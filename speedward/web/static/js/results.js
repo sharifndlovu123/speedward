@@ -154,56 +154,51 @@
     guardOn = want;
   }
 
-  // --- allowance strip: tests left, countdown to the reset, last run ---------------------------
-  // The server gives the numbers (view from /estimate); this only counts the reset down in this tab
-  // and adds "last run" from the saved result's savedAt. Nothing here is stored or guessed: an
-  // unknown value stays "unknown". All text goes in through textContent.
+  // --- allowance strip: remaining allowance, countdown, last run ------------------------------
+  // All wording comes from the server (the view from /estimate holds the finished text with one
+  // {minutes} placeholder). This only counts the reset down in this tab and shows "last run" from the
+  // saved result's savedAt. An unknown value stays unknown. Text goes in through textContent.
   var KEY_URL = "https://globalping.io";
   var TICK_MS = 30000;
   var lastView = null;
   var fetchedAt = 0;
-  var tickTimer = null;
   var refetching = false;
 
+  function isNum(n) { return typeof n === "number" && isFinite(n); }
+
   function secondsLeft() {
-    if (!lastView || lastView.reset_seconds === null || lastView.reset_seconds === undefined) { return null; }
-    return Math.max(0, lastView.reset_seconds - Math.floor((Date.now() - fetchedAt) / 1000));
+    if (!lastView || !isNum(lastView.reset_seconds)) { return null; }
+    return Math.max(0, lastView.reset_seconds - Math.floor(Math.max(0, Date.now() - fetchedAt) / 1000));
   }
 
-  function resetPhrase() {
+  function stripText() {
+    var v = lastView;
     var secs = secondsLeft();
-    if (secs === null) { return "reset time unknown"; }
-    var low = lastView.state === "low" && lastView.next_full_scan_in_minutes !== null;
-    if (secs <= 0) { return "resets now"; }
-    return (low ? "next full allowance" : "resets") + " in " + Math.ceil(secs / 60) + " min";
+    if (secs === null) { return v.text_unknown; }
+    if (v.text_template.indexOf("{minutes}") === -1) { return v.text_template; }
+    if (secs <= 0) { return v.text_now; }
+    return v.text_template.split("{minutes}").join(String(Math.ceil(secs / 60)));
   }
 
-  function lastRunText() {
+  function renderLastRun() {
     var saved = current || readSaved();
-    if (!saved || typeof saved.savedAt !== "number") { return ""; }
+    var box = $("allowance-last-run");
+    if (!box) { return; }
+    if (!saved || !isNum(saved.savedAt)) { show(box, false); return; }
     var minutes = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 60000));
-    return minutes < 1 ? "last run just now" : "last run " + minutes + " min ago";
+    setText($("allowance-ago"), minutes < 1 ? "just now" : minutes + " min ago");
+    show(box, true);
   }
 
   function renderStrip() {
-    var el = $("allowance-strip");
-    if (!el || !lastView) { return; }
-    var v = lastView;
-    var low = v.state === "low" && v.next_full_scan_in_minutes !== null;
-    var phrase = resetPhrase();
-    var run = lastRunText();
-    var tail = v.tail || "";
+    var el = $("allowance-text");
+    renderLastRun();
+    if (!el || !lastView || typeof lastView.text_template !== "string") { return; }
+    var text = stripText();
     var link = false;
-    if (v.keyless && tail.slice(-KEY_URL.length) === KEY_URL) {
-      tail = tail.slice(0, -KEY_URL.length);
+    if (text.slice(-KEY_URL.length) === KEY_URL) {
+      text = text.slice(0, -KEY_URL.length);
       link = true;
-    }
-    var text;
-    if (low) {
-      text = v.head + ". " + phrase.charAt(0).toUpperCase() + phrase.slice(1) + "." + (run ? " " + run + "." : "") +
-        (tail ? " " + tail : "");
-    } else {
-      text = v.head + " \u00b7 " + phrase + (run ? " \u00b7 " + run : "") + (tail ? " \u00b7 " + tail : "");
     }
     el.textContent = text;
     if (link) {
@@ -213,8 +208,10 @@
       a.textContent = KEY_URL;
       el.appendChild(a);
     }
-    el.classList.toggle("low", v.state === "low");
+    $("allowance-strip").classList.toggle("low", lastView.state === "low");
   }
+
+  function markStale(on) { show($("allowance-stale"), on); }
 
   function renderBar(v) {
     var box = $("allowance-bar");
@@ -230,6 +227,7 @@
     lastView = v || null;
     fetchedAt = Date.now();
     refetching = false;
+    markStale(false);
     renderStrip();
     renderBar(lastView);
   }
@@ -243,7 +241,7 @@
     }
   }
 
-  tickTimer = setInterval(tick, TICK_MS);
+  setInterval(tick, TICK_MS);
 
   // --- estimate --------------------------------------------------------------------------------
   var lastCost = null;
@@ -289,6 +287,7 @@
         } else {
           setText($("estimate"), data.error || "The test cost could not be estimated.");
           refetching = false;
+          markStale(true);
           renderBar(null);
           lastCost = null;
           runAgainLabels();
@@ -296,6 +295,7 @@
       });
     }).catch(function () {
       refetching = false;
+      markStale(true);
       setText($("estimate"), "The test cost could not be estimated.");
     });
   }

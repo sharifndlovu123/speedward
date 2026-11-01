@@ -1,5 +1,6 @@
 """Web UI: Django views, in-flight scan state, stateless render/export. Globalping is FakeGlobalping."""
 import copy
+import html
 import json
 import logging
 import re
@@ -99,25 +100,50 @@ def post_json(client, url, body):
 
 # --- the start page ---------------------------------------------------------------------------
 
+def strip_of(body: str) -> str:
+    m = re.search(r'<p[^>]*id="allowance-strip"[^>]*><span id="allowance-text">(.*?)</span>', body, re.S)
+    assert m, "status strip missing"
+    return html.unescape(re.sub(r"<[^>]+>", "", m.group(1)))
+
+
 def test_index_shows_key_free_up_to_a_limit_wording(client):
     body = client.get(reverse("index")).content.decode()
-    assert "A key is free up to a limit" in body
+    assert "A key is free up to a limit" in strip_of(body)
     assert "https://globalping.io" in body
     assert not re.search(r"\bfree\b(?! up to a limit)", body.replace("free up to a limit", ""), re.I)
     assert "Only test sites you own or are authorised to test." in body
 
 
-def test_status_line_without_token_shows_250_and_50(client):
+def test_there_is_one_tests_left_figure_not_two(client):
     body = client.get(reverse("index")).content.decode()
-    assert ("No Globalping key set: 250 tests/hour, 50 locations. A key is free up to a limit: "
-            "https://globalping.io") in re.sub(r"<[^>]+>", "", body)
+    assert 'id="status-line"' not in body
+    assert body.count("tests left this hour") == 1
 
 
-def test_status_line_with_token_shows_remaining(client, settings, fake):
+def test_strip_without_token_shows_250_and_50(client):
+    strip = strip_of(client.get(reverse("index")).content.decode())
+    assert "No Globalping key set: 250 tests/hour, 50 locations." in strip
+    assert strip.endswith("A key is free up to a limit: https://globalping.io")
+
+
+def test_strip_with_token_shows_remaining(client, settings, fake):
     settings.GLOBALPING_TOKEN = TOKEN
     fake.remaining = 321
-    body = re.sub(r"<[^>]+>", "", client.get(reverse("index")).content.decode())
-    assert "Globalping key active: 500 tests/hour, up to 500 locations. Remaining this hour: 321" in body
+    strip = strip_of(client.get(reverse("index")).content.decode())
+    assert "Globalping key active: 500 tests/hour, up to 500 locations. 321 of 500 tests left this hour" in strip
+    assert "free" not in strip
+
+
+def test_strip_shows_credits_with_token(client, settings, fake):
+    settings.GLOBALPING_TOKEN = TOKEN
+    fake.credits = 7
+    assert "Credits: 7." in strip_of(client.get(reverse("index")).content.decode())
+
+
+def test_strip_shows_the_error_when_globalping_cannot_be_used(client, settings, fake):
+    settings.GLOBALPING_TOKEN = TOKEN
+    fake.valid_token = "some-other-token"  # the fake answers 401: the key is rejected
+    assert views.UNREACHABLE in strip_of(client.get(reverse("index")).content.decode())
 
 
 def test_no_token_input_anywhere(client, settings, fake):
@@ -583,7 +609,8 @@ def test_web_estimate_returns_reset_and_bar_parts(client, fake):
     assert view["reset_in_minutes"] == 37 and view["state"] == "ok" and view["keyless"] is True
     assert (view["used_before"], view["this_scan"], view["left_after"]) == (38, 6, 206)
     assert view["caption"] == "38 used already · 6 for this scan · 206 left afterwards"
-    assert view["text"].startswith("212 of 250 tests left this hour (no key) · resets in 37 min")
+    assert "212 of 250 tests left this hour · resets in 37 min" in view["text"]
+    assert view["text_template"].count("{minutes}") == 1 and "resets now" in view["text_now"]
     # existing keys stay
     assert {"fits", "reason", "refused", "message"} <= set(body)
 
@@ -605,20 +632,26 @@ def test_index_status_strip_shows_countdown(client, fake):
     fake.reset = 2220
     fake.remaining = 212
     body = client.get(reverse("index")).content.decode()
-    m = re.search(r'<p[^>]*id="allowance-strip"[^>]*>(.*?)</p>', body, re.S)
-    assert m, "status strip missing"
-    assert "212 of 250 tests left this hour" in m.group(1) and "resets in 37 min" in m.group(1)
-    assert "A key is free up to a limit" in m.group(1)
+    strip = strip_of(body)
+    assert "212 of 250 tests left this hour" in strip and "resets in 37 min" in strip
+    assert "A key is free up to a limit" in strip
 
 
 def test_index_strip_unreachable_has_no_numbers(client, fake):
     fake.limits_status = 500
     body = client.get(reverse("index")).content.decode()
-    m = re.search(r'<p[^>]*id="allowance-strip"[^>]*>(.*?)</p>', body, re.S)
-    assert "unknown" in m.group(1) and "reset time unknown" in m.group(1)
+    assert "unknown" in strip_of(body) and "reset time unknown" in strip_of(body).lower()
 
 
 def test_js_builds_strip_with_text_content_only():
     js = STATIC_JS.read_text()
     assert "allowance-strip" in js and "speedward:result" in js
     assert "innerHTML" not in js and "insertAdjacentHTML" not in js
+
+
+def test_js_has_no_wording_of_its_own_for_the_strip():
+    js = STATIC_JS.read_text()
+    for phrase in ("Next full allowance", "next full allowance", "resets in", "resets now", "reset time unknown",
+                   "tests left", "ask you to confirm", "NaN"):
+        assert phrase not in js, phrase
+    assert "{minutes}" in js and "isNum" in js

@@ -71,18 +71,6 @@ def _client() -> GlobalpingClient:
     return GlobalpingClient(token=token, poll_interval=settings.GLOBALPING_POLL_INTERVAL, **kwargs)
 
 
-def _status_line(a: Allowance) -> str:
-    if not a.authenticated:
-        return (f"No Globalping key set: {a.tests_per_hour} tests/hour, {a.max_probes} locations. "
-                f"A key is free up to a limit: ")
-    left = "unknown" if a.remaining is None else str(a.remaining)
-    line = (f"Globalping key active: {a.tests_per_hour} tests/hour, up to {a.max_probes} locations. "
-            f"Remaining this hour: {left}")
-    if a.credits is not None:
-        line += f". Credits: {a.credits}"
-    return line
-
-
 def _allowance_dict(a: Allowance) -> dict:
     return {"tests_per_hour": a.tests_per_hour, "max_probes": a.max_probes, "remaining": a.remaining,
             "authenticated": a.authenticated, "credits": a.credits}
@@ -120,22 +108,19 @@ def _budget(plan: Plan, allowance: Allowance) -> dict:
 @require_GET
 @never_cache
 def index(request):
-    status, link = "", False
-    strip = "Tests left this hour: unknown · reset time unknown"
+    strip = ""
     try:
-        allowance = _client().allowance()
-        status, link = _status_line(allowance), not allowance.authenticated
-        strip = describe_allowance(allowance, None, time.time()).text
+        strip = describe_allowance(_client().allowance(), None, time.time()).text
     except EndpointRefused as exc:
-        status = str(exc)
+        strip = str(exc)
     except GlobalpingError:
-        status = UNREACHABLE
+        strip = UNREACHABLE
     strip_link = strip.endswith(KEY_PROMPT)  # the address becomes a real link in the template
     if strip_link:
         strip = strip[:-len("https://globalping.io")]
     return render(request, "index.html", {
         "strip_text": strip, "strip_link": strip_link,
-        "notice": NOTICE, "status_line": status, "status_link": link,
+        "notice": NOTICE,
         "ttl_seconds": settings.RESULT_TTL_SECONDS, "ttl_minutes": max(1, settings.RESULT_TTL_SECONDS // 60),
         "default_locations": ", ".join(loc["magic"] for loc in DEFAULT_LOCATIONS),
     })
