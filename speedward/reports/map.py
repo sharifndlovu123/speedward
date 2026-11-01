@@ -1,4 +1,5 @@
-"""World map as an inline SVG string: server-to-location arcs coloured by cold first-byte time.
+"""World map as an inline SVG string. A circle per test location, a square at the server that answered
+it (or one "Server" square), and a line between them coloured by cold first-byte time.
 
 Land outlines are bundled (Natural Earth 110m, public domain, see scripts/build_worldmap.py); the map
 never fetches tiles or any other resource. All dynamic text is escaped here.
@@ -11,7 +12,9 @@ from html import escape
 from pathlib import Path
 
 from speedward.core.locations import CATALOG
-from speedward.core.models import LocationResult, ScanReport
+from speedward.core.models import UNCERTAIN, LocationResult, ScanReport
+
+from ._view import CDN_EDGE_NOTE, NA, SOURCE_TEXT, _from_header, answered_by, position_source
 
 FAST_MS = 300
 SLOW_MS = 800
@@ -20,13 +23,16 @@ _STATUS_TEXT = {"blocked": "blocked", "test_failed": "test failed", "not_run": "
 
 _STYLE = (
     ".sw-map{--land:#d9dee5;--fast:#1a9850;--mid:#e0a100;--slow:#d73027;--off:#8a8f98;--ink:#1f2933;"
-    "--bg:#f6f8fa;--pin:#2b5fd9}"
+    "--bg:#f6f8fa;--pin:#2b5fd9;--sq:#3d4652}"
     "@media (prefers-color-scheme:dark){.sw-map{--land:#2e3640;--fast:#4cc38a;--mid:#f0b429;"
-    "--slow:#ff6b61;--off:#7b838d;--ink:#e6e9ee;--bg:#161b22;--pin:#7aa2ff}}"
+    "--slow:#ff6b61;--off:#7b838d;--ink:#e6e9ee;--bg:#161b22;--pin:#7aa2ff;--sq:#e6e9ee}}"
     ".sw-map text{fill:var(--ink);font-family:system-ui,sans-serif}"
     # Keyboard focus ring: a stroke, because SVG outlines do not draw in Firefox. Ink on the map
     # background is well above 3:1 in light and dark. The selected dot keeps a --pin stroke.
-    ".sw-dot:focus,.sw-pick:focus{outline:none}"
+    ".sw-dot:focus,.sw-pick:focus,.sw-sq:focus{outline:none}"
+    # Squares: the server that answered (small), or the one Server (larger, blue).
+    ".sw-sq{fill:var(--sq);stroke:var(--bg);stroke-width:1}.sw-server{fill:var(--pin);stroke-width:2}"
+    ".sw-sq:focus-visible{stroke:var(--ink);stroke-width:3}"
     ".sw-dot.sw-sel{stroke:var(--pin);stroke-width:3}"
     ".sw-dot:focus-visible,.sw-pick:focus-visible{outline:none;stroke:var(--ink);stroke-width:4;"
     "filter:drop-shadow(0 0 2px var(--bg))}"
@@ -55,6 +61,31 @@ def _city(r: LocationResult) -> str:
     return r.location.city or r.location.country or "unknown"
 
 
+def _single_origin(located: list[LocationResult]) -> bool:
+    """Every placed result reached one address, placed by the database at one spot (not CDN edges)."""
+    return (bool(located) and len({r.server_ip for r in located}) == 1
+            and len({(r.server_position.lat, r.server_position.lon) for r in located}) == 1
+            and all(r.server_position.source == "database" for r in located))
+
+
+def _anchor_text(report: ScanReport, located: list[LocationResult]) -> tuple[str, str] | None:
+    """(label, tooltip) for the one "Server" square, or None when each result gets its own square."""
+    s = report.server
+    if s is not None and s.source == "manual":
+        return "Server (manual setting)", "Server: manual (setting)"
+    if _single_origin(located):
+        r = located[0]
+        return ("Server (all probes reached the same IP)",
+                f"Server (all probes reached the same IP): {r.server_ip}, {position_source(r)}")
+    if located:
+        return None
+    if s is not None and s.source == "manual (pin)":
+        return "Server (pin)", "Server: manual (pin), your own claim"
+    if s is not None:  # a report from before Task 16, placed by the database from one IP
+        return "Server", f"Server: {SOURCE_TEXT.get(s.source, s.source)}"
+    return None
+
+
 def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
                slow_ms: float = SLOW_MS) -> str:
     W = width
@@ -64,6 +95,17 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
 
     def proj(lat: float, lon: float) -> tuple[float, float]:
         return (lon + 180) / 360 * W, (90 - lat) / 180 * H
+
+    def arc(sx, sy, x, y, style):
+        mx, my = (sx + x) / 2, (sy + y) / 2
+        dist = ((x - sx) ** 2 + (y - sy) ** 2) ** 0.5
+        cy = my - dist * 0.25
+        return f'<path d="M{_num(sx)},{_num(sy)} Q{_num(mx)},{_num(cy)} {_num(x)},{_num(y)}" {style}/>'
+
+    def square(cls, x, y, size, text):
+        t = escape(text)
+        return (f'<rect class="{cls}" tabindex="0" role="img" aria-label="{t}" x="{_num(x - size / 2)}" '
+                f'y="{_num(y - size / 2)}" width="{_num(size)}" height="{_num(size)}"><title>{t}</title></rect>')
 
     unplaced = [r for r in report.locations if r.location.lat is None or r.location.lon is None]
     extra = 26 * k if unplaced else 0
@@ -76,42 +118,62 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
     scale = f' transform="scale({k:g})"' if W != 1000 else ""
     out.append(f'<g fill="var(--land)"{scale}>' + "".join(f'<path d="{d}"/>' for d in _land()) + "</g>")
 
-    if report.server is not None:
-        sx, sy = proj(report.server.lat, report.server.lon)
-        server_label = "Server (pin)" if report.server.source == "manual (pin)" else "Server"
+    measured = [r for r in report.locations if r.status == "measured"]
+    located = [r for r in measured if r.server_position is not None]
+    anchor = _anchor_text(report, located)
+    manual = report.server is not None and report.server.source == "manual"
+    edges = anchor is None and bool(located)
+    ips_differ = len({r.server_ip for r in measured if r.server_ip}) > 1
+
+    if anchor is not None:
+        if report.server is not None and (manual or not located):
+            sx, sy = proj(report.server.lat, report.server.lon)
+        else:
+            sx, sy = proj(located[0].server_position.lat, located[0].server_position.lon)
     else:
         sx, sy = 18 * k, H - 22 * k
-        server_label = "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON"
 
-    arcs, dots, labels = [], [], []
+    # One square per answering spot: results at the same place from the same address share it.
+    spots: dict[tuple, list[LocationResult]] = {}
+    if edges:
+        for r in located:
+            p = r.server_position
+            spots.setdefault((r.server_ip, p.lat, p.lon, p.source, r.edge_code), []).append(r)
+
+    arcs, squares, dots, labels = [], [], [], []
     for row, r in enumerate(report.locations):
         if r.location.lat is None or r.location.lon is None:
             continue
         x, y = proj(r.location.lat, r.location.lon)
         name = _city(r)
         fb = r.stages.first_byte if (r.status == "measured" and r.stages is not None) else None
+        dashed = (f'stroke="var(--off)" stroke-width="{_num(1.2 * k)}" fill="none" '
+                  f'stroke-dasharray="{_num(5 * k)} {_num(4 * k)}" opacity="0.45"')
         if fb is not None:
             col = _colour(fb, fast_ms, slow_ms)
             line = f'stroke="{col}" stroke-width="{_num(1.6 * k)}" fill="none" opacity="0.85"'
             dot = f'fill="{col}"'
             text = f"{name} {fb:.0f}ms"
-            title = text
         else:
             if r.status == "measured":
-                reason = "no data"
                 text = f"{name} no data"
             else:
-                reason = r.reason or "no reason given"
-                text = f"{name} {_STATUS_TEXT[r.status]}: {reason}"
-            line = (f'stroke="var(--off)" stroke-width="{_num(1.2 * k)}" fill="none" '
-                    f'stroke-dasharray="{_num(5 * k)} {_num(4 * k)}" opacity="0.45"')
+                text = f"{name} {_STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"
+            line = dashed
             dot = 'fill="var(--off)" opacity="0.6"'
-            title = text
-        if report.server is not None:
-            mx, my = (sx + x) / 2, (sy + y) / 2
-            dist = ((x - sx) ** 2 + (y - sy) ** 2) ** 0.5
-            cy = my - dist * 0.25
-            arcs.append(f'<path d="M{_num(sx)},{_num(sy)} Q{_num(mx)},{_num(cy)} {_num(x)},{_num(y)}" {line}/>')
+        title = text
+        if r.status == "measured" and r.edge_note and not manual:
+            title += f"; {r.edge_note} ({r.edge_reason}), no square drawn"
+            if r.edge_note == UNCERTAIN:
+                text += f", {UNCERTAIN}"
+        if anchor is not None:
+            # From the one Server: every probe for a configured position or a pin; for a single
+            # origin only the results that reached it, plus the dashed lines of unreachable ones.
+            if manual or not located or r.server_position is not None or r.status != "measured":
+                arcs.append(arc(sx, sy, x, y, line))
+        elif edges and r.server_position is not None:
+            qx, qy = proj(r.server_position.lat, r.server_position.lon)
+            arcs.append(arc(x, y, qx, qy, line))
         # data-row ties the dot to its row in the results table (the web UI highlights it on click).
         dots.append(f'<circle class="sw-dot" data-row="{row}" tabindex="0" cx="{_num(x)}" cy="{_num(y)}" '
                     f'r="{_num(4 * k)}" {dot}>'
@@ -120,11 +182,26 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         labels.append(f'<text x="{_num(x + 6 * k)}" y="{_num(y - 6 * k)}" font-size="{_num(fs)}"'
                       f"{dim}>{escape(text)}</text>")
 
-    out += arcs + dots
-    out.append(f'<circle cx="{_num(sx)}" cy="{_num(sy)}" r="{_num(6 * k)}" fill="var(--pin)" '
-               f'stroke="var(--bg)" stroke-width="{_num(2 * k)}"/>')
-    out.append(f'<text x="{_num(sx + 10 * k)}" y="{_num(sy + 4 * k)}" font-size="{_num(fs)}" '
-               f'font-weight="600">{server_label}</text>')
+    for group in spots.values():
+        r = group[0]
+        qx, qy = proj(r.server_position.lat, r.server_position.lon)
+        names = ", ".join(_city(g) for g in group)
+        text = f"Server that answered {names}: {r.server_ip or NA}, {position_source(r)}"
+        if _from_header(r):
+            text += f", {answered_by(r)}"
+        if ips_differ or r.server_position.source == "cdn header":
+            text += f". {CDN_EDGE_NOTE}"
+        squares.append(square("sw-sq", qx, qy, 7 * k, text))
+
+    out += arcs + squares + dots
+    if anchor is not None:
+        label_text, tip = anchor
+        out.append(square("sw-sq sw-server", sx, sy, 12 * k, tip))
+        out.append(f'<text x="{_num(sx + 10 * k)}" y="{_num(sy + 4 * k)}" font-size="{_num(fs)}" '
+                   f'font-weight="600">{escape(label_text)}</text>')
+    elif not located:
+        out.append(f'<text x="{_num(sx)}" y="{_num(sy + 4 * k)}" font-size="{_num(fs)}" font-weight="600">'
+                   "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON</text>")
     out += labels
     if unplaced:
         names = ", ".join(escape(_city(r)) for r in unplaced)

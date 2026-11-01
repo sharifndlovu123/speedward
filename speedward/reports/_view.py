@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from speedward.core.analysis import STAGE_NAMES, summarise
+from speedward.core.edge import edge_city
 from speedward.core.models import LocationResult, ScanReport
 
 CACHE_NOTE = "Repeat request from the same test machine; not a browser cache test."
@@ -31,18 +32,46 @@ def excluded_line(s) -> str:
             f"{s.measured} measured.")
 
 
+CDN_EDGE_NOTE = "CDN edge, not necessarily your origin"
+SOURCE_TEXT = {"database": "geo-IP database", "manual": "manual (setting)", "manual (pin)": "manual (pin)"}
+
+
+def _from_header(r: LocationResult) -> bool:
+    return r.server_position is not None and r.server_position.source == "cdn header" and bool(r.edge_code)
+
+
+def answered_by(r: LocationResult) -> str:
+    """Who answered a measured result: the CDN edge named by its header, else the IP."""
+    if _from_header(r):
+        city = edge_city(r.edge_code)
+        return f"edge {r.edge_code} ({city})" if city else f"edge {r.edge_code}"
+    return r.server_ip or NA
+
+
+def position_source(r: LocationResult) -> str:
+    """Where a measured result's server position came from, or why there is none."""
+    if r.server_position is not None:
+        if _from_header(r):
+            return f"CDN header (cf-ray -{r.edge_code})"
+        return SOURCE_TEXT.get(r.server_position.source, r.server_position.source)
+    if r.edge_note:
+        return f"{r.edge_note} ({r.edge_reason})" if r.edge_reason else r.edge_note
+    return NA
+
+
 def table_rows(report: ScanReport) -> list[dict]:
     rows = []
     for r in report.locations:
         base = {"location": label(r), "network": r.location.network or ""}
         if r.status != "measured":
             rows.append({**base, "excluded": True, "cold": NO_DATA, "warm": NO_DATA, "delay": NO_DATA,
-                         "cdn": NO_DATA, "status": f"{STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"})
+                         "cdn": NO_DATA, "answered": NO_DATA, "source": NO_DATA,
+                         "status": f"{STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"})
             continue
         cold = r.stages.first_byte if r.stages is not None else None
         warm = r.repeat_stages.first_byte if r.repeat_stages is not None else None
         rows.append({**base, "excluded": False, "cold": ms(cold), "warm": ms(warm), "delay": ms(r.ping_ms),
-                     "cdn": r.cdn or NA,
+                     "cdn": r.cdn or NA, "answered": answered_by(r), "source": position_source(r),
                      "status": f"HTTP {r.http_status}" if r.http_status is not None else "measured"})
     return rows
 
