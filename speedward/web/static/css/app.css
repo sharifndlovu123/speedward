@@ -52,3 +52,12 @@ tr.hl{background:var(--hl)}
 .identity dt{color:var(--mute)}.identity dd{margin:0 0 6px;overflow-wrap:anywhere}
 #progress-lines{margin:0;padding-left:20px}
 footer{margin-top:32px;font-size:.85rem}
+
+#allowance-strip{margin-top:8px}
+#allowance-strip.low{border-color:var(--warn);color:var(--warn)}
+.allowance{margin:4px 0 8px}
+.allowance .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--line)}
+.allowance .bar span{display:block;height:100%}
+#bar-used{background:var(--mute);opacity:.6}
+#bar-scan{background:var(--bar)}
+.allowance p{margin:4px 0 0;font-size:.9rem}

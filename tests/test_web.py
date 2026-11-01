@@ -570,3 +570,55 @@ def test_map_legend_prints_thresholds_exactly(client, settings):
     settings.FAST_MS, settings.SLOW_MS = 1234567.0, 5000000.0
     html = post_json(client, reverse("render"), {"result": report_dict(), "limits": {}}).content.decode()
     assert "green up to 1234567 ms" in html and "red from 5000000 ms" in html
+
+
+# --- allowance timer ---------------------------------------------------------------------------
+
+def test_web_estimate_returns_reset_and_bar_parts(client, fake):
+    fake.reset = 2220
+    fake.remaining = 212
+    body = client.post(reverse("estimate"), form()).json()
+    assert body["cost"] == 6 and body["view"]["reset_seconds"] == 2220
+    view = body["view"]
+    assert view["reset_in_minutes"] == 37 and view["state"] == "ok" and view["keyless"] is True
+    assert (view["used_before"], view["this_scan"], view["left_after"]) == (38, 6, 206)
+    assert view["caption"] == "38 used already · 6 for this scan · 206 left afterwards"
+    assert view["text"].startswith("212 of 250 tests left this hour (no key) · resets in 37 min")
+    # existing keys stay
+    assert {"fits", "reason", "refused", "message"} <= set(body)
+
+
+def test_web_estimate_unknown_reset_has_no_number(client, fake):
+    fake.omit_reset = True
+    view = client.post(reverse("estimate"), form()).json()["view"]
+    assert view["reset_in_minutes"] is None and view["reset_seconds"] is None
+    assert "reset time unknown" in view["text"]
+
+
+def test_web_estimate_ignores_posted_numbers(client, fake):
+    fake.remaining = 100
+    view = client.post(reverse("estimate"), form(remaining="1", reset="5", cost="999")).json()["view"]
+    assert view["tests_left"] == 100 and view["this_scan"] == 6
+
+
+def test_index_status_strip_shows_countdown(client, fake):
+    fake.reset = 2220
+    fake.remaining = 212
+    body = client.get(reverse("index")).content.decode()
+    m = re.search(r'<p[^>]*id="allowance-strip"[^>]*>(.*?)</p>', body, re.S)
+    assert m, "status strip missing"
+    assert "212 of 250 tests left this hour" in m.group(1) and "resets in 37 min" in m.group(1)
+    assert "A key is free up to a limit" in m.group(1)
+
+
+def test_index_strip_unreachable_has_no_numbers(client, fake):
+    fake.limits_status = 500
+    body = client.get(reverse("index")).content.decode()
+    m = re.search(r'<p[^>]*id="allowance-strip"[^>]*>(.*?)</p>', body, re.S)
+    assert "unknown" in m.group(1) and "reset time unknown" in m.group(1)
+
+
+def test_js_builds_strip_with_text_content_only():
+    js = STATIC_JS.read_text()
+    assert "allowance-strip" in js and "speedward:result" in js
+    assert "innerHTML" not in js and "insertAdjacentHTML" not in js

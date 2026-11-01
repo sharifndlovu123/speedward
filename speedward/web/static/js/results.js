@@ -154,6 +154,97 @@
     guardOn = want;
   }
 
+  // --- allowance strip: tests left, countdown to the reset, last run ---------------------------
+  // The server gives the numbers (view from /estimate); this only counts the reset down in this tab
+  // and adds "last run" from the saved result's savedAt. Nothing here is stored or guessed: an
+  // unknown value stays "unknown". All text goes in through textContent.
+  var KEY_URL = "https://globalping.io";
+  var TICK_MS = 30000;
+  var lastView = null;
+  var fetchedAt = 0;
+  var tickTimer = null;
+  var refetching = false;
+
+  function secondsLeft() {
+    if (!lastView || lastView.reset_seconds === null || lastView.reset_seconds === undefined) { return null; }
+    return Math.max(0, lastView.reset_seconds - Math.floor((Date.now() - fetchedAt) / 1000));
+  }
+
+  function resetPhrase() {
+    var secs = secondsLeft();
+    if (secs === null) { return "reset time unknown"; }
+    var low = lastView.state === "low" && lastView.next_full_scan_in_minutes !== null;
+    if (secs <= 0) { return "resets now"; }
+    return (low ? "next full allowance" : "resets") + " in " + Math.ceil(secs / 60) + " min";
+  }
+
+  function lastRunText() {
+    var saved = current || readSaved();
+    if (!saved || typeof saved.savedAt !== "number") { return ""; }
+    var minutes = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 60000));
+    return minutes < 1 ? "last run just now" : "last run " + minutes + " min ago";
+  }
+
+  function renderStrip() {
+    var el = $("allowance-strip");
+    if (!el || !lastView) { return; }
+    var v = lastView;
+    var low = v.state === "low" && v.next_full_scan_in_minutes !== null;
+    var phrase = resetPhrase();
+    var run = lastRunText();
+    var tail = v.tail || "";
+    var link = false;
+    if (v.keyless && tail.slice(-KEY_URL.length) === KEY_URL) {
+      tail = tail.slice(0, -KEY_URL.length);
+      link = true;
+    }
+    var text;
+    if (low) {
+      text = v.head + ". " + phrase.charAt(0).toUpperCase() + phrase.slice(1) + "." + (run ? " " + run + "." : "") +
+        (tail ? " " + tail : "");
+    } else {
+      text = v.head + " \u00b7 " + phrase + (run ? " \u00b7 " + run : "") + (tail ? " \u00b7 " + tail : "");
+    }
+    el.textContent = text;
+    if (link) {
+      var a = document.createElement("a");
+      a.href = KEY_URL;
+      a.rel = "noopener noreferrer";
+      a.textContent = KEY_URL;
+      el.appendChild(a);
+    }
+    el.classList.toggle("low", v.state === "low");
+  }
+
+  function renderBar(v) {
+    var box = $("allowance-bar");
+    if (!box) { return; }
+    if (!v || !v.has_bar || !v.tests_per_hour) { show(box, false); return; }
+    $("bar-used").style.width = (100 * v.used_before / v.tests_per_hour) + "%";
+    $("bar-scan").style.width = (100 * v.this_scan / v.tests_per_hour) + "%";
+    setText($("allowance-caption"), v.caption);
+    show(box, true);
+  }
+
+  function applyView(v) {
+    lastView = v || null;
+    fetchedAt = Date.now();
+    refetching = false;
+    renderStrip();
+    renderBar(lastView);
+  }
+
+  function tick() {
+    renderStrip();
+    var secs = secondsLeft();
+    if (secs === 0 && lastView.reset_seconds > 0 && !refetching) {  // the reset time has passed: ask for the new numbers
+      refetching = true;
+      estimate();
+    }
+  }
+
+  tickTimer = setInterval(tick, TICK_MS);
+
   // --- estimate --------------------------------------------------------------------------------
   var lastCost = null;
   var estimateTimer = null;
@@ -165,6 +256,7 @@
   }
 
   function applyBudget(b) {
+    applyView(b.view);
     lastCost = b.cost;
     runAgainLabels();
     setText($("estimate"), b.message || "");
@@ -196,11 +288,14 @@
           applyBudget(data);
         } else {
           setText($("estimate"), data.error || "The test cost could not be estimated.");
+          refetching = false;
+          renderBar(null);
           lastCost = null;
           runAgainLabels();
         }
       });
     }).catch(function () {
+      refetching = false;
       setText($("estimate"), "The test cost could not be estimated.");
     });
   }
@@ -259,6 +354,7 @@
     updateGuard();
     hideResults();
     notice(expiredText());
+    renderStrip();
   }
 
   function clearNow() {
@@ -268,6 +364,7 @@
     updateGuard();
     hideResults();
     notice("");
+    renderStrip();
   }
 
   function storeResult(result) {
@@ -281,6 +378,7 @@
     updateGuard();
     scheduleExpiry(current.savedAt);
     show($("saved-banner"), false);
+    renderStrip();
     return showResults(current);
   }
 
@@ -308,6 +406,7 @@
         $("start").disabled = false;
         if (data.status === "done") {
           storeResult(data.result);
+          estimate();  // the scan used tests: refresh the strip
         } else {
           formError(data.error || "The scan failed.");
         }

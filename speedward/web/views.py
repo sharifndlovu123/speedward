@@ -15,6 +15,7 @@ import json
 import logging
 import math
 import threading
+import time
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
@@ -23,6 +24,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
+from speedward.core.allowance_view import KEY_PROMPT, describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.config import EndpointRefused, check_endpoint
@@ -109,7 +111,8 @@ def _budget(plan: Plan, allowance: Allowance) -> dict:
             refused = CREDITS_ZERO
     return {"cost": cost, "fits": verdict.fits, "reason": verdict.reason, "refused": refused,
             "message": f"This scan uses about {cost} tests. You have {left} left this hour.",
-            "allowance": _allowance_dict(allowance)}
+            "allowance": _allowance_dict(allowance),
+            "view": describe_allowance(allowance, cost, time.time()).as_dict()}
 
 
 # --- pages ---------------------------------------------------------------------------------------
@@ -118,14 +121,20 @@ def _budget(plan: Plan, allowance: Allowance) -> dict:
 @never_cache
 def index(request):
     status, link = "", False
+    strip = "Tests left this hour: unknown · reset time unknown"
     try:
         allowance = _client().allowance()
         status, link = _status_line(allowance), not allowance.authenticated
+        strip = describe_allowance(allowance, None, time.time()).text
     except EndpointRefused as exc:
         status = str(exc)
     except GlobalpingError:
         status = UNREACHABLE
+    strip_link = strip.endswith(KEY_PROMPT)  # the address becomes a real link in the template
+    if strip_link:
+        strip = strip[:-len("https://globalping.io")]
     return render(request, "index.html", {
+        "strip_text": strip, "strip_link": strip_link,
         "notice": NOTICE, "status_line": status, "status_link": link,
         "ttl_seconds": settings.RESULT_TTL_SECONDS, "ttl_minutes": max(1, settings.RESULT_TTL_SECONDS // 60),
         "default_locations": ", ".join(loc["magic"] for loc in DEFAULT_LOCATIONS),

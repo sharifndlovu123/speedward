@@ -5,6 +5,7 @@
   <p class="mute">How fast your site loads from around the world.</p>
   <p class="notice-line">{{ notice }}</p>
   <p class="status" id="status-line">{{ status_line }}{% if status_link %}<a href="https://globalping.io" rel="noopener noreferrer">https://globalping.io</a>{% endif %}</p>
+  <p class="status" id="allowance-strip" aria-live="off">{{ strip_text }}{% if strip_link %}<a href="https://globalping.io" rel="noopener noreferrer">https://globalping.io</a>{% endif %}</p>
 </header>
 
 <div id="notice" class="notice" role="status" hidden></div>
@@ -41,6 +42,10 @@
   </details>
 
   <p id="estimate" class="estimate" aria-live="polite"></p>
+  <div id="allowance-bar" class="allowance" hidden>
+    <div class="bar" role="img" aria-labelledby="allowance-caption"><span id="bar-used"></span><span id="bar-scan"></span></div>
+    <p id="allowance-caption" class="mute"></p>
+  </div>
   <p id="over" class="warn" hidden></p>
   <label class="check" id="confirm-wrap" hidden><input type="checkbox" id="confirm" name="confirm" value="1"> Go ahead anyway. Tests over the hourly allowance use Globalping credits if you have them; otherwise they will not run.</label>
   <p id="form-error" class="error" role="alert" hidden></p>
