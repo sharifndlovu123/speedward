@@ -80,7 +80,7 @@ def test_drag_moves_pin_and_draws_lines(page, live_site, watch):
     expect(previews(page)).to_have_count(12)
 
 
-def test_pin_survives_refresh_and_is_cleared_with_results(page, live_site, watch):
+def test_pin_survives_refresh_and_is_cleared_with_results(page, live_site, watch, no_cf_ray):
     page.goto(live_site + "/")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
@@ -105,14 +105,14 @@ def test_pin_survives_refresh_and_is_cleared_with_results(page, live_site, watch
     expect(previews(page)).to_have_count(0)
 
 
-def test_scan_without_pin_says_position_unknown_and_has_no_lines(page, live_site, watch):
+def test_scan_without_pin_says_position_unknown_and_has_no_lines(page, live_site, watch, no_cf_ray):
     page.goto(live_site + "/")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
     page.click("#start")
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     expect(page.locator("#results-map svg.sw-map")).to_contain_text(
-        "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON")
+        "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON")
     expect(page.locator("#results-map svg.sw-map path[stroke]")).to_have_count(0)
 
 

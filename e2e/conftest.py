@@ -105,3 +105,17 @@ def watch(page):
     page.on("dialog", lambda d: d.accept())  # the "Leave this page?" prompt on reload
     yield problems
     assert not problems, "\n".join(problems)
+
+
+@pytest.fixture
+def no_cf_ray(fake_globalping):
+    """The recorded http result without its cf-ray header, so no answering server can be placed
+    (the e2e server has no geo-IP database). Restored after the test."""
+    import copy
+    before = fake_globalping.by_type["http"]
+    doc = copy.deepcopy(fixture("http_ok"))
+    for item in doc["results"]:
+        item["result"]["headers"].pop("cf-ray", None)
+    fake_globalping.by_type["http"] = doc
+    yield doc
+    fake_globalping.by_type["http"] = before
