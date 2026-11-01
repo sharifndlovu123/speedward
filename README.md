@@ -126,7 +126,7 @@ Set these in the environment or in `.env` (the real environment wins). Defaults 
 | `FAST_MS` | `300` | Timings at or under this are shown as fast |
 | `SLOW_MS` | `800` | Timings over this are shown as slow. Must be above `FAST_MS` |
 | `GEOIP_DB` | none | Path to an offline `.mmdb` database (see below) |
-| `SERVER_LAT`, `SERVER_LON` | none | Server position by hand |
+| `SERVER_LAT`, `SERVER_LON` | none | Server position by hand. Wins over the web form's server pin |
 | `RESULT_TTL_SECONDS` | `900` | Web UI: how long the browser keeps results. Minimum 60 |
 | `MAX_CONCURRENT_SCANS` | `2` | Web UI: scans at once. Minimum 1 |
 | `SECRET_KEY` | random per start | Web UI: required when `DEBUG` is off |
@@ -142,8 +142,11 @@ The map can mark your target's server. Speedward does this without asking an out
 
 - Install the extra (`pip install -e ".[geoip]"`), download an offline City database, and set `GEOIP_DB=/path/to/file.mmdb`. Two sources: MaxMind GeoLite2 City (free account and licence from maxmind.com) or DB-IP Lite City (free `.mmdb` from db-ip.com). Check each one's licence before use.
 - Or set `SERVER_LAT` and `SERVER_LON` yourself.
+- Or, in the web UI, place the **Server pin** (below). This is the only option that needs no setup.
 
-With neither, the map says "Server position unknown". Everything else still works.
+Connection lines run from the server to each place, so they need a position. In the web UI, drag the Server pin on the map, or focus it and use the arrow keys (Shift moves further, Delete removes it), or pick a city in "Server is in:". Lines show as faint previews while you choose places, then as speed-coloured arcs in the results (dashed grey where a place could not reach the site). The position is two numbers kept in this browser tab only (same expiry as results, cleared by "Clear now") and sent with the scan. Precedence: `SERVER_LAT`/`SERVER_LON`, then the geo-IP database, then the pin. A pinned position is recorded as "manual (pin)" in exports, because it is your claim and not a measured location.
+
+With no position at all, the map says "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON" and draws no lines. Everything else still works.
 
 ## How to read the map and the statuses
 
@@ -183,7 +186,7 @@ For Docker, `git pull` then `docker build -t speedward .` and restart the contai
 - **Rate limit / "Refused: ..."**: the scan costs more than the tests you have left. Run `--estimate`, use fewer places, wait, or pass `--yes` if you have credits.
 - **Nothing on the map**: open the HTML report, not the Markdown. If every place is dimmed, no location was measured; read the reasons in the table. A target that refuses all Globalping probes shows as blocked.
 - **Results gone after closing the tab**: by design. Export first.
-- **"Server position unknown"**: set `GEOIP_DB` or `SERVER_LAT` and `SERVER_LON`.
+- **"Server position unknown" or no lines**: drop the Server pin on the map or choose a city in "Server is in:" before the scan, or set `GEOIP_DB` or `SERVER_LAT` and `SERVER_LON`.
 - **The server will not start**: outside `DEBUG`, set `SECRET_KEY`. A `Bad Request (400)` page means the Host name is missing from `ALLOWED_HOSTS`.
 - **`.env` ignored**: it is read from the folder you start the command in, and only the keys in `.env.example` are honoured.
 
