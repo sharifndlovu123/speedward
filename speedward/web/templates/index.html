@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="overlay" class="overlay">
+<header id="topbar" class="panel">
+  <div class="brand"><h1>speedward</h1><span class="mute tagline">How fast your site loads from around the world.</span></div>
+  <p class="notice-line">{{ notice }}</p>
+  <p class="status" id="allowance-strip" aria-live="off"><span id="allowance-text">{{ strip_text }}{% if strip_link %}<a href="https://globalping.io" rel="noopener noreferrer">https://globalping.io</a>{% endif %}</span><span id="allowance-last-run" hidden> · last run <span id="allowance-ago"></span></span><span id="allowance-stale" hidden> · could not refresh, these numbers may be out of date</span></p>
+  <div id="results-bar" class="results-bar" hidden>
+    <h2 id="results-title"></h2>
+    <div class="actions">
+      <span class="mute">Export:</span>
+      <button type="button" data-export="html">HTML report</button>
+      <button type="button" data-export="json">JSON</button>
+      <button type="button" data-export="md">Markdown</button>
+      <button type="button" id="results-run-again">Run again</button>
+      <button type="button" id="results-clear" class="secondary">Clear now</button>
+      <button type="button" id="locations-toggle" class="secondary" aria-pressed="false">Locations</button>
+      <button type="button" id="drawer-toggle" class="secondary" aria-expanded="false" aria-controls="drawer">Table</button>
+    </div>
+  </div>
+</header>
+
+<form id="scan-form" class="scan-form" autocomplete="off" novalidate>
+  <div id="middle" class="middle">
+    <div id="left-col" class="left-col">
+      <div id="notice" class="notice panel" role="status" hidden></div>
+
+      <section id="saved-banner" class="banner panel" hidden aria-label="Saved results">
+        <p id="saved-text"></p>
+        <div class="actions">
+          <button type="button" id="banner-run-again">Run again</button>
+          <button type="button" id="banner-clear" class="secondary">Clear now</button>
+        </div>
+      </section>
+
+      <section id="results-panel" class="panel" hidden aria-label="Results summary">
+        <div id="results-summary"></div>
+        <p class="mute">Kept only until you close this tab ({{ ttl_minutes }} minutes at most). Export now if you want to keep these results.</p>
+      </section>
+
+      <div id="form-panel" class="panel">
+        <div class="panel-head"><label for="url">Site address</label>
+          <button type="button" class="collapse secondary" aria-expanded="true" data-collapse="form-panel">Hide</button></div>
+        <div class="panel-body">
+          <input id="url" name="url" type="url" inputmode="url" placeholder="https://example.com" required>
+
+          <fieldset>
+            <legend>Extra checks <span class="mute">(use more tests)</span></legend>
+            <label class="check"><input type="checkbox" name="traceroute" value="on"> Network path and packet loss</label>
+            <label class="check"><input type="checkbox" name="dns" value="on"> DNS answers in each region</label>
+          </fieldset>
+
+          <details>
+            <summary>Pass/fail limits</summary>
+            <div class="limits">
+              <label for="max_ttfb">Max first byte (ms)<input id="max_ttfb" name="max_ttfb" type="number" min="1" step="any"></label>
+              <label for="max_load">Max load (ms)<input id="max_load" name="max_load" type="number" min="1" step="any"></label>
+              <label for="max_blocked">Max blocked locations<input id="max_blocked" name="max_blocked" type="number" min="0" step="1"></label>
+            </div>
+            <p class="mute">Checked against every location that was measured. Locations that could not be tested never count as passing.</p>
+          </details>
+
+          <p id="pick-summary" class="pick-summary" aria-live="polite"></p>
+          <p id="estimate" class="estimate" aria-live="polite"></p>
+          <div id="allowance-bar" class="allowance" hidden>
+            <div class="bar" role="img" aria-labelledby="allowance-caption"><span id="bar-used"></span><span id="bar-scan"></span></div>
+            <p id="allowance-caption" class="mute"></p>
+          </div>
+          <p id="over" class="warn" hidden></p>
+          <label class="check" id="confirm-wrap" hidden><input type="checkbox" id="confirm" name="confirm" value="1"> Go ahead anyway. Tests over the hourly allowance use Globalping credits if you have them; otherwise they will not run.</label>
+          <p id="form-error" class="error" role="alert" hidden></p>
+          <button type="submit" id="start">Start test</button>
+          <p class="mute small">Tests run on the <a href="https://globalping.io" rel="noopener noreferrer">Globalping</a> network. Nothing about the sites you test is stored on this server.</p>
+        </div>
+      </div>
+
+      <section id="progress" class="panel" hidden aria-live="polite">
+        <h2>Testing</h2>
+        <ul id="progress-lines"></ul>
+      </section>
+    </div>
+  </div>
+
+  <div id="picker-strip" class="panel strip">
+    <div class="panel-head"><b>Locations</b> <span class="mute">Click a dot on the map or a name to switch it on or off.</span>
+      <button type="button" id="sheet-toggle" class="collapse secondary" aria-expanded="false">More</button>
+      <button type="button" class="collapse secondary" aria-expanded="true" data-collapse="picker-strip">Hide</button></div>
+    <div class="panel-body">
+      <input type="hidden" id="locations" name="locations" value="{{ default_locations }}">
+      <div class="presets" role="group" aria-label="Presets">
+        <button type="button" class="secondary" data-preset="default">Default 12</button>
+        <button type="button" class="secondary" data-preset="continent">One per continent</button>
+        <button type="button" class="secondary" data-preset="all">All</button>
+        <button type="button" class="secondary" data-preset="clear">Clear</button>
+      </div>
+      <div id="chips" class="chips">
+        {% for g in groups %}<div class="chip-group" role="group" aria-label="{{ g.continent }}"><span class="group-name">{{ g.continent }}</span>{% for p in g.places %}<button type="button" class="chip" data-place="{{ p.name }}"{% if p.default %} data-default="1"{% endif %}{% if p.lead %} data-lead="1"{% endif %} aria-pressed="{{ p.on }}">{{ p.name }}</button>{% endfor %}</div>
+        {% endfor %}
+        <div class="chip-group" id="custom-group" role="group" aria-label="Added places" hidden><span class="group-name">Added</span></div>
+      </div>
+      <div class="add-place">
+        <label for="add-name">Add another place</label>
+        <input id="add-name" type="text" maxlength="40" placeholder="city or country" autocomplete="off">
+        <button type="button" id="add-btn" class="secondary">Add</button>
+        <span id="add-error" class="error" role="alert" hidden></span>
+      </div>
+    </div>
+  </div>
+</form>
+
+<aside id="drawer" class="drawer panel" hidden aria-label="Result details">
+  <div class="panel-head"><b>Details</b><button type="button" id="drawer-close" class="secondary">Close</button></div>
+  <div id="results-body"></div>
+</aside>
+</div>
+<!-- The map comes last in the page so Tab reaches the address and Start first; it is fixed behind the panels. -->
+<div id="stage" class="map-stage">
+  <div id="picker-map" class="picker-map">{{ picker_svg }}</div>
+  <div id="results-map" class="map" hidden></div>
+</div>
+{% endblock %}

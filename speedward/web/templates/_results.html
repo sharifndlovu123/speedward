@@ -1,0 +1,63 @@
+<div class="fragment">
+<p class="verdict{% if verdict_failed %} failed{% endif %}">{{ verdict }}</p>
+{% if failed %}<ul class="failed-list">{% for f in failed %}<li>Failed: {{ f }}</li>{% endfor %}</ul>{% endif %}
+
+<section class="map" aria-label="Map">{{ map_svg }}</section>
+<p class="mute legend">Lines from the server to each location: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms. Dashed grey: no data. Select a dot to find its row.</p>
+<p id="map-detail" class="map-detail" aria-live="polite"></p>
+
+<section class="tiles" aria-label="Summary">
+<div class="tile"><small>Average first byte</small><b>{{ avg }}</b><small>measured locations only</small></div>
+<div class="tile"><small>Cache gain</small><b>{{ cache }}</b>{% if cache_na %}<small>{{ cache_na_note }}</small>{% endif %}</div>
+<div class="tile"><small>Blocked</small><b>{{ s.blocked }}</b><small>the site refused or timed out</small></div>
+{% if browser %}<div class="tile"><small>Page weight</small><b>{{ browser.weight }}</b><small>{{ browser.requests }}</small></div>{% endif %}
+</section>
+<p>{{ excluded_line }}</p>
+<p class="mute">{{ cache_note }}</p>
+
+<section>
+<h3>Locations</h3>
+<div class="scroll"><table>
+<thead><tr><th>Location</th><th>Network</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Status</th></tr></thead>
+<tbody>
+{% for row in rows %}<tr data-row="{{ row.index }}"{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.network }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.status }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+</section>
+
+<section>
+<h3>Stage breakdown</h3>
+<p class="mute">Average over measured locations. A stage the API did not return is left out.</p>
+{% for st in stages %}<div class="stage"><span>{{ st.name }}</span><span><span class="bar" style="width:{{ st.pct }}%"></span></span><span>{{ st.text }}</span></div>
+{% empty %}<p>no data</p>{% endfor %}
+</section>
+
+<section>
+<h3>Server identity</h3>
+<dl class="identity">{% for k, v in identity %}<dt>{{ k }}</dt><dd>{{ v }}</dd>
+{% endfor %}</dl>
+</section>
+
+{% if dns %}<section>
+<h3>DNS</h3>
+{% if dns_differs %}<p class="warn">Answers differ between locations (common with CDNs that answer by region).</p>{% endif %}
+<div class="scroll"><table><thead><tr><th>Location</th><th>Answers</th><th>Lookup</th></tr></thead><tbody>
+{% for d in dns %}<tr><td>{{ d.location }}</td><td>{{ d.answers }}</td><td>{{ d.lookup }}</td></tr>
+{% endfor %}</tbody></table></div>
+</section>{% endif %}
+
+{% if paths %}<section>
+<h3>Routes</h3>
+{% for p in paths %}<h4>{{ p.location }}</h4>
+{% if p.note %}<p>{{ p.note }}</p>{% else %}<div class="scroll"><table><thead><tr><th>Hop</th><th>Host</th><th>RTT</th><th>Loss</th></tr></thead><tbody>
+{% for h in p.hops %}<tr><td>{{ h.n }}</td><td>{{ h.host }}</td><td>{{ h.rtt }}</td><td>{{ h.loss }}</td></tr>
+{% endfor %}</tbody></table></div>{% endif %}
+{% endfor %}
+</section>{% endif %}
+
+{% if browser %}<section>
+<h3>Browser</h3>
+<p>Page weight {{ browser.weight }}, {{ browser.requests }}, load {{ browser.load }}.</p>
+{% if browser.biggest %}<ul>{% for u, n in browser.biggest %}<li>{{ u }}: {{ n }}</li>{% endfor %}</ul>{% endif %}
+</section>{% endif %}
+</div>

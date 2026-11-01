@@ -253,12 +253,47 @@
 - Produces: `.env.example` with `GLOBALPING_TOKEN=`, `RESULT_TTL_SECONDS=900`, `FAST_MS=300`, `SLOW_MS=800`, `GEOIP_DB=`, `SERVER_LAT=`, `SERVER_LON=`, `SECRET_KEY`, `ALLOWED_HOSTS`. README sections: the authorisation notice; quick start; how to get a Globalping key (free up to a limit, credits above it, link to `https://globalping.io`); the cache-test limitation (a repeat request is not a browser cache); privacy (nothing stored server-side, session storage only, export to keep results).
 
 - [ ] **Step 1: Write the Dockerfile** modelled on siteward's (gunicorn on `speedward.web.wsgi`); build with `docker build -t speedward .` and expect success.
-- [ ] **Step 2: Write `README.md`, `.env.example`, `SECURITY.md`, `scripts/smoke_live.py`** (one real scan against a site the operator owns, asserting a non-empty map and that no non-measured row shows a timing).
+- [ ] **Step 2: Write `README.md`, `.env.example`, `SECURITY.md`, `scripts/smoke_live.py`.** The README must explain self-hosting end to end for someone who has never seen the project (author requirement: "remember it's self hosted, so readme.md should also explain that process well and setup"): what you need (Python 3.11+, or Docker), install steps, getting a Globalping key (free up to a limit, credits above it; what each limit means for scans), where to put it (`.env`, never in the web page), a first CLI scan, running the web UI locally, running it with Docker, running it behind your own reverse proxy/auth (the web app has no login), every `.env` setting with its default, the optional extras (`geoip` offline database and how to obtain one, `browser` with `playwright install chromium`), how to read the map and the "no data"/blocked/test-failed statuses, test-cost estimates and how to stay under the hourly allowance, upgrading, and troubleshooting (no key, 401, rate limit, nothing on the map, session results gone after closing the tab). (one real scan against a site the operator owns, asserting a non-empty map and that no non-measured row shows a timing).
 - [ ] **Step 3: Update `CLAUDE.md`** with the commands now in use: `.venv/bin/pytest`, a single test (`.venv/bin/pytest tests/test_runner.py::test_name -v`), running the web app (`DEBUG=1 django-admin runserver --settings=speedward.web.settings`), and the layer boundaries (`core` has no Django imports).
 - [ ] **Step 4: Run the whole suite** `.venv/bin/pytest -q`; expect all PASS. Run `scripts/smoke_live.py` with and without `GLOBALPING_TOKEN` and record the outcome in the commit message.
 - [ ] **Step 5: Commit** `git commit -am "docs: README, packaging, smoke check"`.
 
 ---
+
+### Task 12: Allowance timer (added mid-build at the author's request; option B of the timer mockup)
+
+**Files:**
+- Create: `speedward/core/allowance_view.py`, `tests/test_allowance_view.py`
+- Modify: `speedward/core/globalping.py` (Allowance gains `reset_seconds: int | None`), `speedward/cli/main.py`, `speedward/web/views.py`, `speedward/web/templates/index.html`, `speedward/web/static/js/results.js`, `speedward/web/static/css/app.css`, `tests/test_cli.py`, `tests/test_web.py`, `e2e/test_session_storage.py` (or a new e2e file)
+
+**Interfaces:**
+- Produces: `Allowance.reset_seconds` read from `GET /v1/limits` (`rateLimit.measurements.create.reset`, seconds) and the `x-ratelimit-reset` POST header; `describe_allowance(allowance, cost: int | None, now_epoch: float) -> AllowanceView` in `allowance_view.py` with `.tests_left`, `.tests_per_hour`, `.reset_in_minutes: int | None` (rounded UP, never 0 while reset_seconds > 0), `.state` (`"ok"`, `"low"` when tests_left < cost or <= 15% of tests_per_hour, `"unknown"` when remaining is unknown), `.used_before`, `.this_scan`, `.left_after` (never negative; the three bar parts sum to tests_per_hour), `.text` (the strip text), `.keyless: bool`, and `.next_full_scan_in_minutes: int | None`.
+
+Behaviour (author's decisions): web status strip "N of M tests left this hour · resets in X min · last run Y min ago"; amber when low, then says when a full scan will fit again; no-key variant shows the lower limits and "A key is free up to a limit: https://globalping.io"; progress bar beside the cost estimate with three parts (already used, this scan, left afterwards) and a caption such as "38 used already · 36 for this scan · 176 left afterwards"; the countdown ticks down client-side every 30 seconds from the server-supplied `reset_seconds` and `fetchedAt`, and the strip refreshes from `/estimate` after every scan; "last run Y min ago" comes ONLY from the saved result in session storage (`speedward:result` savedAt) so it vanishes with the tab; the server stores nothing; CLI prints "You have N left this hour (resets in X min)." next to the estimate (no last-run line). Never show a guess: if `reset_seconds` or `remaining` is unknown, show "unknown" for that part (and omit the bar) rather than a number.
+
+- [ ] **Step 1: Write failing tests**: `test_reset_rounds_up_to_whole_minutes` (61 s -> 2 min, 1 s -> 1 min, 0 -> None/"now"); `test_unknown_reset_is_not_guessed`; `test_low_state_when_remaining_below_cost`; `test_bar_parts_sum_to_limit_and_never_negative`; `test_keyless_text_says_free_up_to_a_limit_and_never_bare_free`; `test_cli_estimate_prints_reset_countdown`; `test_web_estimate_returns_reset_and_bar_parts`; `test_index_status_strip_shows_countdown`; an e2e test that the strip is present, the countdown text decrements when the browser clock is advanced (Playwright `page.clock`), and "last run" appears after a scan and is gone after closing and reopening the tab.
+- [ ] **Step 2: Run the new tests; expect FAIL.**
+- [ ] **Step 3: Implement** `Allowance.reset_seconds` plus `describe_allowance`, then CLI, web view/template/JS/CSS. All dynamic text via `textContent`. No server-side storage of the last run.
+- [ ] **Step 4: Run** the new tests plus the full suite; expect PASS.
+- [ ] **Step 5: Commit** `git commit -am "feat: allowance timer and last-run strip"`.
+
+---
+
+### Task 13: Map-first location picker (added at the author's request; mockups page-1 to page-4 approved)
+
+**Intent:** the map is always on the page. Before a scan it is the location picker (replaces the free-text "Locations" input); during a scan the same map shows progress; after, results. Spec files: mockups in `.superpowers/brainstorm/122437-1793561144/content/` (`page-1-home.html` .. `page-4-return-mobile.html`, `map-always.html`).
+
+**Files:** `speedward/core/locations.py` (add `CATALOG`), `speedward/reports/map.py` (add `render_picker_map`), `speedward/web/views.py`, `templates/index.html`, `static/js/results.js` (or new `static/js/picker.js`), `static/css/app.css`, tests in `tests/` and `e2e/`, README/demo.md/CLAUDE.md wording.
+
+**Requirements:**
+1. `CATALOG`: about 40 `Place(name, country, continent, lat, lon)` entries covering all 12 defaults plus extras on every continent (for example Paris, Stockholm, Madrid, Toronto, Chicago, Mexico City, Santiago, Cairo, Nairobi, Cape Town, Seoul, Hong Kong, Delhi, Jakarta, Melbourne, Auckland). `name` is the string sent as `{"magic": name}`. Defaults must be a subset. No network lookups; coordinates are static. Names must be unique.
+2. `render_picker_map(selected: list[str]) -> str`: same bundled land and style as `render_map`, one `<circle class="sw-pick" data-place="NAME" tabindex="0" role="checkbox" aria-checked=...>` per catalog place with a `<title>`; selected = filled blue (`var(--pin)`), unselected = grey ring. All dynamic text escaped. No outside resources.
+3. Index page: map first (below the header strip), then presets (Default 12, One per continent, All, Clear), chips grouped by continent (real `<button type="button" aria-pressed>` toggles, same state as the dots), an "Add another place" text box + Add button (adds a chip without a dot, trimmed, no commas, max 40 chars), then the address box, extra checks, limits, estimate, Start test (as the mockup page-1). The old visible text input is removed; a hidden `locations` input holds the comma-separated selection so `/estimate` and `/scan` are unchanged. Zero selected is an error ("Pick at least one place"), never silently the default.
+4. Live estimate: every toggle calls the existing estimate flow; summary line "N locations · about M tests".
+5. During a scan the form and picker are disabled and the map stays visible; after a scan the results map (existing `/render` fragment) appears in the same position as the picker, and the picker collapses to a one-line summary "Locations: N selected (change and run again)" that reopens it. Saved results restore the picks.
+6. Phone width: map full width, chips stack below, no horizontal page scroll. Keyboard: dots and chips focusable and toggle with Space/Enter.
+7. CSP unchanged (no inline script or style attributes; classes only). Text set with `textContent` only. CLI `--locations` unchanged.
+8. Tests: unit tests for catalog (unique, defaults subset, continents known, lat/lon in range), picker map (escaping, selected state, no external URL), view renders map and hidden input; e2e: click a dot toggles chip and estimate, presets, add custom place, zero-selection error, picks restored after refresh.
 
 ## Self-Review notes
 

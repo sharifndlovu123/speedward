@@ -1,0 +1,261 @@
+{
+ "id": "fixture-mtr",
+ "type": "mtr",
+ "status": "finished",
+ "createdAt": "2026-11-01T17:58:46.120Z",
+ "updatedAt": "2026-11-01T17:58:46.450Z",
+ "target": "example.com",
+ "probesCount": 4,
+ "locations": [
+  {
+   "magic": "Berlin"
+  },
+  {
+   "magic": "Tokyo"
+  },
+  {
+   "magic": "aws-eu-west-1"
+  },
+  {
+   "magic": "eyeball-network+Brazil"
+  }
+ ],
+ "measurementOptions": null,
+ "results": [
+  {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Berlin",
+    "asn": 8560,
+    "longitude": 13.41,
+    "latitude": 52.52,
+    "network": "IONOS",
+    "tags": [
+     "datacenter-network",
+     "u-h0ger77"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "Host  Loss% Drop Rcv  Avg  StDev  Javg",
+    "resolvedAddress": "104.20.23.154",
+    "resolvedHostname": "example.com",
+    "hops": [
+     {
+      "asn": [],
+      "resolvedAddress": "10.0.0.1",
+      "resolvedHostname": "10.0.0.1",
+      "stats": {
+       "min": 0.2,
+       "max": 0.4,
+       "avg": 0.3,
+       "total": 3,
+       "loss": 0,
+       "rcv": 3,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0.1,
+       "jMax": 0.2,
+       "jAvg": 0.1
+      },
+      "timings": [
+       {
+        "rtt": 0.2
+       },
+       {
+        "rtt": 0.3
+       },
+       {
+        "rtt": 0.4
+       }
+      ]
+     },
+     {
+      "asn": [
+       8560
+      ],
+      "resolvedAddress": "212.227.120.29",
+      "resolvedHostname": "port-channel-2-1460.nf1-bp1-l8.rs.ber.de.net.ionos.com",
+      "stats": {
+       "min": 0.386,
+       "max": 1.003,
+       "avg": 0.6,
+       "total": 3,
+       "loss": 0,
+       "rcv": 3,
+       "drop": 0,
+       "stDev": 0.3,
+       "jMin": 0.4,
+       "jMax": 0.6,
+       "jAvg": 0.5
+      },
+      "timings": [
+       {
+        "rtt": 1.003
+       },
+       {
+        "rtt": 0.386
+       },
+       {
+        "rtt": 0.399
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "104.20.23.154",
+      "resolvedHostname": "example.com",
+      "stats": {
+       "min": 1.0,
+       "max": 2.0,
+       "avg": 1.5,
+       "total": 3,
+       "loss": 33.3,
+       "rcv": 2,
+       "drop": 1,
+       "stDev": 0.3,
+       "jMin": 0.4,
+       "jMax": 0.6,
+       "jAvg": 0.5
+      },
+      "timings": [
+       {
+        "rtt": 1.0
+       },
+       {
+        "rtt": 2.0
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "probe": {
+    "continent": "AS",
+    "region": "Eastern Asia",
+    "country": "JP",
+    "state": null,
+    "city": "Tokyo",
+    "asn": 3258,
+    "longitude": 139.69,
+    "latitude": 35.69,
+    "network": "xTom",
+    "tags": [
+     "datacenter-network",
+     "u-zGato"
+    ],
+    "resolvers": [
+     "1.1.1.1",
+     "8.8.8.8",
+     "2606:4700:4700::1111",
+     "2001:4860:4860::8888"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "Host  Loss% Drop Rcv  Avg  StDev  Javg",
+    "resolvedAddress": "104.20.23.154",
+    "resolvedHostname": "example.com",
+    "hops": [
+     {
+      "asn": [],
+      "resolvedAddress": "10.0.0.1",
+      "resolvedHostname": "10.0.0.1",
+      "stats": {
+       "min": 0.2,
+       "max": 0.4,
+       "avg": 0.3,
+       "total": 3,
+       "loss": 0,
+       "rcv": 3,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0.1,
+       "jMax": 0.2,
+       "jAvg": 0.1
+      },
+      "timings": [
+       {
+        "rtt": 0.2
+       },
+       {
+        "rtt": 0.3
+       },
+       {
+        "rtt": 0.4
+       }
+      ]
+     },
+     {
+      "asn": [
+       8560
+      ],
+      "resolvedAddress": "212.227.120.29",
+      "resolvedHostname": "port-channel-2-1460.nf1-bp1-l8.rs.ber.de.net.ionos.com",
+      "stats": {
+       "min": 0.386,
+       "max": 1.003,
+       "avg": 0.6,
+       "total": 3,
+       "loss": 0,
+       "rcv": 3,
+       "drop": 0,
+       "stDev": 0.3,
+       "jMin": 0.4,
+       "jMax": 0.6,
+       "jAvg": 0.5
+      },
+      "timings": [
+       {
+        "rtt": 1.003
+       },
+       {
+        "rtt": 0.386
+       },
+       {
+        "rtt": 0.399
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "104.20.23.154",
+      "resolvedHostname": "example.com",
+      "stats": {
+       "min": 1.0,
+       "max": 2.0,
+       "avg": 1.5,
+       "total": 3,
+       "loss": 33.3,
+       "rcv": 2,
+       "drop": 1,
+       "stDev": 0.3,
+       "jMin": 0.4,
+       "jMax": 0.6,
+       "jAvg": 0.5
+      },
+      "timings": [
+       {
+        "rtt": 1.0
+       },
+       {
+        "rtt": 2.0
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}
