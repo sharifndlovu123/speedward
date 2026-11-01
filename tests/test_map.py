@@ -75,3 +75,12 @@ def test_labels_are_escaped_exactly_once():
     assert "d&#x27;Ivoire" in svg and "AT&amp;T" in svg and "&quot;no&quot;" in svg
     for bad in ("&amp;amp;", "&amp;#x27;", "&amp;quot;"):
         assert bad not in svg
+
+
+def test_dots_have_a_stroke_based_keyboard_focus_ring():
+    from speedward.reports.map import render_picker_map
+    svg = render_map(report([ok("Tokyo", 100)]))
+    assert ".sw-dot:focus-visible" in svg and ".sw-pick:focus-visible" in svg
+    assert "stroke-width" in svg.split(".sw-dot:focus-visible")[1].split("}")[0]
+    assert "outline:2px" not in svg  # no SVG outline, keyboard-only stroke
+    assert ".sw-dot.sw-sel" in svg
