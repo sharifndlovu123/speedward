@@ -306,6 +306,19 @@ Behaviour (author's decisions): web status strip "N of M tests left this hour ·
 4. CSP unchanged: no inline script or style attributes, textContent only.
 5. Tests: e2e that the drawer opens taller than before (height >= 60% of viewport), Close button closes it, Escape closes it, focus returns; unit/e2e that the focus style rule exists and the focused dot has a non-default stroke.
 
+### Task 15: Server pin so connection lines always draw (author chose option A of mockup page-10-lines.html)
+
+**Problem:** `render_map` draws arcs only when `report.server` is known (geo-IP DB or SERVER_LAT/SERVER_LON); in a default setup no lines show. No outside lookups are allowed.
+
+**Requirements:**
+1. Web form: a "Server" pin on the map the person can drag (pointer and keyboard: arrow keys move it, with a visible focus ring) and a "Server is in:" select listing the catalog cities plus "Not set". Lines from the pin to each selected place appear as faint previews in picker mode and as speed-coloured arcs (dashed grey for unreachable) in results.
+2. The chosen position (two numbers, validated finite, lat -90..90, lon -180..180) is kept in this tab only (sessionStorage, same expiry as results) and posted with /scan as `server_lat`/`server_lon`; `/estimate` unchanged. A configured override or geo-IP result still wins; a manual pin applies only when neither exists. The source is recorded as "manual (pin)" in the report so it is not mistaken for a measured location.
+3. If no position is set, the map shows "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON" with no fake lines.
+4. Core stays Django-free; the validation lives in core (extend Geolocator or runner input), web stays thin. Never log the position or the target.
+5. CSP unchanged, textContent only, keyboard operable, WCAG: pin has role and accessible name, instructions announced.
+6. Tests: unit (validation, precedence, report source label, arcs drawn when pin given, none when unknown), views (bad values refused with a fixed message), e2e (drag/keys move pin, select sets it, lines appear in picker and results, survives refresh, cleared with results).
+7. Update README and demo.md (how lines work and the setting).
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).
