@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import typer
 
+from speedward.core import config
 from speedward.core.analysis import Limits, evaluate_limits
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.geo import geolocator_from_env
@@ -34,42 +34,13 @@ def _err(message: str):
 
 
 def load_dotenv(path: Path) -> dict[str, str]:
-    """Tiny .env reader: KEY=VALUE lines, # comments, blank lines, simple quotes. No expansion."""
-    out: dict[str, str] = {}
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except OSError:
-        return out
-    except UnicodeDecodeError:
-        _err("Note: the .env file could not be read as text and was ignored.")
-        return out
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        if line.startswith("export "):
-            line = line[7:].lstrip()
-        key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip()
-        if value[:1] in ("'", '"') and value.find(value[0], 1) > 0:
-            value = value[1:value.find(value[0], 1)]
-        else:
-            value = re.split(r"\s#", value, maxsplit=1)[0].strip()
-        if key:
-            out[key] = value
-    return out
-
-
-# Only these keys may come from a `.env` in the current directory, which may be untrusted
-# (e.g. a cloned repo). Anything that could move an endpoint or path is deliberately absent.
-DOTENV_ALLOWED = ("GLOBALPING_TOKEN", "GEOIP_DB", "SERVER_LAT", "SERVER_LON", "FAST_MS", "SLOW_MS")
-LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+    """Kept for callers of the CLI module; the reader lives in speedward.core.config."""
+    return config.load_dotenv(path, on_warning=_err)
 
 
 def _environment() -> dict[str, str]:
     """The real environment, with allowlisted `.env` keys filling gaps (never overriding)."""
-    file_env = {k: v for k, v in load_dotenv(Path(".env")).items() if k in DOTENV_ALLOWED}
-    return {**file_env, **os.environ}
+    return config.build_environment(Path(".env"), on_warning=_err)
 
 
 @app.command()
@@ -123,12 +94,14 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     kwargs = {}
     token = env.get("GLOBALPING_TOKEN") or None
     if base_url and base_url.rstrip("/") != DEFAULT_BASE_URL:
-        host = urlsplit(base_url).hostname or ""
-        _err(f"Using a custom Globalping endpoint: {clean(host)}")
-        if token and host not in LOOPBACK_HOSTS:
-            _err("Refusing to send a Globalping key to a non-default, non-local endpoint.")
-            raise typer.Exit(2)
-        kwargs["base_url"] = base_url
+        _err(f"Using a custom Globalping endpoint: {clean(urlsplit(base_url).hostname or '')}")
+    try:
+        custom = config.check_endpoint(base_url, token)
+    except config.EndpointRefused as exc:
+        _err(str(exc))
+        raise typer.Exit(2)
+    if custom:
+        kwargs["base_url"] = custom
     client = GlobalpingClient(token=token, **kwargs)
 
     try:
