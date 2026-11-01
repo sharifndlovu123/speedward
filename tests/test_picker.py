@@ -51,3 +51,12 @@ def test_picker_escapes_dynamic_text(monkeypatch):
     monkeypatch.setattr(m, "CATALOG", [Place('<b>"x"', "<i>", "Asia", 0, 0)])
     svg = render_picker_map([])
     assert "<b>" not in svg and "<i>" not in svg and "&lt;b&gt;" in svg and "&quot;x&quot;" in svg
+
+
+def test_picker_has_a_focusable_labelled_server_pin_and_a_lines_layer():
+    svg = render_picker_map([])
+    assert svg.count('class="sw-pin"') == 1
+    assert 'aria-label="Server position pin' in svg and 'tabindex="0"' in svg
+    assert 'aria-describedby="pin-help"' in svg
+    assert 'class="sw-preview"' in svg
+    assert "<script" not in svg and "http" not in svg.replace("http://www.w3.org", "")

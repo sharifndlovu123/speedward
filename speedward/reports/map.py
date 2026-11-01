@@ -78,10 +78,10 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
 
     if report.server is not None:
         sx, sy = proj(report.server.lat, report.server.lon)
-        server_label = "Server"
+        server_label = "Server (pin)" if report.server.source == "manual (pin)" else "Server"
     else:
         sx, sy = 18 * k, H - 22 * k
-        server_label = "Server position unknown"
+        server_label = "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON"
 
     arcs, dots, labels = [], [], []
     for row, r in enumerate(report.locations):
@@ -142,6 +142,15 @@ _PICK_STYLE = (
     "@keyframes sw-pulse{50%{opacity:.35}}"
     ".sw-scanning .sw-pick[aria-checked=\"true\"]{animation:sw-pulse 1.2s ease-in-out infinite}"
     ".sw-locked .sw-pick{cursor:default}"
+    # The server pin: drag it, or focus it and use the arrow keys. The ring only shows on keyboard focus.
+    ".sw-pin{cursor:grab;touch-action:none}.sw-pin:focus{outline:none}"
+    ".sw-pin .sw-body{fill:var(--pin);stroke:var(--bg);stroke-width:2}"
+    ".sw-pin .sw-ring{fill:none;stroke:none}"
+    ".sw-pin:focus-visible .sw-ring{stroke:var(--ink);stroke-width:3}"
+    ".sw-pin.sw-drag{cursor:grabbing}.sw-locked .sw-pin{cursor:default}"
+    ".sw-pin text{fill:var(--ink);font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px;"
+    "pointer-events:none}"
+    ".sw-preview path{fill:none;stroke:var(--pin);stroke-width:1.4;opacity:.4;pointer-events:none}"
 )
 
 
@@ -162,6 +171,8 @@ def render_picker_map(selected: list[str], width: int = 1000) -> str:
     ]
     scale = f' transform="scale({k:g})"' if W != 1000 else ""
     out.append(f'<g fill="var(--land)"{scale}>' + "".join(f'<path d="{d}"/>' for d in _land()) + "</g>")
+    # Faint server-to-place lines; the page script fills this layer while a pin is set (SVG, no outside data).
+    out.append('<g class="sw-preview" aria-hidden="true"></g>')
     for p in CATALOG:
         x = (p.lon + 180) / 360 * W
         y = (90 - p.lat) / 180 * H
@@ -169,5 +180,12 @@ def render_picker_map(selected: list[str], width: int = 1000) -> str:
         out.append(f'<circle class="sw-pick" data-place="{escape(p.name, quote=True)}" tabindex="0" '
                    f'role="checkbox" aria-checked="{on}" cx="{_num(x)}" cy="{_num(y)}" r="{_num(7 * k)}">'
                    f"<title>{escape(p.name)}, {escape(p.country)}</title></circle>")
+    # Resting place of the unset pin is bottom left; the script moves it (data-home is that spot).
+    hx, hy = _num(22 * k), _num(H - 22 * k)
+    out.append(f'<g class="sw-pin" tabindex="0" role="button" aria-roledescription="draggable pin" '
+               f'aria-label="Server position pin, not set" aria-describedby="pin-help" '
+               f'data-home="{hx},{hy}" transform="translate({hx},{hy})">'
+               f'<circle class="sw-ring" r="{_num(13 * k)}"/><circle class="sw-body" r="{_num(9 * k)}"/>'
+               f'<text x="{_num(15 * k)}" y="{_num(4 * k)}" font-size="{_num(max(9.0, 11 * k))}">Server</text></g>')
     out.append("</svg>")
     return "".join(out)

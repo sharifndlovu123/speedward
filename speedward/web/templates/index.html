@@ -60,6 +60,16 @@
             <p class="mute">Checked against every location that was measured. Locations that could not be tested never count as passing.</p>
           </details>
 
+          <div class="server-pin">
+            <label for="server-city">Server is in:</label>
+            <select id="server-city">
+              <option value="">Not set</option>
+              <option value="custom" disabled hidden>Custom position (dragged)</option>
+              {% for g in groups %}<optgroup label="{{ g.continent }}">{% for p in g.places %}<option value="{{ p.name }}" data-lat="{{ p.lat|stringformat:'.4f' }}" data-lon="{{ p.lon|stringformat:'.4f' }}">{{ p.name }}</option>{% endfor %}</optgroup>{% endfor %}
+            </select>
+            <p id="pin-help" class="mute small">Optional. Drag the Server pin on the map, or focus it and use the arrow keys (hold Shift to move further, Delete to remove it). Lines from the server then show for each place. The position stays in this tab only.</p>
+            <p id="pin-status" class="mute small" aria-live="polite"></p>
+          </div>
           <p id="pick-summary" class="pick-summary" aria-live="polite"></p>
           <p id="estimate" class="estimate" aria-live="polite"></p>
           <div id="allowance-bar" class="allowance" hidden>
