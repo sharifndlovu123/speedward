@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DJANGO_SETTINGS_MODULE=speedwar
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY speedward ./speedward
-RUN pip install --no-cache-dir . \
+RUN pip install --no-cache-dir ".[geoip]" \
  && STATIC_ROOT=/app/staticfiles django-admin collectstatic --noinput \
  && useradd --system --create-home app
 ENV STATIC_ROOT=/app/staticfiles

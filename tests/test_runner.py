@@ -302,21 +302,94 @@ def test_browser_flag_is_ignored_here(fake):
 
 # --- server position and progress ---------------------------------------
 
-class RecordingGeo:
-    def __init__(self):
-        self.seen = []
+class FakeDb(Geolocator):
+    """A Geolocator whose database answers from a dict (no file, no maxminddb)."""
 
-    def locate(self, ip):
+    def __init__(self, table, override=None, pin=None):
+        super().__init__(None, override, pin)
+        self.table, self.seen = table, []
+
+    def lookup(self, ip):
         self.seen.append(ip)
-        return Geolocator(None, (1.0, 2.0)).locate(ip)
+        return self.table.get(ip, "not in the geo-IP database")
 
 
-def test_server_position_from_first_measured_ip(fake):
-    fake.by_type["http"] = http_with({0: failure("http_timeout")})
-    geo = RecordingGeo()
+def without_cf_ray(res):
+    res["headers"].pop("cf-ray", None)
+
+
+CF_IP = fixture("http_ok")["results"][0]["result"]["resolvedAddress"]  # both probes got this one
+
+
+def test_cf_ray_places_each_edge_without_a_database(fake):
+    rep = run_scan("example.com", plan(), client(fake))
+    berlin, tokyo = rep.locations
+    assert (berlin.edge_code, tokyo.edge_code) == ("TXL", "NRT")
+    assert berlin.server_position.source == tokyo.server_position.source == "cdn header"
+    assert abs(tokyo.server_position.lat - 35.77) < 0.1 and abs(tokyo.server_position.lon - 140.39) < 0.1
+    assert berlin.edge_note is None and rep.server is None
+
+
+def test_raw_headers_are_never_kept_in_the_report(fake):
+    text = json.dumps(run_scan("example.com", plan(), client(fake)).to_dict())
+    assert "cf-ray" not in text and "a53cca1a6ccf518e" not in text and "cloudflare" not in text
+
+
+def test_no_database_and_no_header_means_position_not_available(fake):
+    fake.by_type["http"] = http_with({0: without_cf_ray, 1: without_cf_ray})
+    rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, None))
+    for r in rep.locations:
+        assert r.server_position is None and r.edge_code is None
+        assert (r.edge_note, r.edge_reason) == ("position not available", "no geo-IP database set")
+
+
+def test_anycast_address_from_the_database_is_uncertain(fake):
+    # The recorded Cloudflare address answered Berlin (0 ms connect) and Tokyo (3 ms): a database
+    # position in San Francisco cannot be right for either, and it is seen on two continents.
+    fake.by_type["http"] = http_with({0: without_cf_ray, 1: without_cf_ray})
+    geo = FakeDb({CF_IP: (37.77, -122.42)})
     rep = run_scan("example.com", plan(), client(fake), geo=geo)
-    assert geo.seen == [fixture("http_ok")["results"][1]["result"]["resolvedAddress"]]
-    assert rep.server is not None and (rep.server.lat, rep.server.lon) == (1.0, 2.0)
+    assert geo.seen == [CF_IP]
+    for r in rep.locations:
+        assert r.server_position is None
+        assert (r.edge_note, r.edge_reason) == ("edge location uncertain", "shared address")
+    assert rep.server is None
+
+
+def test_database_position_used_for_an_address_on_one_continent(fake):
+    def other_ip(res):
+        without_cf_ray(res)
+        res["resolvedAddress"] = "93.184.216.34"
+    fake.by_type["http"] = http_with({0: other_ip, 1: without_cf_ray})
+    rep = run_scan("example.com", plan(), client(fake), geo=FakeDb({"93.184.216.34": (52.5, 13.4)}))
+    berlin, tokyo = rep.locations
+    assert berlin.server_position is not None and berlin.server_position.source == "database"
+    assert (tokyo.edge_note, tokyo.edge_reason) == ("position not available", "not in the geo-IP database")
+
+
+def test_failed_results_carry_no_server_fields(fake):
+    fake.by_type["http"] = http_with({0: failure("http_timeout")})
+    berlin, tokyo = run_scan("example.com", plan(), client(fake)).locations
+    assert berlin.status != "measured"
+    assert (berlin.server_position, berlin.edge_code, berlin.edge_note, berlin.edge_reason) == (None,) * 4
+    assert tokyo.server_position is not None
+
+
+def test_pin_is_ignored_when_a_result_has_a_position(fake):
+    rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, None, pin=(5.0, 6.0)))
+    assert rep.server is None
+
+
+def test_pin_is_the_fallback_when_no_result_has_a_position(fake):
+    fake.by_type["http"] = http_with({0: without_cf_ray, 1: without_cf_ray})
+    rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, None, pin=(5.0, 6.0)))
+    assert rep.server is not None and rep.server.source == "manual (pin)"
+
+
+def test_configured_position_always_wins_for_the_server(fake):
+    rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, (1.0, 2.0), pin=(5.0, 6.0)))
+    assert rep.server is not None and (rep.server.lat, rep.server.lon, rep.server.source) == (1.0, 2.0, "manual")
+    assert all(r.server_position is not None for r in rep.locations)  # the table still says what answered
 
 
 def test_server_position_none_without_geo(fake):

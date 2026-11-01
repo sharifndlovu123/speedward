@@ -192,3 +192,33 @@ def test_geolocator_pin_goes_through_parse_pin_with_fixed_message(pin):
     assert "nan" not in str(exc.value) and "x" != str(exc.value)
     assert str(exc.value) in ("server pin is not a valid position",
                               "server pin needs both a latitude and a longitude")
+
+
+# --- lookup: the database only, with a reason when there is no answer (Task 16) -----------------
+
+def _db(tmp_path):
+    db = tmp_path / "x.mmdb"
+    db.write_bytes(b"x")
+    return str(db)
+
+
+def test_lookup_returns_database_position(tmp_path, monkeypatch):
+    install_fake_maxminddb(monkeypatch, {"location": {"latitude": 51.5, "longitude": -0.12}})
+    assert Geolocator(_db(tmp_path), None).lookup("8.8.8.8") == (51.5, -0.12)
+
+
+def test_lookup_ignores_override_and_pin(tmp_path, monkeypatch):
+    install_fake_maxminddb(monkeypatch, {"location": {"latitude": 51.5, "longitude": -0.12}})
+    assert Geolocator(_db(tmp_path), (1, 2), pin=(3, 4)).lookup("8.8.8.8") == (51.5, -0.12)
+    assert Geolocator(None, (1, 2), pin=(3, 4)).lookup("8.8.8.8") == "no geo-IP database set"
+
+
+def test_lookup_reasons(tmp_path, monkeypatch):
+    assert Geolocator(None, None).lookup("8.8.8.8") == "no geo-IP database set"
+    assert Geolocator(str(tmp_path / "nope.mmdb"), None).lookup("8.8.8.8") == "geo-IP database could not be read"
+    install_fake_maxminddb(monkeypatch, None)
+    assert Geolocator(_db(tmp_path), None).lookup("8.8.8.8") == "not in the geo-IP database"
+    install_fake_maxminddb(monkeypatch, {"location": {"latitude": 99, "longitude": 0}})
+    assert Geolocator(_db(tmp_path), None).lookup("8.8.8.8") == "not in the geo-IP database"
+    monkeypatch.setitem(sys.modules, "maxminddb", None)
+    assert Geolocator(_db(tmp_path), None).lookup("8.8.8.8") == "geo-IP database could not be read"

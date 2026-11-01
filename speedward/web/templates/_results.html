@@ -3,7 +3,20 @@
 {% if failed %}<ul class="failed-list">{% for f in failed %}<li>Failed: {{ f }}</li>{% endfor %}</ul>{% endif %}
 
 <section class="map" aria-label="Map">{{ map_svg }}</section>
-<p class="mute legend">Lines from the server to each location: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms. Dashed grey: no data. Select a dot to find its row.</p>
+<p class="mute legend">Circle = test location. Square = server that answered it (a CDN edge when the addresses differ; a frame around the circle when in the same city). Lines: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms; dashed grey: no data. Select a dot to find its row.</p>
+{% if position_note %}<div class="position-note">
+{% if position_note == "setup" %}<p>No server positions yet. Results still show every number; lines need the free offline location file.</p>
+<details><summary>How to set it up</summary>
+<ol>
+<li>Download a City database in <code>.mmdb</code> form: MaxMind GeoLite2 City (free account and licence from maxmind.com) or DB-IP Lite City (free from db-ip.com, CC BY 4.0). Check the licence before use.</li>
+<li>Install the extra: <code>pip install -e ".[geoip]"</code> (the Docker image has it).</li>
+<li>Set <code>GEOIP_DB=/path/to/file.mmdb</code> in <code>.env</code>, or for Docker mount the file and pass <code>-e GEOIP_DB=/geo/GeoLite2-City.mmdb</code>. Restart, then run the test again.</li>
+</ol>
+<p class="mute">The file stays on this server; no lookup leaves it. Addresses shared by a CDN (anycast) still get no square, because their place is uncertain.</p>
+</details>
+{% else %}<p>No server positions: the addresses that answered could not be placed with confidence (see Position source in the table). Lines are drawn only from a position that can be trusted.</p>
+{% endif %}<button type="button" class="secondary" data-place-pin>Place a server manually (your own claim)</button>
+</div>{% endif %}
 <p id="map-detail" class="map-detail" aria-live="polite"></p>
 
 <section class="tiles" aria-label="Summary">
@@ -18,9 +31,9 @@
 <section>
 <h3>Locations</h3>
 <div class="scroll"><table>
-<thead><tr><th>Location</th><th>Network</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Status</th></tr></thead>
+<thead><tr><th>Location</th><th>Network</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Answered by</th><th>Position source</th><th>Status</th></tr></thead>
 <tbody>
-{% for row in rows %}<tr data-row="{{ row.index }}"{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.network }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.status }}</td></tr>
+{% for row in rows %}<tr data-row="{{ row.index }}"{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.network }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 </section>

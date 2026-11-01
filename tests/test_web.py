@@ -82,11 +82,13 @@ def report_dict(**overrides):
         "locations": [
             {"location": loc, "status": "measured", "reason": "", "stages": stages, "repeat_stages": None,
              "ping_ms": 9.0, "http_status": 200, "cdn": None, "server_ip": "203.0.113.9", "tls_version": None,
-             "http_version": None, "redirects": [], "repeat_same_probe": False},
+             "http_version": None, "redirects": [], "repeat_same_probe": False,
+             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None},
             {"location": dict(loc, city="Lagos", country="NG", lat=6.5, lon=3.4), "status": "blocked",
              "reason": "timed out the connection", "stages": None, "repeat_stages": None, "ping_ms": None,
              "http_status": None, "cdn": None, "server_ip": None, "tls_version": None, "http_version": None,
-             "redirects": [], "repeat_same_probe": False},
+             "redirects": [], "repeat_same_probe": False,
+             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None},
         ],
         "paths": [], "dns": [], "browser": None,
     }
@@ -673,9 +675,24 @@ def test_index_has_map_picker_and_hidden_locations_input(client):
 PIN_BAD = "The server pin is not a valid position. Drop it again on the map or choose a city."
 
 
-def test_scan_with_pin_records_manual_pin_source(client):
+def http_without_cf_ray():
+    doc = copy.deepcopy(fixture("http_ok"))
+    for item in doc["results"]:
+        item["result"]["headers"].pop("cf-ray")
+    return doc
+
+
+def test_scan_with_pin_records_manual_pin_source_when_nothing_was_placed(client, fake):
+    fake.by_type["http"] = http_without_cf_ray()
     result = run_full_scan(client, server_lat="-26.2", server_lon="28.04")
     assert result["server"] == {"lat": -26.2, "lon": 28.04, "source": "manual (pin)"}
+
+
+def test_pin_is_not_used_when_answering_servers_were_placed(client):
+    result = run_full_scan(client, server_lat="-26.2", server_lon="28.04")
+    assert result["server"] is None
+    assert [r["server_position"]["source"] for r in result["locations"]] == ["cdn header", "cdn header"]
+    assert [r["edge_code"] for r in result["locations"]] == ["TXL", "NRT"]
 
 
 def test_scan_without_pin_has_no_server(client):
@@ -714,3 +731,62 @@ def test_index_offers_server_select_with_not_set_and_cities(client):
     assert 'id="server-city"' in page and "Not set" in page
     assert re.search(r'<option value="Johannesburg" data-lat="-?[\d.]+" data-lon="-?[\d.]+"', page)
     assert 'id="pin-help"' in page
+
+
+# --- answering-server positions in the results fragment (Task 16) -------------------------------
+
+NOTE_TEXT = "No server positions yet. Results still show every number; lines need the free offline location file."
+
+
+def rendered(client, result):
+    return post_json(client, reverse("render"), {"result": result, "limits": {}}).content.decode()
+
+
+def with_tokyo(**fields):
+    d = report_dict()
+    d["locations"][0].update(fields)
+    return d
+
+
+def test_fragment_has_answered_by_and_position_source_columns(client):
+    html = rendered(client, with_tokyo(edge_code="NRT",
+                                       server_position={"lat": 35.77, "lon": 140.39, "source": "cdn header"}))
+    assert "<th>Answered by</th><th>Position source</th>" in html
+    assert "<td>edge NRT (Tokyo)</td><td>CDN header (cf-ray -NRT)</td>" in html
+    assert 'class="sw-sq' in html
+    assert NOTE_TEXT not in html
+
+
+def test_fallback_note_when_no_database_is_set(client):
+    html = rendered(client, with_tokyo(edge_note="position not available", edge_reason="no geo-IP database set"))
+    assert NOTE_TEXT in html
+    assert "How to set it up" in html and "Place a server manually (your own claim)" in html
+    assert "GEOIP_DB" in html and "GeoLite2 City" in html and "DB-IP Lite City" in html
+    assert 'data-place-pin' in html
+
+
+def test_fallback_note_for_an_old_report_without_positions(client):
+    assert NOTE_TEXT in rendered(client, report_dict())
+
+
+def test_uncertain_positions_get_their_own_note_not_the_setup_one(client):
+    html = rendered(client, with_tokyo(edge_note="edge location uncertain", edge_reason="shared address"))
+    assert NOTE_TEXT not in html
+    assert "could not be placed with confidence" in html and "Place a server manually (your own claim)" in html
+    assert "<td>edge location uncertain (shared address)</td>" in html
+
+
+def test_no_fallback_note_with_a_configured_position(client):
+    html = rendered(client, report_dict(server={"lat": 1, "lon": 2, "source": "manual"}))
+    assert NOTE_TEXT not in html and "Server (manual setting)" in html
+
+
+def test_legend_explains_circles_squares_and_lines(client):
+    html = rendered(client, report_dict())
+    assert "Circle = test location. Square = server that answered it" in html
+
+
+def test_unreadable_database_gets_the_setup_note(client):
+    html = rendered(client, with_tokyo(edge_note="position not available",
+                                       edge_reason="geo-IP database could not be read"))
+    assert NOTE_TEXT in html and "could not be placed with confidence" not in html

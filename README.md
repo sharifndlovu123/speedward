@@ -22,7 +22,7 @@ pip install -e .
 speedward scan --help
 ```
 
-Optional extras: `pip install -e ".[geoip]"` (offline server position, see below).
+Optional extras: `pip install -e ".[geoip]"` (offline position of the server that answered each place, see below).
 
 ## Get a Globalping key
 
@@ -125,8 +125,8 @@ Set these in the environment or in `.env` (the real environment wins). Defaults 
 | `GLOBALPING_TOKEN` | none | Globalping key. Optional. |
 | `FAST_MS` | `300` | Timings at or under this are shown as fast |
 | `SLOW_MS` | `800` | Timings over this are shown as slow. Must be above `FAST_MS` |
-| `GEOIP_DB` | none | Path to an offline `.mmdb` database (see below) |
-| `SERVER_LAT`, `SERVER_LON` | none | Server position by hand. Wins over the web form's server pin |
+| `GEOIP_DB` | none | Path to an offline City `.mmdb` database, used to place the server that answered each place (see below) |
+| `SERVER_LAT`, `SERVER_LON` | none | Server position by hand. Wins over everything else for the one Server square |
 | `RESULT_TTL_SECONDS` | `900` | Web UI: how long the browser keeps results. Minimum 60 |
 | `MAX_CONCURRENT_SCANS` | `2` | Web UI: scans at once. Minimum 1 |
 | `SECRET_KEY` | random per start | Web UI: required when `DEBUG` is off |
@@ -136,21 +136,34 @@ Set these in the environment or in `.env` (the real environment wins). Defaults 
 
 Not a `.env` setting: `STATIC_ROOT` (real environment only; defaults to `./staticfiles`).
 
-## Optional: show where the site's server is
+## Optional: lines to the server that answered each place
 
-The map can mark your target's server. Speedward does this without asking an outside service about your target. Either:
+Each measured place records the IP address that answered it. Speedward puts that server on the map as a **square**, with a speed-coloured line from the place's circle to it. This is done offline: nothing about your target is sent to an outside service.
 
-- Install the extra (`pip install -e ".[geoip]"`), download an offline City database, and set `GEOIP_DB=/path/to/file.mmdb`. Two sources: MaxMind GeoLite2 City (free account and licence from maxmind.com) or DB-IP Lite City (free `.mmdb` from db-ip.com). Check each one's licence before use.
-- Or set `SERVER_LAT` and `SERVER_LON` yourself.
-- Or, in the web UI, place the **Server pin** (below). This is the only option that needs no setup.
+**Download the location file (once).** Positions come from an offline City database:
 
-Connection lines run from the server to each place, so they need a position. In the web UI, drag the Server pin on the map, or focus it and use the arrow keys (Shift moves further, Delete removes it), or pick a city in "Server is in:". Lines show as faint previews while you choose places, then as speed-coloured arcs in the results (dashed grey where a place could not reach the site). The position is two numbers kept in this browser tab only (same expiry as results, cleared by "Clear now") and sent with the scan. Precedence: `SERVER_LAT`/`SERVER_LON`, then the geo-IP database, then the pin. A pinned position is recorded as "manual (pin)" in exports, because it is your claim and not a measured location.
+1. Download a City database in `.mmdb` form: **MaxMind GeoLite2 City** (free account and licence from maxmind.com; the licence asks you to keep it up to date and credit MaxMind) or **DB-IP Lite City** (free from db-ip.com, CC BY 4.0, credit DB-IP). Check the licence before use.
+2. Install the extra: `pip install -e ".[geoip]"` (the Docker image already has it).
+3. Point speedward at the file: `GEOIP_DB=/path/to/GeoLite2-City.mmdb` in `.env`. With Docker, mount it read-only and add to the `docker run` line above: `-v /srv/geo:/geo:ro -e GEOIP_DB=/geo/GeoLite2-City.mmdb`. The file stays on your server.
 
-With no position at all, the map says "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON" and draws no lines. Everything else still works.
+**CDN edge or origin.** A site behind a CDN is answered by the CDN's nearest edge, not by your own server, so each place can get a different square. When the addresses differ between places, a square's tooltip says "CDN edge, not necessarily your origin". Cloudflare names the edge in its `cf-ray` header (for example `-NRT` for Tokyo); speedward keeps only that airport code (never the headers) and places the edge from a bundled airport table (OurAirports, public domain; built by `scripts/build_iata.py`). That works even without the location file. Other CDNs' headers are not used, because their format is not certain. When every measured place reached the same address (at least two places) and the database places it, the map draws one **Server** square with a line from every place.
+
+**Uncertain cases draw nothing.** A position is drawn only when it can be trusted. The table's **Position source** column says why there is none:
+
+- "edge location uncertain (shared address)": the same address answered places on 2 or more continents (anycast or a shared CDN address, which databases register at one place). It is still drawn if every place's connect time is long enough for the database position (a single origin); a connect time faster than light could travel there rules it out.
+- "edge location uncertain (geo-IP database and CDN header disagree)": the two are more than 2,500 km apart.
+- "edge location uncertain (delay too short for the database position)" or "(delay too short for the CDN header position)": the connect time is faster than light could reach that position.
+- "position not available (...)": a private address, an answering address that could not be read, an address not in the database, no database set (or an unreadable one), or no answering address.
+
+The thresholds are named constants in `speedward/core/edge.py`.
+
+**Fallback: a position you set yourself.** If no place could be placed, the web results say "No server positions yet" with a setup link and **Place a server manually (your own claim)**. That opens the Server pin: drag it on the map, focus it and use the arrow keys (Shift moves further, Delete removes it), or pick a city in "Server is in:". The pin is two numbers kept in this browser tab only (same expiry as results, cleared by "Clear now") and sent with the next scan; it is used only when no answering server can be placed, and is recorded as "manual (pin)" in exports, because it is your claim and not a measured location. `SERVER_LAT` and `SERVER_LON` always win: they draw one Server square, recorded as "manual (setting)".
+
+With no position at all, the map says "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON" and draws no lines. Everything else still works.
 
 ## How to read the map and the statuses
 
-The map has one dot per test location, coloured by first-byte time against `FAST_MS` and `SLOW_MS`. Each row in the table has one status:
+The map has one dot per test location, coloured by first-byte time against `FAST_MS` and `SLOW_MS`, and a square at the server that answered it where that can be placed (see above). Each row in the table has one status:
 
 - **measured**: the test ran and the site answered. Only these rows have timings and count in averages and pass/fail limits.
 - **blocked**: the site itself refused the request or timed out.
@@ -186,7 +199,7 @@ For Docker, `git pull` then `docker build -t speedward .` and restart the contai
 - **Rate limit / "Refused: ..."**: the scan costs more than the tests you have left. Run `--estimate`, use fewer places, wait, or pass `--yes` if you have credits.
 - **Nothing on the map**: open the HTML report, not the Markdown. If every place is dimmed, no location was measured; read the reasons in the table. A target that refuses all Globalping probes shows as blocked.
 - **Results gone after closing the tab**: by design. Export first.
-- **"Server position unknown" or no lines**: drop the Server pin on the map or choose a city in "Server is in:" before the scan, or set `GEOIP_DB` or `SERVER_LAT` and `SERVER_LON`.
+- **No squares or no lines**: set `GEOIP_DB` (see "Download the location file"), or set `SERVER_LAT` and `SERVER_LON`, or place the Server pin before the scan. If the table says "edge location uncertain", the address is shared and its place cannot be trusted; that is deliberate.
 - **The server will not start**: outside `DEBUG`, set `SECRET_KEY`. A `Bad Request (400)` page means the Host name is missing from `ALLOWED_HOSTS`.
 - **`.env` ignored**: it is read from the folder you start the command in, and only the keys in `.env.example` are honoured.
 

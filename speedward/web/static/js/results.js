@@ -803,7 +803,7 @@
         return nodes;
       }
       var mapNodes = take("section.map");
-      var panelNodes = take(".verdict, .failed-list, #map-detail, .tiles, .legend");
+      var panelNodes = take(".verdict, .failed-list, .legend, .position-note, #map-detail, .tiles");
       var rest = doc.querySelector(".fragment") || doc.body;
       var mapBox = $("results-map");
       mapBox.replaceChildren.apply(mapBox, mapNodes);
@@ -986,9 +986,26 @@
     });
   });
 
+  // --- "Place a server manually": the pin is only a fallback, used when nothing could be placed ---
+  $("results-summary").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-place-pin]") : null;
+    if (!b) { return; }
+    setPicking(true);
+    var panel = $("form-panel");
+    if (panel.classList.contains("collapsed")) { panel.querySelector("[data-collapse]").click(); }
+    pinEl.focus();
+    setText($("pin-status"), "Drag the Server pin or use the arrow keys, then run the test again. " +
+      "It is your own claim and is used only when no answering server can be placed.");
+  });
+
   // --- map: dots select their table row ---------------------------------------------------------
   function dotOf(target) {
     return target && target.closest ? target.closest("circle[data-row]") : null;
+  }
+
+  // Squares (the server that answered) only describe themselves; they have no single table row.
+  function squareOf(target) {
+    return target && target.closest ? target.closest("rect.sw-sq") : null;
   }
 
   function describe(dot) {
@@ -1019,11 +1036,11 @@
     if (dot && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); select(dot); }
   });
   resultsBody.addEventListener("focusin", function (e) {
-    var dot = dotOf(e.target);
+    var dot = dotOf(e.target) || squareOf(e.target);
     if (dot) { describe(dot); }
   });
   resultsBody.addEventListener("mouseover", function (e) {
-    var dot = dotOf(e.target);
+    var dot = dotOf(e.target) || squareOf(e.target);
     if (dot) { describe(dot); }
   });
 

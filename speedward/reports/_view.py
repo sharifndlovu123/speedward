@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from speedward.core.analysis import STAGE_NAMES, summarise
-from speedward.core.models import LocationResult, ScanReport
+from speedward.core.edge import edge_city
+from speedward.core.models import DB_UNREADABLE, NO_DB, LocationResult, ScanReport
 
 CACHE_NOTE = "Repeat request from the same test machine; not a browser cache test."
 CACHE_NA_NOTE = "needs the same test machine for both runs"
@@ -31,18 +32,46 @@ def excluded_line(s) -> str:
             f"{s.measured} measured.")
 
 
+CDN_EDGE_NOTE = "CDN edge, not necessarily your origin"
+SOURCE_TEXT = {"database": "geo-IP database", "manual": "manual (setting)", "manual (pin)": "manual (pin)"}
+
+
+def _from_header(r: LocationResult) -> bool:
+    return r.server_position is not None and r.server_position.source == "cdn header" and bool(r.edge_code)
+
+
+def answered_by(r: LocationResult) -> str:
+    """Who answered a measured result: the CDN edge named by its header, else the IP."""
+    if _from_header(r):
+        city = edge_city(r.edge_code)
+        return f"edge {r.edge_code} ({city})" if city else f"edge {r.edge_code}"
+    return r.server_ip or NA
+
+
+def position_source(r: LocationResult) -> str:
+    """Where a measured result's server position came from, or why there is none."""
+    if r.server_position is not None:
+        if _from_header(r):
+            return f"CDN header (cf-ray -{r.edge_code})"
+        return SOURCE_TEXT.get(r.server_position.source, r.server_position.source)
+    if r.edge_note:
+        return f"{r.edge_note} ({r.edge_reason})" if r.edge_reason else r.edge_note
+    return NA
+
+
 def table_rows(report: ScanReport) -> list[dict]:
     rows = []
     for r in report.locations:
         base = {"location": label(r), "network": r.location.network or ""}
         if r.status != "measured":
             rows.append({**base, "excluded": True, "cold": NO_DATA, "warm": NO_DATA, "delay": NO_DATA,
-                         "cdn": NO_DATA, "status": f"{STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"})
+                         "cdn": NO_DATA, "answered": NO_DATA, "source": NO_DATA,
+                         "status": f"{STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"})
             continue
         cold = r.stages.first_byte if r.stages is not None else None
         warm = r.repeat_stages.first_byte if r.repeat_stages is not None else None
         rows.append({**base, "excluded": False, "cold": ms(cold), "warm": ms(warm), "delay": ms(r.ping_ms),
-                     "cdn": r.cdn or NA,
+                     "cdn": r.cdn or NA, "answered": answered_by(r), "source": position_source(r),
                      "status": f"HTTP {r.http_status}" if r.http_status is not None else "measured"})
     return rows
 
@@ -78,7 +107,32 @@ def server_identity(report: ScanReport) -> list[tuple[str, str]]:
          any(r.redirects for r in measured) else "none seen" if measured else NA),
         ("TLS version", uniq(r.tls_version for r in measured)),
         ("HTTP version", uniq(r.http_version for r in measured)),
+        ("Server position on the map", server_source(report)),
     ]
+
+
+def server_source(report: ScanReport) -> str:
+    s = report.server
+    if s is not None and (s.source == "manual" or not any(r.server_position for r in report.locations)):
+        return SOURCE_TEXT.get(s.source, s.source)
+    if any(r.status == "measured" and r.server_position is not None for r in report.locations):
+        return "from the server that answered each location (see Position source)"
+    return NA
+
+
+def position_note(report: ScanReport) -> str | None:
+    """Which note the web UI shows beside the map when no answering server could be placed:
+    "setup" (no geo-IP database, or a report from before positions existed), "uncertain" (every
+    address was doubtful), or None (something was placed, or SERVER_LAT/SERVER_LON is set)."""
+    if report.server is not None and report.server.source == "manual":
+        return None
+    measured = [r for r in report.locations if r.status == "measured"]
+    if any(r.server_position is not None for r in measured):
+        return None
+    reasons = {r.edge_reason for r in measured}
+    if not measured or None in reasons or NO_DB in reasons or DB_UNREADABLE in reasons:
+        return "setup"
+    return "uncertain"
 
 
 def dns_rows(report: ScanReport) -> tuple[list[dict], bool]:
@@ -120,7 +174,7 @@ def context(report: ScanReport) -> dict:
         "cache_note": CACHE_NOTE,
         "excluded_line": excluded_line(s),
         "rows": table_rows(report), "stages": stage_averages(report),
-        "identity": server_identity(report), "dns": dns, "dns_differs": differ, "paths": path_rows(report),
+        "identity": server_identity(report), "position_note": position_note(report), "dns": dns, "dns_differs": differ, "paths": path_rows(report),
         "browser": None if b is None else {
             "weight": f"{b.page_weight_bytes / 1024:.0f} KB" if b.page_weight_bytes is not None else NA,
             "requests": f"{b.requests} requests" if b.requests is not None else NA,

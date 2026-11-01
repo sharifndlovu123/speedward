@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from speedward import __version__
 from speedward.core.analysis import cdn_status
 from speedward.core.budget import Plan
+from speedward.core.edge import Answer, cf_ray_code, place
 from speedward.core.geo import Geolocator
 from speedward.core.globalping import (
     GlobalpingClient,
@@ -29,7 +30,9 @@ from speedward.core.models import (
     Location,
     LocationResult,
     PathResult,
+    NO_DB,
     ScanReport,
+    ServerPosition,
     Stages,
 )
 from speedward.core.target import normalise_target
@@ -204,7 +207,8 @@ def _cold_fields(probe: dict, item: dict) -> dict:
         redirect = _location_header(headers) if code is not None and 300 <= code < 400 else None
         fields.update(stages=_stages(res), http_status=code, cdn=cdn_status(headers),
                       server_ip=_str(res.get("resolvedAddress")), tls_version=_str(tls.get("protocol")),
-                      http_version=_http_version(res), redirects=[redirect] if redirect else [])
+                      http_version=_http_version(res), redirects=[redirect] if redirect else [],
+                      edge_code=cf_ray_code(headers))  # only the derived code; headers are dropped
     elif status == "blocked":
         fields["http_status"] = code
     return fields
@@ -293,6 +297,8 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         doc, _, why = scan.measure("DNS check", "dns", cold_id, None, fallback_locations=plan.locations)
         dns = _dns(cold, doc, why)
 
+    # 6. Where the server that answered each measured result is (offline: airport table, geo-IP).
+    _place_servers(cold, fields, geo)
     results = [LocationResult(**f) for f in fields]
 
     # Locations Globalping found no probe for.
@@ -305,12 +311,37 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
             results.append(LocationResult(Location("", label, None, None, None, None, None),
                                           "not_run", "no probe was available for this location"))
 
-    server = None
-    if geo is not None:
-        ip = next((r.server_ip for r in results if r.status == "measured" and r.server_ip), None)
-        server = geo.locate(ip)  # also with no IP: a configured position or a pin needs none
+    server = _server(geo, results)
     progress("Finished")
     return _report(target, started, plan, scan, server, results, paths, dns)
+
+
+def _place_servers(cold, fields: list[dict], geo: Geolocator | None) -> None:
+    answers = []
+    for (probe, _), f in zip(cold, fields):
+        if f["status"] != "measured":
+            answers.append(None)
+            continue
+        loc, stages = f["location"], f.get("stages")
+        answers.append(Answer(ip=f.get("server_ip"), continent=_str(probe.get("continent")), lat=loc.lat,
+                              lon=loc.lon, connect_ms=stages.connect if stages is not None else None,
+                              edge_code=f.get("edge_code")))
+    lookup = geo.lookup if geo is not None else (lambda ip: NO_DB)
+    for f, placed in zip(fields, place(answers, lookup)):
+        if placed is not None:
+            f.update(server_position=placed.position, edge_note=placed.note, edge_reason=placed.reason)
+
+
+def _server(geo: Geolocator | None, results: list[LocationResult]) -> ServerPosition | None:
+    """The one "Server" position: a configured SERVER_LAT/SERVER_LON always; the web form's pin only
+    when no result could be placed (it is the person's claim, never a measurement)."""
+    if geo is None:
+        return None
+    if geo.override is not None:
+        return ServerPosition(geo.override[0], geo.override[1], "manual")
+    if geo.pin is not None and not any(r.server_position is not None for r in results):
+        return ServerPosition(geo.pin[0], geo.pin[1], "manual (pin)")
+    return None
 
 
 def _paths(cold, doc, why: str) -> list[PathResult]:

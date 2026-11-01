@@ -122,3 +122,65 @@ def test_markdown_report_has_the_table():
     md = render(rep(locations=[ok(), LocationResult(loc("Beijing"), "blocked", "timed out")]), "md")
     assert "| Location |" in md and "| --- |" in md
     assert "920 ms" in md and "no data" in md and "timed out" in md
+
+
+# --- "Answered by" and "Position source" (Task 16) ----------------------------------------------
+
+def placed_locations():
+    return [
+        ok("Tokyo", 38, server_ip="104.16.1.1", edge_code="NRT",
+           server_position=ServerPosition(35.77, 140.39, "cdn header")),
+        ok("London", 22, server_ip="151.101.1.1", server_position=ServerPosition(51.5, -0.1, "database")),
+        ok("Lagos", 240, server_ip="104.16.9.9", edge_note="edge location uncertain", edge_reason="shared address"),
+        ok("Oslo", 50),  # a report from before Task 16: nothing known
+        LocationResult(loc("Beijing"), "blocked", "timed out"),
+    ]
+
+
+def md_row(md, city):
+    return next(line for line in md.splitlines() if line.startswith(f"| {city},"))
+
+
+def test_markdown_has_answered_by_and_position_source_columns():
+    md = render(rep(locations=placed_locations(), server=None), "md")
+    assert "| Answered by | Position source |" in md
+    assert "| edge NRT (Tokyo) | CDN header (cf-ray -NRT) |" in md_row(md, "Tokyo")
+    assert "| 151.101.1.1 | geo-IP database |" in md_row(md, "London")
+    assert "| 104.16.9.9 | edge location uncertain (shared address) |" in md_row(md, "Lagos")
+    assert "| not available | not available |" in md_row(md, "Oslo")
+    assert "| no data | no data |" in md_row(md, "Beijing")
+    header = next(line for line in md.splitlines() if line.startswith("| Location |"))
+    assert header.count("|") == md_row(md, "Tokyo").count("|")
+
+
+def test_html_report_has_the_new_columns():
+    html = render(rep(locations=placed_locations(), server=None), "html")
+    assert "<th>Answered by</th><th>Position source</th>" in html
+    assert "<td>edge NRT (Tokyo)</td><td>CDN header (cf-ray -NRT)</td>" in html
+    assert "<td>104.16.9.9</td><td>edge location uncertain (shared address)</td>" in html
+    assert html.count('class="sw-sq') == 2
+
+
+def test_json_carries_positions_and_sources():
+    data = json.loads(render(rep(locations=placed_locations(), server=None), "json"))
+    tokyo, london, lagos = data["locations"][:3]
+    assert tokyo["server_position"] == {"lat": 35.77, "lon": 140.39, "source": "cdn header"}
+    assert tokyo["edge_code"] == "NRT"
+    assert london["server_position"]["source"] == "database"
+    assert (lagos["server_position"], lagos["edge_note"], lagos["edge_reason"]) == (
+        None, "edge location uncertain", "shared address")
+
+
+def test_markdown_says_where_the_server_square_came_from():
+    md = render(rep(server=ServerPosition(1, 2, "manual (pin)")), "md")
+    assert "Server position on the map: manual (pin)" in md
+    md = render(rep(server=ServerPosition(1, 2, "manual")), "md")
+    assert "Server position on the map: manual (setting)" in md
+
+
+def test_new_columns_are_escaped_in_markdown_and_html():
+    hostile = [ok("Tokyo", 38, server_ip="1.2.3.4|<b>x</b>")]
+    md = render(rep(locations=hostile, server=None), "md")
+    assert "1.2.3.4\\|<b>x</b>" in md_row(md, "Tokyo")
+    html = render(rep(locations=hostile, server=None), "html")
+    assert "<b>x</b>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html

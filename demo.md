@@ -17,6 +17,15 @@ Optional: get a Globalping key at <https://globalping.io>. It is free up to a li
 GLOBALPING_TOKEN=your-key-here
 ```
 
+Optional: download the location file, so the map can place the server that answered each place. Get a City `.mmdb` file (MaxMind GeoLite2 City, free account and licence; or DB-IP Lite City, free, CC BY 4.0; check the licence), then:
+
+```bash
+pip install -e ".[geoip]"
+echo "GEOIP_DB=/path/to/GeoLite2-City.mmdb" >> .env
+```
+
+With Docker, mount the file and pass it at run time: `-v /srv/geo:/geo:ro -e GEOIP_DB=/geo/GeoLite2-City.mmdb`. The lookup is offline; nothing about your target leaves the machine. Without the file, Cloudflare edges are still placed from their `cf-ray` header.
+
 Check the cost first, then scan and save the HTML report:
 
 ```bash
@@ -96,6 +105,8 @@ speedward scan https://example.com --format html --out docs/demo-report.html
 - First byte: 20 ms
 - Download: 1 ms
 
+This recording predates the "Answered by" and "Position source" columns, so they are not shown here; current reports add them after CDN (see "How to read it").
+
 The report also lists the server identity (answering IPs 172.66.147.243 and 104.20.23.154, TLS 1.3, HTTP/1.1, no redirect on the first response).
 
 ## How to read it
@@ -103,6 +114,7 @@ The report also lists the server identity (answering IPs 172.66.147.243 and 104.
 - **The map** (top of the HTML report) has one dot per location, coloured by first-byte time. Green is fast, amber is middling, red is slow, against `FAST_MS` (300) and `SLOW_MS` (800).
 - **No cache / Cache** are first-byte times for the first visit and a repeat request from the same test machine. The repeat is not a browser cache test. "Cache gain" in the summary can be negative, as here (-3%): the repeat was not faster.
 - **Dimmed, dashed grey lines** on the map are places that could not reach the site (blocked, test failed or did not run). Their rows say "no data" with a reason. They show no number and are left out of averages and limits. Every location in this run was measured, so none were dimmed here.
+- **Squares and the two new columns**: a square marks the server that answered each place, with a line from the place to it. Behind a CDN (as example.com is, on Cloudflare) each place is answered by a nearby edge: "Answered by" reads like "edge NRT (Tokyo)" and "Position source" like "CDN header (cf-ray -NRT)", and the tooltip says "CDN edge, not necessarily your origin". A site on one server shows one "Server" square, placed by the geo-IP database. An address shared across continents, or one the database and header disagree on by more than 2,500 km, draws no square and reads "edge location uncertain"; a private address or no location file reads "position not available". Never a guess.
 - **Delay** is the network round-trip time from that location to the site (a ping), separate from the page timings. In this run it was 1 to 3 ms in most places and about 105 ms for Lagos and Dubai. If a delay could not be measured it shows "not available", never a guess.
 - **Status**: measured, blocked (the site refused or timed out), test failed (a Globalping problem) or did not run.
 - **Cost**: 12 locations cost about 36 tests. Add `--traceroute` or `--dns` for more. The cost is shown before every scan, and a scan that does not fit your remaining allowance is refused unless you pass `--yes`.
@@ -138,4 +150,4 @@ A hop that did not answer shows as "not available" with 100% loss, and the Tokyo
 
 This section is written from the page templates and a real load of the home page (HTTP 200), not from a screenshot.
 
-The home page is a world map that fills the window, with panels floating over it. The top strip shows the title, the authorisation notice and the allowance strip (with a key it reads "Globalping key active: 500 tests/hour, up to 500 locations. 321 of 500 tests left this hour ..."). The left panel holds the Site address, two Extra checks (network path, DNS answers), a collapsible Pass/fail limits section, a "Server is in:" list (it sets the draggable Server pin on the map; faint lines then run from the pin to each picked place, and the same pin is sent with the scan so the results show speed-coloured arcs, with "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON" and no lines when it is not set), the cost line ("12 locations · about 36 tests") and Start test. The bottom panel is the location picker: click a dot on the map or a name to switch a place on or off (blue is on, a grey ring is off), use the presets (Default 12, One per continent, All, Clear), or add another place by name. Picking nothing is an error, never the default. As you pick, the estimated cost updates; if it will not fit your allowance a warning appears with a checkbox to go ahead anyway. While the test runs the panels are locked and progress lines appear. Results then show on the same map, with a side panel of summary figures, a table drawer that opens when you click a dot, and buttons for HTML, JSON and Markdown export, Run again, Clear now and "Locations (N)" to reopen the picker. They are kept only in the browser's session storage until the tab closes (15 minutes at most); a banner offers the saved results after a refresh, with your picks restored. Nothing about the tested site is stored on the server.
+The home page is a world map that fills the window, with panels floating over it. The top strip shows the title, the authorisation notice and the allowance strip (with a key it reads "Globalping key active: 500 tests/hour, up to 500 locations. 321 of 500 tests left this hour ..."). The left panel holds the Site address, two Extra checks (network path, DNS answers), a collapsible Pass/fail limits section, a "Server is in:" list (it sets the draggable Server pin on the map, a fallback used only when no answering server can be placed; faint lines run from the pin to each picked place), the cost line ("12 locations · about 36 tests") and Start test. The bottom panel is the location picker: click a dot on the map or a name to switch a place on or off (blue is on, a grey ring is off), use the presets (Default 12, One per continent, All, Clear), or add another place by name. Picking nothing is an error, never the default. As you pick, the estimated cost updates; if it will not fit your allowance a warning appears with a checkbox to go ahead anyway. While the test runs the panels are locked and progress lines appear. Results then show on the same map: a circle per test location, a square at the server that answered it, and a speed-coloured line between them (a CDN gives a square near each place, with the tooltip "CDN edge, not necessarily your origin"; a single origin gives one "Server" square with a line from every place; a shared address whose place is uncertain draws nothing, and the table says "edge location uncertain"). With no location file set, the side panel says "No server positions yet", with "How to set it up" and "Place a server manually (your own claim)". The results have a side panel of summary figures, a table drawer that opens when you click a dot, and buttons for HTML, JSON and Markdown export, Run again, Clear now and "Locations (N)" to reopen the picker. They are kept only in the browser's session storage until the tab closes (15 minutes at most); a banner offers the saved results after a refresh, with your picks restored. Nothing about the tested site is stored on the server.
