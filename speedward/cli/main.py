@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import typer
 
 from speedward.core import config
+from speedward.core.allowance_view import describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.geo import geolocator_from_env
@@ -114,7 +116,8 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     if not allowance.authenticated:
         _err(NO_KEY)
     left = "an unknown number of" if allowance.remaining is None else str(allowance.remaining)
-    _err(f"This scan uses about {cost} tests. You have {left} left this hour.")
+    reset = describe_allowance(allowance, cost, time.time()).reset_phrase
+    _err(f"This scan uses about {cost} tests. You have {left} left this hour ({reset}).")
     if allowance.credits is not None:
         _err(f"Globalping credits: {allowance.credits}.")
     if estimate:

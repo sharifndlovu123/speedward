@@ -272,3 +272,16 @@ def test_pass_fail_line_prints_limits_exactly(fake, args, text):
     r = scan(*args)
     assert f"(limits: {text})" in r.stderr
     assert "e+" not in r.stderr
+
+
+def test_cli_estimate_prints_reset_countdown(fake):
+    fake.reset = 2220
+    r = scan("--estimate")
+    assert "You have 250 left this hour (resets in 37 min)." in r.stderr
+    assert "last run" not in r.stderr.lower()
+
+
+def test_cli_estimate_unknown_reset_is_not_guessed(fake):
+    fake.omit_reset = True
+    r = scan("--estimate")
+    assert "(reset time unknown)" in r.stderr
