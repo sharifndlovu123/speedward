@@ -2,7 +2,7 @@
 
 Observed on 2026-11-01 against `https://api.globalping.io/v1` with `scripts/globalping_spike.py` plus a few one-off single-probe calls. Targets: `example.com` (main run), `httpbin.org`, `expired.badssl.com`, a non-existent subdomain of `example.com`. About 25 tests were consumed.
 
-**Not tested:** authenticated behaviour. `GLOBALPING_TOKEN` was not set, so every call was unauthenticated and the free-key limits, `Authorization` handling and credit headers are "not observed". Anything below not stated as observed is "not observed".
+The sections below, up to "Authenticated run", were observed unauthenticated. Authenticated behaviour (free key) is in the "Authenticated run" section at the end, observed the same day with about 77 more tests. Anything not stated as observed is "not observed".
 
 This file is the source of truth for field names. Anything marked "not available" must be shown as "not available" by the app, never guessed.
 
@@ -153,9 +153,9 @@ DNS (A query, default resolver of the probe):
 {"rateLimit":{"measurements":{"create":{"type":"ip","limit":250,"remaining":250,"reset":0}}}}
 ```
 
-  Later in the session: `{"limit":250,"remaining":226,"reset":3554}`. `reset` is seconds until the window resets. `type: "ip"` for an unauthenticated caller. The authenticated shape (and any credits section): not observed. `GET /limits` itself did not consume allowance (remaining was unchanged across calls).
+  Later in the session: `{"limit":250,"remaining":226,"reset":3554}`. `reset` is seconds until the window resets. `type: "ip"` for an unauthenticated caller. The authenticated shape is in "Authenticated run" below. `GET /limits` itself did not consume allowance (remaining was unchanged across calls).
 - Polling `GET /v1/measurements/{id}` did not appear in the rate-limit headers (no `x-ratelimit-*` header on GET results).
-- Probe-count cap of 50 per measurement (unauthenticated): not observed (never tried).
+- Probe-count cap of 50 per measurement (unauthenticated): stated in the published OpenAPI spec ("Non-authenticated requests are limited to a maximum of 50 probes"), not tried here. Authenticated: see below.
 - 429 response (rate limit hit) body and headers: not observed. I deliberately did not exhaust the allowance. Same for the unregistered over-limit call (credits-required response). Later tasks must code the 429 handler defensively: treat any `429` as "Globalping limit reached" and read `Retry-After` / `x-ratelimit-reset` if present, and tests for it must use a fake, not a claimed real shape.
 
 ## Summary for later tasks
@@ -172,5 +172,59 @@ DNS (A query, default resolver of the probe):
 | cert error | `tls.authorized == false` with `tls.error`, result still `finished` |
 | DNS failure / timeout | `failed` + `failureSource: "target"` + `rawOutput` text |
 | allowance | `x-ratelimit-*` on POST and `GET /v1/limits` |
-| 429 shape, authenticated behaviour, credits | not observed |
+| authenticated limits, probe cap, reuse, filters | see "Authenticated run" |
+| 429 shape, credits headers | not observed |
 | traceroute hop ASN | not available (MTR has `asn` list) |
+
+## Authenticated run
+
+Observed on 2026-11-01 with a free API key (no credits balance), about 77 tests (3+3+3 http/ping reuse, 60 ping, 8 filters). Raw responses were kept outside the repo. The key is never recorded here.
+
+### Auth header and limit reporting
+
+- Header that works: `Authorization: Bearer <token>`. An invalid token returns `401`: `{"error":{"type":"unauthorized","message":"Unauthorized."},"links":{"documentation":"https://globalping.io/docs/api.globalping.io#get-/v1/limits"}}`. A bad token is rejected, not silently treated as anonymous (observed on `GET /v1/limits`).
+- Allowance doubles: the same `x-ratelimit-*` headers on the `POST /v1/measurements` 202 response, now `x-ratelimit-limit: 500` (was 250). Headers observed on a 202: `x-request-cost: 3`, `x-ratelimit-limit: 500`, `x-ratelimit-consumed: 3`, `x-ratelimit-remaining: 497`, `x-ratelimit-reset: 3600` (seconds until the window resets, counting down: 3600, 3598, 3596, ...). Header names are lowercase on the wire. `consumed` is this request's cost, not a running total; `remaining` is the running balance.
+- `x-credits-consumed` / `x-credits-remaining` were NOT present on any response, even authenticated (this account has 0 credits; they are only listed in `Access-Control-Expose-Headers`). Whether they appear once credits exist: not observed.
+- `GET /v1/limits` authenticated returns `200`:
+
+```json
+{"rateLimit":{"measurements":{"create":{"type":"user","limit":500,"remaining":500,"reset":0}}},"credits":{"remaining":0}}
+```
+
+  After spending 77 tests: `{"rateLimit":{"measurements":{"create":{"type":"user","limit":500,"remaining":423,"reset":3576}}},"credits":{"remaining":0}}`. So `type` is `user` (was `ip` unauthenticated), and a `credits.remaining` section is added (absent unauthenticated). `reset` is `0` while no window is open. The unauthenticated call from the same machine at the same time showed its own separate IP window (`type: ip`, limit 250), so the two allowances are independent. `GET /limits` did not consume allowance and carries no `x-ratelimit-*` headers (observed: the response had none). `GET /v1/measurements/{id}` results also carried none.
+- Failed requests (400, 422) did not change `remaining` (checked against the totals: 497, 494, 491 after the three accepted calls; the 400 and two 422 calls in between left it unchanged).
+- 429: not observed.
+
+### More than 50 probes
+
+`{"type":"ping","target":"example.com","locations":[{"magic":"world"}],"limit":60}` authenticated: `202`, `{"id":"...","probesCount":60}`, `x-request-cost: 60`, remaining 491 to 431. All 60 results finished, from 26 countries. The measurement echoes a top-level `"limit": 60`. The spec gives 500 as the maximum for `limit` (global or per-location, mutually exclusive); 60 is the largest value actually tried. The unauthenticated 50 cap was not tried, so its error message is not observed.
+
+### Probe reuse (`from`)
+
+There is no `from` field or magic. What works is the previous measurement id as the `locations` value (a plain string), as already noted. Tested with three locations (`Berlin`, `Tokyo`, `eyeball-network+Brazil`):
+
+```json
+{"type":"http","target":"example.com","locations":"22KyUQXITCD7ryMxu00121QQk",
+ "measurementOptions":{"request":{"method":"GET","path":"/"},"protocol":"HTTPS"}}
+```
+
+- `202`, `probesCount: 3`, cost 3. The same three probes answered, in the same order: Berlin DE AS8560 `u-rutkk`, Tokyo JP AS3258 `u-JohnFilch123`, Sao Paulo BR AS26599 `u-CTassisF`, identical city/asn/network/tags in both measurements.
+- Type and options are not inherited. The same id also worked for a different type (`ping`), with the same three probes.
+- Rejected shapes: top-level `"from": "<id>"` returns `400` (`"from" is not allowed`). `locations: [{"magic":"from:<id>"}]` returns `422 no_probes_found`. An unknown id as a string returns `422` `{"error":{"type":"no_probes_found","message":"No matching IPv4 probes available."}}`, the same body as an expired id would be per the spec (`422`).
+- Per the spec: reuse only works for the lifetime of the original measurement; the probes come back in the original order; a reused probe that is no longer available yields a test with `status: "offline"` that has only `status` and `rawOutput` (spec only, an offline probe was not observed). The app must treat `offline` like "no data".
+
+### Location filters (authenticated, limit 2 each, ping)
+
+| Request `locations` | Result |
+| --- | --- |
+| `[{"magic":"datacenter-network"}]` | 2 probes, Hetzner (AS24940) in Falkenstein DE and Helsinki FI, tag `datacenter-network` |
+| `[{"magic":"eyeball-network"}]` | 2 probes, both Taiwan AS3462, tag `eyeball-network` |
+| `[{"magic":"aws-eu-west-1"}]` | 1 probe despite limit 2: Dublin IE, AS16509, tags `aws-eu-west-1`, `aws`, `datacenter-network` |
+| `[{"asn":15169}]` | 1 probe despite limit 2: Sao Paulo BR, AS15169 Google, tags `gcp-southamerica-east1`, `gcp`, `datacenter-network` |
+| `[{"magic":"AS3320"}]` | 2 probes, Deutsche Telekom (Hamburg, Nuremberg), `eyeball-network` |
+
+So fewer probes than `limit` can be returned when fewer match, and the cost is the number of probes actually used (1, not 2). Unfiltered tags give random probes, not a fixed one. Cloud region tags (`aws-...`, `gcp-...`) are in `probe.tags`. Note that `limit` there is per request when given at top level; per-location `limit` was not tried in this run.
+
+### Other
+
+- The OpenAPI spec (`https://api.globalping.io/v1/spec.yaml`) lists a top-level `timeout` (integer, 5 to 30, probe-side wall-clock timeout). Not tried here.
