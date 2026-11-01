@@ -78,9 +78,15 @@ def test_labels_are_escaped_exactly_once():
 
 
 def test_dots_have_a_stroke_based_keyboard_focus_ring():
-    from speedward.reports.map import render_picker_map
     svg = render_map(report([ok("Tokyo", 100)]))
     assert ".sw-dot:focus-visible" in svg and ".sw-pick:focus-visible" in svg
     assert "stroke-width" in svg.split(".sw-dot:focus-visible")[1].split("}")[0]
     assert "outline:2px" not in svg  # no SVG outline, keyboard-only stroke
     assert ".sw-dot.sw-sel" in svg
+
+
+def test_focus_ring_rule_comes_after_the_checked_rule_for_picks():
+    from speedward.reports.map import _PICK_STYLE
+    checked = _PICK_STYLE.index('.sw-pick[aria-checked="true"]{')
+    ring = _PICK_STYLE.index('[aria-checked="true"]:focus-visible{stroke:var(--ink)')
+    assert ring > checked

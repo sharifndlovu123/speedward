@@ -71,10 +71,24 @@ def test_focus_ring_is_a_stroke(page, live_site, watch):
     page.keyboard.press("Tab")
     after = dot.evaluate("e => [getComputedStyle(e).strokeWidth, getComputedStyle(e).stroke]")
     assert before != after[0] and float(after[0].replace("px", "")) >= 3
-    pick_dot = None
     page.click("#locations-toggle")
     pd = page.locator("#picker-map .sw-pick").first
     pd.focus()
     page.keyboard.press("Shift+Tab")
     page.keyboard.press("Tab")
     assert float(pd.evaluate("e => getComputedStyle(e).strokeWidth").replace("px", "")) >= 3
+
+
+def test_focused_checked_pick_ring_is_ink_not_background(page, live_site, watch):
+    page.goto(live_site + "/")
+    pd = page.locator('#picker-map .sw-pick[aria-checked="true"]').first
+    pd.focus()
+    page.keyboard.press("Shift+Tab")
+    page.keyboard.press("Tab")
+    stroke, ink, bg = pd.evaluate(
+        "e => { const m = e.closest('svg'); const cs = getComputedStyle(m);"
+        " const probe = (v) => { const t = document.createElement('span'); t.style.color = v;"
+        " m.appendChild(t); const c = getComputedStyle(t).color; t.remove(); return c; };"
+        " return [getComputedStyle(e).stroke, probe(cs.getPropertyValue('--ink')),"
+        " probe(cs.getPropertyValue('--bg'))]; }")
+    assert stroke == ink and stroke != bg

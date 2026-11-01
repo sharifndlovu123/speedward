@@ -28,7 +28,8 @@ _STYLE = (
     # background is well above 3:1 in light and dark. The selected dot keeps a --pin stroke.
     ".sw-dot:focus,.sw-pick:focus{outline:none}"
     ".sw-dot.sw-sel{stroke:var(--pin);stroke-width:3}"
-    ".sw-dot:focus-visible,.sw-pick:focus-visible{outline:none;stroke:var(--ink);stroke-width:4}"
+    ".sw-dot:focus-visible,.sw-pick:focus-visible{outline:none;stroke:var(--ink);stroke-width:4;"
+    "filter:drop-shadow(0 0 2px var(--bg))}"
 )
 
 
@@ -136,6 +137,8 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
 _PICK_STYLE = (
     ".sw-pick{fill:var(--bg);stroke:var(--off);stroke-width:2;cursor:pointer}"
     '.sw-pick[aria-checked="true"]{fill:var(--pin);stroke:var(--bg)}'
+    # After the checked rule and more specific, so the ring shows on checked and unchecked picks.
+    '.sw-pick:focus-visible,.sw-pick[aria-checked="true"]:focus-visible{stroke:var(--ink);stroke-width:4}'
     "@keyframes sw-pulse{50%{opacity:.35}}"
     ".sw-scanning .sw-pick[aria-checked=\"true\"]{animation:sw-pulse 1.2s ease-in-out infinite}"
     ".sw-locked .sw-pick{cursor:default}"
