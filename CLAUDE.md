@@ -2,9 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current state
+## Commands
 
-This repo has no code yet. It holds only the approved design, `docs/superpowers/specs/2026-11-01-speedward-design.md`, and a build plan (once written) under `docs/superpowers/plans/`. Read the design before doing anything. Build, lint and test commands do not exist yet; add them here when the first code lands.
+- Install: `python -m venv .venv && .venv/bin/pip install -e ".[dev]"`
+- All tests: `.venv/bin/pytest -q`
+- One test: `.venv/bin/pytest tests/test_runner.py::test_name -v`
+- End-to-end (browser): `pip install -e ".[e2e]" && playwright install chromium`, then `.venv/bin/pytest e2e`
+- CLI: `.venv/bin/speedward scan URL --estimate` (then without `--estimate`; `--help` lists options)
+- Web app locally: `DEBUG=1 django-admin runserver --settings=speedward.web.settings`
+- Docker: `docker build -t speedward .` (gunicorn, one worker plus threads)
+- Live check (uses real tests, site you own): `.venv/bin/python scripts/smoke_live.py URL`
+
+Design: `docs/superpowers/specs/2026-11-01-speedward-design.md`. Observed API fields: `docs/globalping-api-notes.md`. The real-browser page test is not built yet (`--browser` is a stub).
+
+## Layers
+
+- `speedward/core`: scan logic, Globalping client, budget, config. No Django imports.
+- `speedward/reports`: pure rendering (json, md, html, map). No I/O.
+- `speedward/web` and `speedward/cli`: thin shells over core and reports. No scan logic here.
 
 ## What this is
 
