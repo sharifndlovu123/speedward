@@ -183,3 +183,12 @@ def test_parse_pin_none_when_both_absent():
 def test_bad_pin_rejected_by_geolocator():
     with pytest.raises(ValueError):
         Geolocator(None, None, pin=(100, 0))
+
+
+@pytest.mark.parametrize("pin", [(True, 0), (0, False), ("x", 1), (float("nan"), 0)])
+def test_geolocator_pin_goes_through_parse_pin_with_fixed_message(pin):
+    with pytest.raises(ValueError) as exc:
+        Geolocator(None, None, pin=pin)
+    assert "nan" not in str(exc.value) and "x" != str(exc.value)
+    assert str(exc.value) in ("server pin is not a valid position",
+                              "server pin needs both a latitude and a longitude")

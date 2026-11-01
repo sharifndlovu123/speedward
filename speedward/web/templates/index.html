@@ -64,10 +64,10 @@
             <label for="server-city">Server is in:</label>
             <select id="server-city">
               <option value="">Not set</option>
-              <option value="custom" disabled hidden>Custom position (dragged)</option>
+              <option value="custom" disabled hidden>Custom position</option>
               {% for g in groups %}<optgroup label="{{ g.continent }}">{% for p in g.places %}<option value="{{ p.name }}" data-lat="{{ p.lat|stringformat:'.4f' }}" data-lon="{{ p.lon|stringformat:'.4f' }}">{{ p.name }}</option>{% endfor %}</optgroup>{% endfor %}
             </select>
-            <p id="pin-help" class="mute small">Optional: drag the Server pin on the map, or focus it and use the arrow keys (Shift moves further, Delete removes it), to draw lines from it. Kept in this tab only.</p>
+            <p id="pin-help" class="mute small">Optional: drag the Server pin on the map, or focus it and use the arrow keys (Shift moves further, Delete or Backspace removes it), to draw lines from it. Kept in this tab only.</p>
             <p id="pin-status" class="visually-hidden" aria-live="polite"></p>
           </div>
           <p id="pick-summary" class="pick-summary" aria-live="polite"></p>

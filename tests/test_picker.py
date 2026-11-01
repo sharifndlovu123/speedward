@@ -55,7 +55,7 @@ def test_picker_escapes_dynamic_text(monkeypatch):
 
 def test_picker_has_a_focusable_labelled_server_pin_and_a_lines_layer():
     svg = render_picker_map([])
-    assert svg.count('class="sw-pin"') == 1
+    assert svg.count('class="sw-pin sw-unset"') == 1 and 'role="application"' in svg
     assert 'aria-label="Server position pin' in svg and 'tabindex="0"' in svg
     assert 'aria-describedby="pin-help"' in svg
     assert 'class="sw-preview"' in svg

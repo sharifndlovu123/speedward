@@ -27,9 +27,12 @@ def previews(page):
 def test_no_pin_no_lines_and_pin_is_labelled(page, live_site, watch):
     page.goto(live_site + "/")
     expect(previews(page)).to_have_count(0)
-    expect(page.locator(PIN)).to_have_attribute("role", "button")
+    expect(page.locator(PIN)).to_have_attribute("role", "application")
     expect(page.locator(PIN)).to_have_attribute("aria-label", "Server position pin, not set")
     expect(page.locator("#pin-help")).to_contain_text("arrow keys")
+    expect(page.locator("#pin-help")).to_contain_text("Backspace")
+    expect(page.locator(PIN)).to_have_class("sw-pin sw-unset")
+    expect(page.locator(PIN + " text")).to_have_text("Server (drag me)")
     assert stored(page) is None
 
 
@@ -51,10 +54,10 @@ def test_keyboard_moves_pin_and_focus_ring_is_visible(page, live_site, watch):
     page.goto(live_site + "/")
     page.locator(PIN).focus()
     page.keyboard.press("ArrowRight")
-    expect(page.locator(PIN)).to_have_attribute("aria-label", "Server position pin, 0.00 north, 2.00 east")
+    expect(page.locator(PIN)).to_have_attribute("aria-label", "Server position pin, 0.00 north, 167.00 east")
     page.keyboard.press("ArrowUp")
     page.keyboard.press("Shift+ArrowUp")
-    expect(page.locator(PIN)).to_have_attribute("aria-label", "Server position pin, 12.00 north, 2.00 east")
+    expect(page.locator(PIN)).to_have_attribute("aria-label", "Server position pin, 12.00 north, 167.00 east")
     assert stored(page)["lat"] == 12
     expect(page.locator("#server-city")).to_have_value("custom")
     assert page.locator(PIN + " .sw-ring").evaluate("e => getComputedStyle(e).stroke") != "none"
@@ -111,3 +114,41 @@ def test_scan_without_pin_says_position_unknown_and_has_no_lines(page, live_site
     expect(page.locator("#results-map svg.sw-map")).to_contain_text(
         "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON")
     expect(page.locator("#results-map svg.sw-map path[stroke]")).to_have_count(0)
+
+
+def test_plain_click_on_unset_pin_does_not_place_it_or_send_a_position(page, live_site, watch):
+    bodies = []
+    page.on("request", lambda r: bodies.append(r.post_data or "") if r.url.endswith("/scan") else None)
+    page.goto(live_site + "/")
+    x, y = centre(page, PIN + " .sw-body")
+    page.mouse.click(x, y)
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + 2, y + 1)  # under the 4px threshold
+    page.mouse.up()
+    assert stored(page) is None
+    expect(page.locator(PIN)).to_have_attribute("aria-label", "Server position pin, not set")
+    expect(previews(page)).to_have_count(0)
+    page.fill("#url", TARGET)
+    pick(page, "Berlin", "Tokyo")
+    page.click("#start")
+    expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
+    assert len(bodies) == 1 and "server_lat" not in bodies[0] and "server_lon" not in bodies[0]
+
+
+def test_placed_pin_is_solid_and_labelled_server(page, live_site, watch):
+    page.goto(live_site + "/")
+    page.select_option("#server-city", "Frankfurt")
+    expect(page.locator(PIN)).not_to_have_class("sw-pin sw-unset")
+    expect(page.locator(PIN + " text")).to_have_text("Server")
+
+
+def test_status_announces_on_drop_not_during_drag(page, live_site, watch):
+    page.goto(live_site + "/")
+    x, y = centre(page, PIN + " .sw-body")
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x - 200, y + 50, steps=6)
+    expect(page.locator("#pin-status")).to_have_text("")
+    page.mouse.up()
+    expect(page.locator("#pin-status")).to_contain_text("Server pin:")

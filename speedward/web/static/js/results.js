@@ -497,6 +497,11 @@
   var pin = null;           // {lat, lon} or null
   var pinTimer = null;
   var dragging = false;
+  var moved = false;        // a click or tap that never moves must not place the pin
+  var downAt = null;
+  var DRAG_PX = 4;
+  // The unset pin rests here; the first arrow key starts from this spot.
+  var pinRest = { lat: 0, lon: 165 };  // same spot as data-home (see render_picker_map)
 
   function clampNum(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
   function pinOk(p) {
@@ -560,14 +565,14 @@
     var x = pin ? toX(pin.lon) : pinHome[0];
     var y = pin ? toY(pin.lat) : pinHome[1];
     pinEl.setAttribute("transform", "translate(" + x + "," + y + ")");
-    pinEl.style.opacity = pin ? "1" : "0.8";
+    pinEl.style.opacity = pin ? "1" : "0.7";
+    pinEl.classList.toggle("sw-unset", !pin);
     var label = pinEl.querySelector("text");  // flips to the left near the right edge so it never clips
     var flip = x > vb.width * 0.88;
+    label.textContent = pin ? "Server" : "Server (drag me)";
     label.setAttribute("text-anchor", flip ? "end" : "start");
     label.setAttribute("x", String((flip ? -15 : 15) * vb.width / 1000));
-    var where = pin ? dir(pin.lat, "north", "south") + ", " + dir(pin.lon, "east", "west") : "not set";
-    pinEl.setAttribute("aria-label", "Server position pin, " + where);
-    setText($("pin-status"), pin ? "Server pin: " + where + ". Kept in this tab only." : "");
+    pinEl.setAttribute("aria-label", "Server position pin, " + pinWhere());
     var sel = $("server-city");
     var value = "";
     if (pin) {
@@ -580,6 +585,13 @@
     sel.value = value;
     renderPreview();
   }
+
+  // Announced only on drop, key presses and the city list, never while dragging.
+  function announcePin() {
+    setText($("pin-status"), pin ? "Server pin: " + pinWhere() + ". Kept in this tab only." : "Server pin removed.");
+  }
+
+  function pinWhere() { return pin ? dir(pin.lat, "north", "south") + ", " + dir(pin.lon, "east", "west") : "not set"; }
 
   function setPin(lat, lon, persist) {
     var p = { lat: round4(clampNum(lat, -90, 90)), lon: round4(clampNum(lon, -180, 180)) };
@@ -614,17 +626,25 @@
     e.preventDefault();
     e.stopPropagation();
     dragging = true;
+    moved = false;
+    downAt = { x: e.clientX, y: e.clientY };
     pinEl.classList.add("sw-drag");
     try { pinEl.setPointerCapture(e.pointerId); } catch (err) { /* no capture: still works inside the map */ }
     pinEl.focus();
+  });
+  pinEl.addEventListener("pointermove", function (e) {
+    if (!dragging) { return; }
+    if (!moved) {
+      if (Math.abs(e.clientX - downAt.x) < DRAG_PX && Math.abs(e.clientY - downAt.y) < DRAG_PX) { return; }
+      moved = true;
+    }
     dragTo(e);
   });
-  pinEl.addEventListener("pointermove", function (e) { if (dragging) { dragTo(e); } });
   function endDrag() {
     if (!dragging) { return; }
     dragging = false;
     pinEl.classList.remove("sw-drag");
-    savePin();
+    if (moved) { savePin(); announcePin(); }
   }
   pinEl.addEventListener("pointerup", endDrag);
   pinEl.addEventListener("pointercancel", endDrag);
@@ -637,17 +657,19 @@
     else if (e.key === "ArrowDown") { dLat = -step; }
     else if (e.key === "ArrowLeft") { dLon = -step; }
     else if (e.key === "ArrowRight") { dLon = step; }
-    else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); clearPin(); return; }
+    else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); clearPin(); announcePin(); return; }
     else { return; }
     e.preventDefault();
-    var base = pin || { lat: 0, lon: 0 };
+    var base = pin || pinRest;
     setPin(base.lat + dLat, base.lon + dLon, true);
+    announcePin();
   });
   $("server-city").addEventListener("change", function () {
     var opt = this.options[this.selectedIndex];
-    if (!opt.value) { clearPin(); return; }
+    if (!opt.value) { clearPin(); announcePin(); return; }
     if (opt.value === "custom") { return; }
     setPin(Number(opt.getAttribute("data-lat")), Number(opt.getAttribute("data-lon")), true);
+    announcePin();
   });
 
   initPicker();

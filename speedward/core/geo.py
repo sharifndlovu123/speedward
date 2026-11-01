@@ -60,7 +60,7 @@ class Geolocator:
                  pin: tuple[float, float] | None = None):
         self.db_path = db_path
         self.override = _valid_override(override)
-        self.pin = _valid_override(pin)
+        self.pin = None if pin is None else parse_pin(*pin)
 
     def _pinned(self) -> ServerPosition | None:
         return None if self.pin is None else ServerPosition(self.pin[0], self.pin[1], "manual (pin)")

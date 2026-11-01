@@ -146,6 +146,8 @@ _PICK_STYLE = (
     ".sw-pin{cursor:grab;touch-action:none}.sw-pin:focus{outline:none}"
     ".sw-pin .sw-body{fill:var(--pin);stroke:var(--bg);stroke-width:2}"
     ".sw-pin .sw-ring{fill:none;stroke:none}"
+    # Unset: hollow, dashed and faded so it does not read as a real server location.
+    ".sw-pin.sw-unset .sw-body{fill:var(--bg);stroke:var(--pin);stroke-dasharray:4 3}"
     ".sw-pin:focus-visible .sw-ring{stroke:var(--ink);stroke-width:3}"
     ".sw-pin.sw-drag{cursor:grabbing}.sw-locked .sw-pin{cursor:default}"
     ".sw-pin text{fill:var(--ink);font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px;"
@@ -183,10 +185,10 @@ def render_picker_map(selected: list[str], width: int = 1000) -> str:
     # Resting place of the unset pin: open Pacific on the right, clear of the side panels and the
     # bottom strip so it can be grabbed. The script moves it (data-home is that spot).
     hx, hy = _num(345 / 360 * W), _num(H / 2)
-    out.append(f'<g class="sw-pin" tabindex="0" role="button" aria-roledescription="draggable pin" '
+    out.append(f'<g class="sw-pin sw-unset" tabindex="0" role="application" aria-roledescription="draggable pin" '
                f'aria-label="Server position pin, not set" aria-describedby="pin-help" '
                f'data-home="{hx},{hy}" transform="translate({hx},{hy})">'
                f'<circle class="sw-ring" r="{_num(13 * k)}"/><circle class="sw-body" r="{_num(9 * k)}"/>'
-               f'<text x="{_num(15 * k)}" y="{_num(4 * k)}" font-size="{_num(max(9.0, 11 * k))}">Server</text></g>')
+               f'<text x="{_num(15 * k)}" y="{_num(4 * k)}" font-size="{_num(max(9.0, 11 * k))}">Server (drag me)</text></g>')
     out.append("</svg>")
     return "".join(out)

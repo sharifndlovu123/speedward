@@ -168,3 +168,17 @@ def test_from_dict_does_not_share_input():
 def test_from_dict_rejects_oversized_integers(mutate):
     with pytest.raises(ValueError):
         ScanReport.from_dict(_broken(mutate))
+
+
+@pytest.mark.parametrize("source", ["manual", "manual (pin)", "database"])
+def test_server_source_known_values_round_trip(source):
+    d = {"lat": 1, "lon": 2, "source": source}
+    from speedward.core.models import _server
+    assert _server(d).source == source
+
+
+@pytest.mark.parametrize("source", ["trusted by NASA", "", "<b>x</b>", "Manual"])
+def test_server_source_unknown_value_rejected(source):
+    from speedward.core.models import _server
+    with pytest.raises(ValueError):
+        _server({"lat": 1, "lon": 2, "source": source})
