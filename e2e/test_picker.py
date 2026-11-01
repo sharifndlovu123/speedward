@@ -139,7 +139,8 @@ def test_phone_width_has_no_horizontal_scroll(page, live_site, watch):
     page.goto(live_site + "/")
     expect(page.locator("#picker-map svg")).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    expect(page.locator("#start")).to_be_visible()
+    expect(page.locator("#url")).to_be_in_viewport()
+    expect(page.locator("#start")).to_be_in_viewport()
 
 
 def test_start_button_stays_reachable_on_a_short_screen(page, live_site, watch):
@@ -148,3 +149,60 @@ def test_start_button_stays_reachable_on_a_short_screen(page, live_site, watch):
     page.click("[data-collapse=picker-strip]")  # a collapsed panel frees the dots under it
     expect(page.locator("#chips")).to_be_hidden()
     expect(dot(page, "Paris")).to_be_in_viewport()
+
+
+def test_first_tab_stops_are_panel_controls_not_dots(page, live_site, watch):
+    page.goto(live_site + "/")
+    seen = []
+    for _ in range(4):
+        page.keyboard.press("Tab")
+        seen.append(page.evaluate("document.activeElement.id || document.activeElement.className"))
+    assert "url" in seen
+    assert not any("sw-pick" in str(x) for x in seen)
+    for _ in range(60):  # the dots are still reachable, after the panels
+        page.keyboard.press("Tab")
+        if page.evaluate("document.activeElement.classList.contains('sw-pick')"):
+            break
+    else:
+        raise AssertionError("dots are not reachable by keyboard")
+
+
+def _first_scan(page, live_site):
+    page.goto(live_site + "/")
+    page.fill("#url", TARGET)
+    page.click("[data-preset=clear]")
+    chip(page, "Paris").click()
+    page.click("#start")
+    expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
+
+
+def test_failed_rescan_keeps_old_results_and_shows_the_error(page, live_site, watch):
+    _first_scan(page, live_site)
+    page.route("**/scan/*/status", lambda route: route.fulfill(
+        json={"status": "error", "error": "The scan failed because Globalping could not be used."}))
+    page.click("#results-run-again")
+    expect(page.locator("#form-error")).to_be_visible()
+    expect(page.locator("#form-error")).to_have_text("The scan failed because Globalping could not be used.")
+    expect(page.locator("#start")).to_be_enabled()
+    page.click("#locations-toggle")  # back to the earlier results, still saved
+    expect(page.locator("#results-map svg.sw-map")).to_be_visible()
+
+
+def test_lost_contact_keeps_old_results_and_shows_the_error(page, live_site):  # no `watch`: the abort logs a console error
+    _first_scan(page, live_site)
+    page.route("**/scan/*/status", lambda route: route.abort())
+    page.click("#results-run-again")
+    expect(page.locator("#form-error")).to_have_text(
+        "Lost contact with the server while waiting for the results.")
+    page.click("#locations-toggle")
+    expect(page.locator("#results-map svg.sw-map")).to_be_visible()
+    assert page.evaluate("sessionStorage.getItem('speedward:result') !== null")
+
+
+def test_phone_results_mode_keeps_export_and_run_again_reachable(page, live_site, watch):
+    page.set_viewport_size({"width": 360, "height": 740})
+    _first_scan(page, live_site)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    for sel in ("[data-export=html]", "#results-run-again", "#locations-toggle"):
+        page.locator(sel).scroll_into_view_if_needed()
+        expect(page.locator(sel)).to_be_in_viewport()

@@ -648,6 +648,13 @@
     });
   }
 
+  // The earlier results are still saved: show them again first, then the error, so the message is
+  // placed on screen after the layout has settled (formError opens the panel that holds it).
+  function scanFailed(message) {
+    var back = current ? showResults(current) : Promise.resolve();
+    back.then(function () { formError(message); });
+  }
+
   function poll(id) {
     fetch("/scan/" + encodeURIComponent(id) + "/status", { cache: "no-store", credentials: "same-origin" })
       .then(function (r) { return r.json(); })
@@ -664,15 +671,14 @@
           storeResult(data.result);
           estimate();  // the scan used tests: refresh the strip
         } else {
-          if (current) { showResults(current); }  // the earlier results are still saved: show them again
-          formError(data.error || "The scan failed.");
+          scanFailed(data.error || "The scan failed.");
         }
       })
       .catch(function () {
         show($("progress"), false);
         lockPicks(false);
         $("start").disabled = false;
-        formError("Lost contact with the server while waiting for the results.");
+        scanFailed("Lost contact with the server while waiting for the results.");
       });
   }
 
