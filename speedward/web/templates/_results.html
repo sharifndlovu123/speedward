@@ -3,7 +3,7 @@
 {% if failed %}<ul class="failed-list">{% for f in failed %}<li>Failed: {{ f }}</li>{% endfor %}</ul>{% endif %}
 
 <section class="map" aria-label="Map">{{ map_svg }}</section>
-<p class="mute legend">Circle = test location. Square = server that answered it (a CDN edge when the addresses differ). Lines: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms; dashed grey: no data. Select a dot to find its row.</p>
+<p class="mute legend">Circle = test location. Square = server that answered it (a CDN edge when the addresses differ; a frame around the circle when in the same city). Lines: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms; dashed grey: no data. Select a dot to find its row.</p>
 {% if position_note %}<div class="position-note">
 {% if position_note == "setup" %}<p>No server positions yet. Results still show every number; lines need the free offline location file.</p>
 <details><summary>How to set it up</summary>

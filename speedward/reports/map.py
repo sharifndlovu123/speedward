@@ -17,6 +17,8 @@ from speedward.core.models import UNCERTAIN, LocationResult, ScanReport
 from ._view import CDN_EDGE_NOTE, NA, SOURCE_TEXT, _from_header, answered_by, position_source
 
 FAST_MS = 300
+# A square closer than this (map pixels at width 1000) to its circle is drawn as a frame around it.
+HERE_PX = 9
 SLOW_MS = 800
 
 _STATUS_TEXT = {"blocked": "blocked", "test_failed": "test failed", "not_run": "did not run"}
@@ -32,6 +34,7 @@ _STYLE = (
     ".sw-dot:focus,.sw-pick:focus,.sw-sq:focus{outline:none}"
     # Squares: the server that answered (small), or the one Server (larger, blue).
     ".sw-sq{fill:var(--sq);stroke:var(--bg);stroke-width:1}.sw-server{fill:var(--pin);stroke-width:2}"
+    ".sw-here{fill:none;stroke:var(--sq);stroke-width:1.5}"
     ".sw-sq:focus-visible{stroke:var(--ink);stroke-width:3}"
     ".sw-dot.sw-sel{stroke:var(--pin);stroke-width:3}"
     ".sw-dot:focus-visible,.sw-pick:focus-visible{outline:none;stroke:var(--ink);stroke-width:4;"
@@ -179,21 +182,31 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
                     f'r="{_num(4 * k)}" {dot}>'
                     f"<title>{escape(title)}</title></circle>")
         dim = "" if fb is not None else ' opacity="0.7"'
-        labels.append(f'<text x="{_num(x + 6 * k)}" y="{_num(y - 6 * k)}" font-size="{_num(fs)}"'
+        labels.append(f'<text x="{_num(x + 9 * k)}" y="{_num(y - 6 * k)}" font-size="{_num(fs)}"'
                       f"{dim}>{escape(text)}</text>")
 
+    on_top = []
     for group in spots.values():
         r = group[0]
         qx, qy = proj(r.server_position.lat, r.server_position.lon)
+        # An edge in the probe's own city would hide under its circle: frame the circle instead, at
+        # the true spot (nothing is moved), drawn above the dots.
+        here = any(g.location.lat is not None and g.location.lon is not None
+                   and ((qx - proj(g.location.lat, g.location.lon)[0]) ** 2
+                        + (qy - proj(g.location.lat, g.location.lon)[1]) ** 2) ** 0.5 < HERE_PX * k
+                   for g in group)
         names = ", ".join(_city(g) for g in group)
         text = f"Server that answered {names}: {r.server_ip or NA}, {position_source(r)}"
         if _from_header(r):
             text += f", {answered_by(r)}"
         if ips_differ or r.server_position.source == "cdn header":
             text += f". {CDN_EDGE_NOTE}"
-        squares.append(square("sw-sq", qx, qy, 7 * k, text))
+        if here:
+            on_top.append(square("sw-sq sw-here", qx, qy, 14 * k, text))
+        else:
+            squares.append(square("sw-sq", qx, qy, 7 * k, text))
 
-    out += arcs + squares + dots
+    out += arcs + squares + dots + on_top
     if anchor is not None:
         label_text, tip = anchor
         out.append(square("sw-sq sw-server", sx, sy, 12 * k, tip))

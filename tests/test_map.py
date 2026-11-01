@@ -214,3 +214,14 @@ def test_results_at_one_spot_share_one_square():
     svg = render_map(r)
     assert len(re.findall(SQUARE, svg)) == 2 and len(re.findall(ARC, svg)) == 3
     assert "Tokyo, Osaka" in svg
+
+
+def test_edge_in_the_same_city_frames_the_circle_instead_of_hiding_under_it():
+    # Tokyo's edge (NRT) is a few pixels from the Tokyo circle: an outline square around it, drawn on top.
+    r = report([placed("Tokyo", 38, "104.16.1.1", (35.77, 140.39), "cdn header", "NRT", lat=35.69, lon=139.69),
+                placed("London", 22, "151.101.1.1", (40.0, -100.0), lat=51.5, lon=-0.1)], server=None)
+    svg = render_map(r)
+    assert len(re.findall(r'<rect class="sw-sq sw-here"', svg)) == 1
+    assert len(re.findall(r'<rect class="sw-sq"', svg)) == 1  # London's is far away: a filled square
+    assert svg.index('class="sw-sq sw-here"') > svg.index('class="sw-dot"')
+    assert ".sw-here{fill:none" in svg

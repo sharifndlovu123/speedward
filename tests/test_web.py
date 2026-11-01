@@ -753,7 +753,7 @@ def test_fragment_has_answered_by_and_position_source_columns(client):
                                        server_position={"lat": 35.77, "lon": 140.39, "source": "cdn header"}))
     assert "<th>Answered by</th><th>Position source</th>" in html
     assert "<td>edge NRT (Tokyo)</td><td>CDN header (cf-ray -NRT)</td>" in html
-    assert 'class="sw-sq"' in html
+    assert 'class="sw-sq' in html
     assert NOTE_TEXT not in html
 
 
