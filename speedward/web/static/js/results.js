@@ -325,6 +325,8 @@
     notice(storage ? "" : storageBlockedText);
     var v = formValues();
     if ($("confirm").checked) { v.confirm = "1"; }
+    var lim = limitValues();  // checked by the server before any test is spent
+    Object.keys(lim).forEach(function (k) { if (lim[k] !== null) { v[k] = String(lim[k]); } });
     $("start").disabled = true;
     post("/scan", v, false).then(function (r) {
       return r.json().then(function (data) {

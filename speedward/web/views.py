@@ -46,7 +46,7 @@ GLOBALPING_FAILED = "The scan failed because Globalping could not be used."
 UNEXPECTED = "The scan failed unexpectedly."
 BUSY = "The scanner is busy with other scans. Please try again in a minute."
 BAD_RESULT = "That result could not be read. Run the scan again or load a valid export."
-BAD_LIMITS = "Pass/fail limits must be numbers above 0 (max blocked: a whole number, 0 or more)."
+BAD_LIMITS = ("Pass/fail limits must be numbers of 1 or more (max blocked: a whole number, 0 or more).")
 GONE = "This scan is no longer on the server. Results are kept only in your browser."
 UNREACHABLE = ("Globalping could not be reached, or it rejected the key. "
                "Check the server's network and its GLOBALPING_TOKEN setting.")
@@ -56,7 +56,7 @@ CREDITS_ZERO = ("Refused: this scan is over the tests left and you have no Globa
 EXPORT_TYPES = {"json": "application/json", "md": "text/markdown; charset=utf-8",
                 "html": "text/html; charset=utf-8"}
 LIMIT_LABELS = (("max_ttfb", "max first byte", " ms"), ("max_load", "max load", " ms"),
-                ("max_blocked", "max blocked", ""))
+                ("max_blocked", "max blocked", ""), ("max_page_weight", "max page weight", " bytes"))
 
 
 # --- Globalping access -------------------------------------------------------------------------
@@ -140,6 +140,10 @@ def estimate(request):
     except ValueError as exc:
         return _error(str(exc), 400)
     try:
+        _limits(request.POST)
+    except ValueError:
+        return _error(BAD_LIMITS, 400)
+    try:
         allowance = _client().allowance()
     except EndpointRefused as exc:
         return _error(str(exc), 503)
@@ -171,6 +175,10 @@ def scan(request):
         plan = _plan(request)
     except ValueError as exc:  # fixed messages from target.py / locations.py
         return _error(str(exc), 400)
+    try:  # checked before any test is spent, though only /render uses them
+        _limits(request.POST)
+    except ValueError:
+        return _error(BAD_LIMITS, 400)
     try:
         geo = geolocator_from_env({"GEOIP_DB": settings.GEOIP_DB or "", "SERVER_LAT": settings.SERVER_LAT or "",
                                    "SERVER_LON": settings.SERVER_LON or ""})
@@ -237,26 +245,49 @@ def _report(data: dict) -> ScanReport:
         raise ValueError("bad report") from None
 
 
+# (key, minimum, whole number) as the CLI accepts them: --max-ttfb/--max-load/--max-page-weight >= 1,
+# --max-blocked >= 0. The upper bound keeps every value formattable and comparable.
+_LIMIT_RULES = (("max_ttfb", 1, False), ("max_load", 1, False), ("max_page_weight", 1, True),
+                ("max_blocked", 0, True))
+_LIMIT_MAX = 10**9
+
+
+def _limit_value(value, minimum: int, whole: bool):
+    """One limit from JSON (number) or a form (text). ValueError on anything not a finite, in-range number."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            value = int(text)
+        except ValueError:
+            try:
+                value = float(text)
+            except ValueError:
+                raise ValueError("not a number") from None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("not a number")
+    try:  # a huge integer overflows float conversion
+        if not math.isfinite(value):
+            raise ValueError("not finite")
+    except ArithmeticError:
+        raise ValueError("too large") from None
+    if not minimum <= value <= _LIMIT_MAX:
+        raise ValueError("out of range")
+    if whole:
+        if not float(value).is_integer():
+            raise ValueError("not a whole number")
+        return int(value)
+    return value
+
+
 def _limits(raw) -> Limits:
+    """Limits from posted JSON (an object) or a form (a QueryDict). ValueError when any is invalid."""
     if raw is None:
         return Limits()
-    if not isinstance(raw, dict):
+    if not hasattr(raw, "get"):
         raise ValueError("limits must be an object")
-
-    def number(key, whole=False, minimum=0.0, strict=True):
-        v = raw.get(key)
-        if v is None or v == "":
-            return None
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
-            raise ValueError(key)
-        if whole and not (isinstance(v, int) or float(v).is_integer()):
-            raise ValueError(key)
-        if (v <= minimum) if strict else (v < minimum):
-            raise ValueError(key)
-        return int(v) if whole else v
-
-    return Limits(max_ttfb=number("max_ttfb"), max_load=number("max_load"),
-                  max_blocked=number("max_blocked", whole=True, strict=False))
+    return Limits(**{key: _limit_value(raw.get(key), minimum, whole) for key, minimum, whole in _LIMIT_RULES})
 
 
 def _pass_fail(report: ScanReport, limits: Limits) -> tuple[str, list[str]]:

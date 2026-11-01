@@ -503,3 +503,49 @@ def test_x_frame_options_setting_is_deny(client):
     from django.conf import settings as dj_settings
     assert dj_settings.X_FRAME_OPTIONS == "DENY"
     assert client.get(reverse("index"))["X-Frame-Options"] == "DENY"
+
+
+BAD_LIMIT_VALUES = [10**400, -5, "abc"]
+LIMIT_KEYS = ["max_ttfb", "max_load", "max_blocked", "max_page_weight"]
+
+
+@pytest.mark.parametrize("key", LIMIT_KEYS)
+@pytest.mark.parametrize("value", BAD_LIMIT_VALUES, ids=["huge", "negative", "text"])
+def test_bad_limit_on_render_is_400(client, caplog, key, value):
+    caplog.set_level(logging.DEBUG)
+    body = json.dumps({"result": report_dict(), "limits": {key: "V"}}).replace('"V"', str(value) if value != "abc" else '"abc"')
+    r = client.post(reverse("render"), data=body, content_type="application/json")
+    assert r.status_code == 400 and "Traceback" not in r.content.decode()
+    assert r.json()["error"] == views.BAD_LIMITS
+    assert not [x for x in caplog.records if x.levelno >= logging.ERROR]
+
+
+@pytest.mark.parametrize("route", ["scan", "estimate"])
+@pytest.mark.parametrize("key", LIMIT_KEYS)
+@pytest.mark.parametrize("value", BAD_LIMIT_VALUES, ids=["huge", "negative", "text"])
+def test_bad_limit_on_form_routes_is_400(client, caplog, fake, route, key, value):
+    caplog.set_level(logging.DEBUG)
+    r = client.post(reverse(route), form(**{key: str(value)}))
+    assert r.status_code == 400 and "Traceback" not in r.content.decode()
+    assert r.json()["error"] == views.BAD_LIMITS
+    assert fake.posts() == []
+    assert not [x for x in caplog.records if x.levelno >= logging.ERROR]
+
+
+@pytest.mark.parametrize("limits", [{"max_ttfb": 0.5}, {"max_load": 0}, {"max_page_weight": 0},
+                                    {"max_blocked": True}, {"max_ttfb": [1]}, {"max_blocked": 10**10}])
+def test_render_rejects_out_of_range_limits(client, limits):
+    r = post_json(client, reverse("render"), {"result": report_dict(), "limits": limits})
+    assert r.status_code == 400
+
+
+@pytest.mark.parametrize("data", [{"max_ttfb": "NaN"}, {"max_load": "inf"}, {"max_blocked": "1.5"},
+                                  {"max_ttfb": "1" + "0" * 5000}])
+def test_scan_rejects_non_finite_form_limits(client, fake, data):
+    assert client.post(reverse("scan"), form(**data)).status_code == 400
+    assert fake.posts() == []
+
+
+def test_valid_form_limits_accepted(client):
+    r = client.post(reverse("estimate"), form(max_ttfb="800", max_load="", max_blocked="0"))
+    assert r.status_code == 200
