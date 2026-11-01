@@ -1,9 +1,10 @@
 """The allowance strip: tests left, a countdown to the reset, and "last run" from this tab only."""
-from e2e.helpers import pick
 import re
 
 import pytest
 from playwright.sync_api import expect
+
+from e2e.helpers import pick
 
 TARGET = "https://e2e-target.example/"
 

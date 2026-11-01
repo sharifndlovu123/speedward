@@ -319,8 +319,13 @@
   }
 
   ["traceroute", "dns"].forEach(function (name) {
-    form.elements[name].addEventListener("input", estimateSoon);
-    form.elements[name].addEventListener("change", estimateSoon);
+    function changed() {
+      costStale = true;
+      renderSummary();
+      estimateSoon();
+    }
+    form.elements[name].addEventListener("input", changed);
+    form.elements[name].addEventListener("change", changed);
   });
 
   // --- location picker: map dots and chips share one selection ---------------------------------

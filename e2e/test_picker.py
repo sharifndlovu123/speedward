@@ -25,6 +25,16 @@ def test_default_twelve_selected_and_summary(page, live_site, watch):
     expect(page.locator("#pick-summary")).to_have_text("12 locations · about 36 tests")
 
 
+def test_toggling_dns_drops_the_old_count_at_once(page, live_site, watch):
+    page.goto(live_site + "/")
+    expect(page.locator("#pick-summary")).to_have_text("12 locations · about 36 tests")
+    held = []
+    page.route("**/estimate", lambda route: held.append(route))  # never answered: no new count arrives
+    page.locator("[name=dns]").evaluate("el => el.click()")
+    expect(page.locator("#pick-summary")).to_have_text("12 locations")
+    page.unroute("**/estimate")
+
+
 def test_clicking_a_dot_toggles_chip_and_estimate(page, live_site, watch):
     page.goto(live_site + "/")
     expect(page.locator("#pick-summary")).to_contain_text("about 36 tests")

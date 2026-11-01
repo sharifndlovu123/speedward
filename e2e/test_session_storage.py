@@ -1,9 +1,10 @@
 """Saved results live only in this tab's sessionStorage; the server keeps nothing."""
-from e2e.helpers import pick
 import json
 from urllib.parse import urlsplit
 
 from playwright.sync_api import expect
+
+from e2e.helpers import pick
 
 TARGET = "https://e2e-target.example/"
 KEY = "speedward:result"

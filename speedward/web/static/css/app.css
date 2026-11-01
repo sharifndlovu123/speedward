@@ -62,7 +62,7 @@ footer{margin-top:32px;font-size:.85rem}
 .allowance p{margin:4px 0 0;font-size:.9rem}
 
 /* Map in front, panels over it. The overlay never traps focus: panels are ordinary, collapsible,
-   and the map (first in the page) comes before them in tab order. */
+   and the map (fixed behind the overlay, after it in the DOM) is reached after them in tab order. */
 body{overflow:hidden;height:100vh;height:100dvh}
 main{max-width:none;padding:0}
 .map-stage{position:fixed;inset:0;z-index:0;background:var(--bg)}
