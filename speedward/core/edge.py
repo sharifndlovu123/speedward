@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from speedward.core.geo import _public_ip
-from speedward.core.models import ServerPosition
+from speedward.core.models import EDGE_NOTES, EDGE_REASONS, POSITION_SOURCES, ServerPosition
 
 # --- thresholds -------------------------------------------------------------------------------
 
@@ -30,25 +30,11 @@ LIGHT_KM_PER_RTT_MS = 150
 # Geo-IP positions are city level; this much error is allowed before the delay check counts.
 DB_SLACK_KM = 300
 
-# --- fixed wording (also stored in reports, so validated on load) -------------------------------
+# --- fixed wording (stored in reports, so the sets live in models and are validated on load) -----
 
-UNCERTAIN = "edge location uncertain"
-NOT_AVAILABLE = "position not available"
-EDGE_NOTES = (UNCERTAIN, NOT_AVAILABLE)
-
-SHARED = "shared address"
-DISAGREE = "geo-IP database and CDN header disagree"
-TOO_FAST = "delay too short for the database position"
-PRIVATE = "private address"
-NO_IP = "no answering IP"
-NO_DB = "no geo-IP database set"
-NOT_IN_DB = "not in the geo-IP database"
-DB_UNREADABLE = "geo-IP database could not be read"
-EDGE_REASONS = (SHARED, DISAGREE, TOO_FAST, PRIVATE, NO_IP, NO_DB, NOT_IN_DB, DB_UNREADABLE)
-
-DATABASE = "database"
-CDN_HEADER = "cdn header"
-POSITION_SOURCES = (DATABASE, CDN_HEADER)
+UNCERTAIN, NOT_AVAILABLE = EDGE_NOTES
+(SHARED, DISAGREE, TOO_FAST, PRIVATE, NO_IP, NO_DB, NOT_IN_DB, DB_UNREADABLE) = EDGE_REASONS
+DATABASE, CDN_HEADER = POSITION_SOURCES
 
 # --- the airport table ------------------------------------------------------------------------
 

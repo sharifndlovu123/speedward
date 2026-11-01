@@ -20,6 +20,14 @@ def clean(text: str) -> str:
 
 STATUSES = ("measured", "blocked", "test_failed", "not_run")
 
+# Where the server that answered one result is (see speedward/core/edge.py, which uses these).
+POSITION_SOURCES = ("database", "cdn header")
+EDGE_NOTES = ("edge location uncertain", "position not available")
+EDGE_REASONS = ("shared address", "geo-IP database and CDN header disagree",
+                "delay too short for the database position", "private address", "no answering IP",
+                "no geo-IP database set", "not in the geo-IP database", "geo-IP database could not be read")
+_EDGE_CODE = re.compile(r"[A-Z]{3}")
+
 
 def _check_status(status: str) -> None:
     if status not in STATUSES:
@@ -69,6 +77,12 @@ class LocationResult:
     # Redirects are not followed: this holds only the first response's Location header, if any.
     redirects: list[str] = field(default_factory=list)
     repeat_same_probe: bool = False
+    # The server that answered, placed offline: a position (source in POSITION_SOURCES), or no
+    # position with a note (EDGE_NOTES) and the reason (EDGE_REASONS). Never both.
+    server_position: ServerPosition | None = None
+    edge_code: str | None = None  # airport code from the cf-ray header; raw headers are never kept
+    edge_note: str | None = None
+    edge_reason: str | None = None
 
     def __post_init__(self):
         _check_status(self.status)
@@ -76,6 +90,19 @@ class LocationResult:
             self.stages is not None or self.repeat_stages is not None or self.ping_ms is not None
         ):
             raise ValueError("only a measured result may carry timings")
+        if self.status != "measured" and (self.server_position is not None or self.edge_code is not None
+                                          or self.edge_note is not None or self.edge_reason is not None):
+            raise ValueError("only a measured result may say which server answered")
+        if self.server_position is not None and self.server_position.source not in POSITION_SOURCES:
+            raise ValueError("server position source is not known")
+        if self.edge_code is not None and not _EDGE_CODE.fullmatch(self.edge_code):
+            raise ValueError("edge code must be three capital letters")
+        if (self.edge_note is None) != (self.edge_reason is None):
+            raise ValueError("an edge note and its reason go together")
+        if self.edge_note is not None and (self.edge_note not in EDGE_NOTES or self.edge_reason not in EDGE_REASONS):
+            raise ValueError("edge note or reason is not known")
+        if self.edge_note is not None and self.server_position is not None:
+            raise ValueError("a result has either a server position or an edge note")
         self.reason = clean(self.reason)
         self.redirects = [clean(r) for r in self.redirects]
         for name in ("server_ip", "tls_version", "http_version", "cdn"):
@@ -296,7 +323,24 @@ def _location_result(d: dict) -> LocationResult:
         cdn=_s_or_none(d, "cdn"), server_ip=_s_or_none(d, "server_ip"),
         tls_version=_s_or_none(d, "tls_version"), http_version=_s_or_none(d, "http_version"),
         redirects=_str_list(d, "redirects"), repeat_same_probe=same,
+        # Absent in reports from before Task 16: they load with no position and no note.
+        server_position=_result_position(d.get("server_position")),
+        edge_code=_s_or_none(d, "edge_code"), edge_note=_s_or_none(d, "edge_note"),
+        edge_reason=_s_or_none(d, "edge_reason"),
     )
+
+
+def _result_position(value) -> ServerPosition | None:
+    if value is None:
+        return None
+    d = _obj(value, "server_position")
+    lat, lon = _num_or_none(d, "lat", -90, 90), _num_or_none(d, "lon", -180, 180)
+    if lat is None or lon is None:
+        raise ValueError("server position needs lat and lon")
+    source = _s(d, "source")
+    if source not in POSITION_SOURCES:
+        raise ValueError("server position source is not known")
+    return ServerPosition(lat, lon, source)
 
 
 def _hop(d) -> Hop:

@@ -182,3 +182,67 @@ def test_server_source_unknown_value_rejected(source):
     from speedward.core.models import _server
     with pytest.raises(ValueError):
         _server({"lat": 1, "lon": 2, "source": source})
+
+
+# --- per-result server position (Task 16) -------------------------------------------------------
+
+def _placed_report() -> ScanReport:
+    r = _full_report()
+    r.locations[0].server_position = ServerPosition(35.77, 140.39, "cdn header")
+    r.locations[0].edge_code = "NRT"
+    r.locations.append(LocationResult(LOC, "measured", stages=STAGES, server_ip="104.16.1.1",
+                                      edge_note="edge location uncertain", edge_reason="shared address"))
+    return r
+
+
+def test_server_position_fields_round_trip():
+    r = _placed_report()
+    d = json.loads(json.dumps(r.to_dict()))
+    assert d["locations"][0]["server_position"] == {"lat": 35.77, "lon": 140.39, "source": "cdn header"}
+    assert d["locations"][0]["edge_code"] == "NRT"
+    assert d["locations"][2]["edge_note"] == "edge location uncertain"
+    assert ScanReport.from_dict(d) == r
+
+
+def test_old_report_without_server_position_still_loads():
+    d = json.loads(json.dumps(_full_report().to_dict()))
+    for loc in d["locations"]:
+        for key in ("server_position", "edge_code", "edge_note", "edge_reason"):
+            loc.pop(key, None)
+    r = ScanReport.from_dict(d)
+    assert all(x.server_position is None and x.edge_note is None and x.edge_code is None for x in r.locations)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda d: d["locations"][0].update(server_position={"lat": 1, "lon": 2, "source": "manual"}),
+    lambda d: d["locations"][0].update(server_position={"lat": 1, "lon": 2, "source": "guess"}),
+    lambda d: d["locations"][0].update(server_position={"lat": 91, "lon": 2, "source": "database"}),
+    lambda d: d["locations"][0].update(server_position={"lat": 1, "lon": None, "source": "database"}),
+    lambda d: d["locations"][0].update(server_position={"lat": True, "lon": 2, "source": "database"}),
+    lambda d: d["locations"][0].update(server_position="Tokyo"),
+    lambda d: d["locations"][0].update(edge_code="nrt"),
+    lambda d: d["locations"][0].update(edge_code="NRTX"),
+    lambda d: d["locations"][0].update(edge_code=5),
+    lambda d: d["locations"][2].update(edge_note="probably Tokyo"),
+    lambda d: d["locations"][2].update(edge_reason="<b>x</b>"),
+    lambda d: d["locations"][2].update(edge_reason=None),  # a note always says why
+    lambda d: d["locations"][2].update(edge_note=None),  # a reason never comes alone
+    # a position and an "uncertain" note at once
+    lambda d: d["locations"][0].update(edge_note="edge location uncertain", edge_reason="shared address"),
+    # only a measured result can say which server answered
+    lambda d: d["locations"][1].update(server_position={"lat": 1, "lon": 2, "source": "database"}),
+    lambda d: d["locations"][1].update(edge_note="position not available", edge_reason="private address"),
+    lambda d: d["locations"][1].update(edge_code="NRT"),
+])
+def test_server_position_fields_rejected_when_malformed(mutate):
+    d = json.loads(json.dumps(_placed_report().to_dict()))
+    mutate(d)
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)
+
+
+def test_model_wording_sets_match_the_edge_module():
+    from speedward.core import edge, models
+    assert models.EDGE_NOTES == edge.EDGE_NOTES
+    assert models.EDGE_REASONS == edge.EDGE_REASONS
+    assert models.POSITION_SOURCES == edge.POSITION_SOURCES == ("database", "cdn header")
