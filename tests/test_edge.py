@@ -189,7 +189,7 @@ def test_unknown_continents_count_as_different_ones():
 
 
 @pytest.mark.parametrize("ip,reason", [("10.0.0.1", edge.PRIVATE), ("192.168.1.2", edge.PRIVATE),
-                                       ("::1", edge.PRIVATE), ("not-an-ip", edge.PRIVATE), (None, edge.NO_IP)])
+                                       ("::1", edge.PRIVATE), ("not-an-ip", edge.BAD_IP), (None, edge.NO_IP)])
 def test_private_or_missing_ip_has_no_position(ip, reason):
     out = place([a(ip=ip)], lookup_of({}))
     assert out == [Placement(None, edge.NOT_AVAILABLE, reason)]
@@ -228,3 +228,20 @@ def test_reasons_and_notes_are_fixed_sets():
     for r in (edge.SHARED, edge.DISAGREE, edge.TOO_FAST, edge.PRIVATE, edge.NO_IP, edge.NO_DB, edge.NOT_IN_DB,
               edge.DB_UNREADABLE):
         assert r in edge.EDGE_REASONS
+
+
+# --- review fixes ---------------------------------------------------------------------------------
+
+def test_cf_ray_city_too_far_for_the_connect_time_is_uncertain():
+    # Berlin connects in 1 ms, but the header claims Sydney: light cannot do that round trip.
+    out = place([a(code="SYD", connect=1)], no_db)
+    assert out == [Placement(None, edge.UNCERTAIN, edge.HEADER_TOO_FAST)]
+
+
+def test_cf_ray_city_consistent_with_the_connect_time_is_used():
+    assert place([a(code="SYD", connect=400)], no_db)[0].position.source == "cdn header"
+
+
+def test_unparseable_ip_is_not_called_private():
+    assert place([a(ip="not-an-ip")], lookup_of({})) == [Placement(None, edge.NOT_AVAILABLE, edge.BAD_IP)]
+    assert edge.BAD_IP != edge.PRIVATE

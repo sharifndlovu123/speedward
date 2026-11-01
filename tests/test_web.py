@@ -784,3 +784,9 @@ def test_no_fallback_note_with_a_configured_position(client):
 def test_legend_explains_circles_squares_and_lines(client):
     html = rendered(client, report_dict())
     assert "Circle = test location. Square = server that answered it" in html
+
+
+def test_unreadable_database_gets_the_setup_note(client):
+    html = rendered(client, with_tokyo(edge_note="position not available",
+                                       edge_reason="geo-IP database could not be read"))
+    assert NOTE_TEXT in html and "could not be placed with confidence" not in html

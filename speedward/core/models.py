@@ -31,7 +31,10 @@ NO_IP = "no answering IP"
 NO_DB = "no geo-IP database set"
 NOT_IN_DB = "not in the geo-IP database"
 DB_UNREADABLE = "geo-IP database could not be read"
-EDGE_REASONS = (SHARED, DISAGREE, TOO_FAST, PRIVATE, NO_IP, NO_DB, NOT_IN_DB, DB_UNREADABLE)
+HEADER_TOO_FAST = "delay too short for the CDN header position"
+BAD_IP = "answering IP could not be read"
+EDGE_REASONS = (SHARED, DISAGREE, TOO_FAST, PRIVATE, NO_IP, NO_DB, NOT_IN_DB, DB_UNREADABLE, HEADER_TOO_FAST,
+                BAD_IP)
 _EDGE_CODE = re.compile(r"[A-Z]{3}")
 
 

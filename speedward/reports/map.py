@@ -64,19 +64,24 @@ def _city(r: LocationResult) -> str:
     return r.location.city or r.location.country or "unknown"
 
 
-def _single_origin(located: list[LocationResult]) -> bool:
-    """Every placed result reached one address, placed by the database at one spot (not CDN edges)."""
-    return (bool(located) and len({r.server_ip for r in located}) == 1
+def _single_origin(measured: list[LocationResult], located: list[LocationResult]) -> bool:
+    """Every measured result that has an address reached the same one, all of them were placed, at one
+    spot, by the database (not CDN edges). Two placed results at least: one alone proves nothing."""
+    with_ip = [r for r in measured if r.server_ip]
+    return (len(located) >= 2 and len({r.server_ip for r in with_ip}) == 1
+            and all(r.server_position is not None for r in with_ip)
+            and len({r.server_ip for r in located}) == 1
             and len({(r.server_position.lat, r.server_position.lon) for r in located}) == 1
             and all(r.server_position.source == "database" for r in located))
 
 
-def _anchor_text(report: ScanReport, located: list[LocationResult]) -> tuple[str, str] | None:
+def _anchor_text(report: ScanReport, measured: list[LocationResult],
+                 located: list[LocationResult]) -> tuple[str, str] | None:
     """(label, tooltip) for the one "Server" square, or None when each result gets its own square."""
     s = report.server
     if s is not None and s.source == "manual":
         return "Server (manual setting)", "Server: manual (setting)"
-    if _single_origin(located):
+    if _single_origin(measured, located):
         r = located[0]
         return ("Server (all probes reached the same IP)",
                 f"Server (all probes reached the same IP): {r.server_ip}, {position_source(r)}")
@@ -123,7 +128,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
 
     measured = [r for r in report.locations if r.status == "measured"]
     located = [r for r in measured if r.server_position is not None]
-    anchor = _anchor_text(report, located)
+    anchor = _anchor_text(report, measured, located)
     manual = report.server is not None and report.server.source == "manual"
     edges = anchor is None and bool(located)
     ips_differ = len({r.server_ip for r in measured if r.server_ip}) > 1

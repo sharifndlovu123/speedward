@@ -225,3 +225,22 @@ def test_edge_in_the_same_city_frames_the_circle_instead_of_hiding_under_it():
     assert len(re.findall(r'<rect class="sw-sq"', svg)) == 1  # London's is far away: a filled square
     assert svg.index('class="sw-sq sw-here"') > svg.index('class="sw-dot"')
     assert ".sw-here{fill:none" in svg
+
+
+def test_no_single_origin_label_when_another_probe_got_a_different_ip():
+    r = report([placed("Tokyo", 400, "93.184.216.34", (50.1, 8.7), lat=35.7, lon=139.7),
+                placed("London", 30, "93.184.216.34", (50.1, 8.7), lat=51.5, lon=-0.1),
+                placed("Lagos", 200, "151.101.1.1", note="position not available",
+                       reason="not in the geo-IP database", lat=6.5, lon=3.4)], server=None)
+    svg = render_map(r)
+    assert "all probes reached the same IP" not in svg and 'class="sw-sq sw-server"' not in svg
+    assert "CDN edge, not necessarily your origin" in svg
+
+
+def test_no_single_origin_label_for_one_placed_probe_among_several():
+    r = report([placed("Tokyo", 400, "93.184.216.34", (50.1, 8.7), lat=35.7, lon=139.7),
+                placed("London", 30, "151.101.1.1", note="position not available",
+                       reason="private address", lat=51.5, lon=-0.1),
+                placed("Lagos", 200, "151.101.2.2", note="edge location uncertain",
+                       reason="shared address", lat=6.5, lon=3.4)], server=None)
+    assert "all probes reached the same IP" not in render_map(r)

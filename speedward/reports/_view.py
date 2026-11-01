@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from speedward.core.analysis import STAGE_NAMES, summarise
 from speedward.core.edge import edge_city
-from speedward.core.models import NO_DB, LocationResult, ScanReport
+from speedward.core.models import DB_UNREADABLE, NO_DB, LocationResult, ScanReport
 
 CACHE_NOTE = "Repeat request from the same test machine; not a browser cache test."
 CACHE_NA_NOTE = "needs the same test machine for both runs"
@@ -130,7 +130,7 @@ def position_note(report: ScanReport) -> str | None:
     if any(r.server_position is not None for r in measured):
         return None
     reasons = {r.edge_reason for r in measured}
-    if not measured or None in reasons or NO_DB in reasons:
+    if not measured or None in reasons or NO_DB in reasons or DB_UNREADABLE in reasons:
         return "setup"
     return "uncertain"
 

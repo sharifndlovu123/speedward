@@ -146,14 +146,14 @@ Each measured place records the IP address that answered it. Speedward puts that
 2. Install the extra: `pip install -e ".[geoip]"` (the Docker image already has it).
 3. Point speedward at the file: `GEOIP_DB=/path/to/GeoLite2-City.mmdb` in `.env`. With Docker, mount it read-only and add to the `docker run` line above: `-v /srv/geo:/geo:ro -e GEOIP_DB=/geo/GeoLite2-City.mmdb`. The file stays on your server.
 
-**CDN edge or origin.** A site behind a CDN is answered by the CDN's nearest edge, not by your own server, so each place can get a different square. When the addresses differ between places, a square's tooltip says "CDN edge, not necessarily your origin". Cloudflare names the edge in its `cf-ray` header (for example `-NRT` for Tokyo); speedward keeps only that airport code (never the headers) and places the edge from a bundled airport table (OurAirports, public domain; built by `scripts/build_iata.py`). That works even without the location file. Other CDNs' headers are not used, because their format is not certain. When every place reached the same address and the database places it, the map draws one **Server** square with a line from every place.
+**CDN edge or origin.** A site behind a CDN is answered by the CDN's nearest edge, not by your own server, so each place can get a different square. When the addresses differ between places, a square's tooltip says "CDN edge, not necessarily your origin". Cloudflare names the edge in its `cf-ray` header (for example `-NRT` for Tokyo); speedward keeps only that airport code (never the headers) and places the edge from a bundled airport table (OurAirports, public domain; built by `scripts/build_iata.py`). That works even without the location file. Other CDNs' headers are not used, because their format is not certain. When every measured place reached the same address (at least two places) and the database places it, the map draws one **Server** square with a line from every place.
 
 **Uncertain cases draw nothing.** A position is drawn only when it can be trusted. The table's **Position source** column says why there is none:
 
 - "edge location uncertain (shared address)": the same address answered places on 2 or more continents (anycast or a shared CDN address, which databases register at one place). It is still drawn if every place's connect time is long enough for the database position (a single origin); a connect time faster than light could travel there rules it out.
 - "edge location uncertain (geo-IP database and CDN header disagree)": the two are more than 2,500 km apart.
-- "edge location uncertain (delay too short for the database position)": the connect time is faster than light could reach the database position.
-- "position not available (...)": a private address, an address not in the database, no database set, or no answering address.
+- "edge location uncertain (delay too short for the database position)" or "(delay too short for the CDN header position)": the connect time is faster than light could reach that position.
+- "position not available (...)": a private address, an answering address that could not be read, an address not in the database, no database set (or an unreadable one), or no answering address.
 
 The thresholds are named constants in `speedward/core/edge.py`.
 

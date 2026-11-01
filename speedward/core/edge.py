@@ -7,6 +7,7 @@ believed unless every probe's delay fits it. Anything doubtful gets no position 
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import math
 import re
@@ -17,6 +18,8 @@ from pathlib import Path
 
 from speedward.core.geo import _public_ip
 from speedward.core.models import (  # noqa: F401 - re-exported
+    BAD_IP,
+    HEADER_TOO_FAST,
     DB_UNREADABLE,
     DISAGREE,
     EDGE_NOTES,
@@ -133,6 +136,14 @@ def _fits(group: list[Answer], lat: float, lon: float, need_all: bool) -> bool:
     return not any(_too_fast(x, lat, lon) for x in group)
 
 
+def _parses(ip: str) -> bool:
+    try:
+        ipaddress.ip_address(ip.strip())
+    except ValueError:
+        return False
+    return True
+
+
 def place(answers: Sequence[Answer | None],
           lookup: Callable[[str], tuple[float, float] | str]) -> list[Placement | None]:
     """One Placement per answer (None stays None, for results that were not measured).
@@ -151,7 +162,7 @@ def place(answers: Sequence[Answer | None],
         # An unknown continent counts as one of its own: we cannot show it is the same.
         continents = {x.continent or f"?{i}" for i, x in members}
         shared[ip] = len(continents) >= SHARED_MIN_CONTINENTS
-        db[ip] = lookup(ip.strip()) if _public_ip(ip) else PRIVATE
+        db[ip] = lookup(ip.strip()) if _public_ip(ip) else PRIVATE if _parses(ip) else BAD_IP
 
     out: list[Placement | None] = []
     for ans in answers:
@@ -162,7 +173,10 @@ def place(answers: Sequence[Answer | None],
         found = db.get(ans.ip) if ans.ip else NO_IP
         is_shared = bool(ans.ip) and shared[ans.ip]
         if airport is not None:
-            if (isinstance(found, tuple) and not is_shared
+            # The TCP connect ends at the edge, so a header city light could not reach in time is wrong.
+            if _too_fast(ans, airport.lat, airport.lon):
+                out.append(Placement(None, UNCERTAIN, HEADER_TOO_FAST))
+            elif (isinstance(found, tuple) and not is_shared
                     and distance_km(airport.lat, airport.lon, *found) > HEADER_DB_MAX_KM):
                 out.append(Placement(None, UNCERTAIN, DISAGREE))
             else:
