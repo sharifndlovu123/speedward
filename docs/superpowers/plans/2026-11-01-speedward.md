@@ -260,6 +260,25 @@
 
 ---
 
+### Task 12: Allowance timer (added mid-build at the author's request; option B of the timer mockup)
+
+**Files:**
+- Create: `speedward/core/allowance_view.py`, `tests/test_allowance_view.py`
+- Modify: `speedward/core/globalping.py` (Allowance gains `reset_seconds: int | None`), `speedward/cli/main.py`, `speedward/web/views.py`, `speedward/web/templates/index.html`, `speedward/web/static/js/results.js`, `speedward/web/static/css/app.css`, `tests/test_cli.py`, `tests/test_web.py`, `e2e/test_session_storage.py` (or a new e2e file)
+
+**Interfaces:**
+- Produces: `Allowance.reset_seconds` read from `GET /v1/limits` (`rateLimit.measurements.create.reset`, seconds) and the `x-ratelimit-reset` POST header; `describe_allowance(allowance, cost: int | None, now_epoch: float) -> AllowanceView` in `allowance_view.py` with `.tests_left`, `.tests_per_hour`, `.reset_in_minutes: int | None` (rounded UP, never 0 while reset_seconds > 0), `.state` (`"ok"`, `"low"` when tests_left < cost or <= 15% of tests_per_hour, `"unknown"` when remaining is unknown), `.used_before`, `.this_scan`, `.left_after` (never negative; the three bar parts sum to tests_per_hour), `.text` (the strip text), `.keyless: bool`, and `.next_full_scan_in_minutes: int | None`.
+
+Behaviour (author's decisions): web status strip "N of M tests left this hour · resets in X min · last run Y min ago"; amber when low, then says when a full scan will fit again; no-key variant shows the lower limits and "A key is free up to a limit: https://globalping.io"; progress bar beside the cost estimate with three parts (already used, this scan, left afterwards) and a caption such as "38 used already · 36 for this scan · 176 left afterwards"; the countdown ticks down client-side every 30 seconds from the server-supplied `reset_seconds` and `fetchedAt`, and the strip refreshes from `/estimate` after every scan; "last run Y min ago" comes ONLY from the saved result in session storage (`speedward:result` savedAt) so it vanishes with the tab; the server stores nothing; CLI prints "You have N left this hour (resets in X min)." next to the estimate (no last-run line). Never show a guess: if `reset_seconds` or `remaining` is unknown, show "unknown" for that part (and omit the bar) rather than a number.
+
+- [ ] **Step 1: Write failing tests**: `test_reset_rounds_up_to_whole_minutes` (61 s -> 2 min, 1 s -> 1 min, 0 -> None/"now"); `test_unknown_reset_is_not_guessed`; `test_low_state_when_remaining_below_cost`; `test_bar_parts_sum_to_limit_and_never_negative`; `test_keyless_text_says_free_up_to_a_limit_and_never_bare_free`; `test_cli_estimate_prints_reset_countdown`; `test_web_estimate_returns_reset_and_bar_parts`; `test_index_status_strip_shows_countdown`; an e2e test that the strip is present, the countdown text decrements when the browser clock is advanced (Playwright `page.clock`), and "last run" appears after a scan and is gone after closing and reopening the tab.
+- [ ] **Step 2: Run the new tests; expect FAIL.**
+- [ ] **Step 3: Implement** `Allowance.reset_seconds` plus `describe_allowance`, then CLI, web view/template/JS/CSS. All dynamic text via `textContent`. No server-side storage of the last run.
+- [ ] **Step 4: Run** the new tests plus the full suite; expect PASS.
+- [ ] **Step 5: Commit** `git commit -am "feat: allowance timer and last-run strip"`.
+
+---
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).
