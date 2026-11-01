@@ -28,6 +28,11 @@ class FakeGlobalping:
         self.limit = None  # overrides the limit in /limits and the POST headers
         self.remaining = None
         self.credits = None
+        self.by_type: dict[str, dict] = {}  # per measurement type template, overrides `template`
+        self.queued: dict[str, list[dict]] = {}  # one-shot docs per type, used before templates
+        self.rate_limit_after: int | None = None  # accept this many POSTs, then answer 429
+        self.reuse_expired = False  # every POST with a measurement id as locations gets 422
+        self._accepted = 0
         self._polls: dict[str, int] = {}
         self._counter = 0
         self._httpd = None
@@ -41,6 +46,19 @@ class FakeGlobalping:
         """Replace the `result` of one probe in the template (e.g. a per-probe failure)."""
         self.template = copy.deepcopy(self.template)
         self.template["results"][index]["result"] = result
+
+    def queue(self, type: str, name_or_doc) -> None:
+        """Use this doc for the next POST of `type` only."""
+        doc = fixture(name_or_doc) if isinstance(name_or_doc, str) else name_or_doc
+        self.queued.setdefault(type, []).append(doc)
+
+    def posts(self, type: str | None = None) -> list[dict]:
+        return [b for m, _, _, b in self.requests if m == "POST" and (type is None or b.get("type") == type)]
+
+    def _doc_for(self, type: str) -> dict:
+        if self.queued.get(type):
+            return copy.deepcopy(self.queued[type].pop(0))
+        return copy.deepcopy(self.by_type.get(type, self.template))
 
     def rate_limit(self, headers: dict | None = None, body: bytes | str = b"") -> None:
         self.force_429 = (headers or {}, body.encode() if isinstance(body, str) else body)
@@ -120,12 +138,15 @@ class FakeGlobalping:
                 if outer.force_429 is not None:
                     headers, raw = outer.force_429
                     return self._send(429, raw, headers)
+                if outer.rate_limit_after is not None and outer._accepted >= outer.rate_limit_after:
+                    return self._send(429, b"")
                 locations = body.get("locations")
                 if isinstance(locations, str):  # probe reuse by measurement id
-                    if locations not in outer.measurements:
+                    if outer.reuse_expired or locations not in outer.measurements:
                         return self._send(422, {"error": {"type": "no_probes_found",
                                                           "message": "No matching IPv4 probes available."}})
-                doc = copy.deepcopy(outer.template)
+                doc = outer._doc_for(body.get("type"))
+                outer._accepted += 1
                 outer._counter += 1
                 mid = f"fake{outer._counter:04d}"
                 doc.update(id=mid, type=body.get("type"), target=body.get("target"))

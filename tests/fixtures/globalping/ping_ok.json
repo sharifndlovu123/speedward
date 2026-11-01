@@ -1,0 +1,127 @@
+{
+ "id": "fixture-ping",
+ "type": "ping",
+ "status": "finished",
+ "createdAt": "2026-11-01T17:58:46.120Z",
+ "updatedAt": "2026-11-01T17:58:46.450Z",
+ "target": "example.com",
+ "probesCount": 4,
+ "locations": [
+  {
+   "magic": "Berlin"
+  },
+  {
+   "magic": "Tokyo"
+  },
+  {
+   "magic": "aws-eu-west-1"
+  },
+  {
+   "magic": "eyeball-network+Brazil"
+  }
+ ],
+ "measurementOptions": null,
+ "results": [
+  {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Berlin",
+    "asn": 8560,
+    "longitude": 13.41,
+    "latitude": 52.52,
+    "network": "IONOS",
+    "tags": [
+     "datacenter-network",
+     "u-h0ger77"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "PING example.com (104.20.23.154) 56(84) bytes of data.",
+    "resolvedAddress": "104.20.23.154",
+    "resolvedHostname": "example.com",
+    "timings": [
+     {
+      "ttl": 57,
+      "rtt": 0.744
+     },
+     {
+      "ttl": 57,
+      "rtt": 0.744
+     },
+     {
+      "ttl": 57,
+      "rtt": 0.744
+     }
+    ],
+    "stats": {
+     "min": 0.744,
+     "max": 0.744,
+     "avg": 0.744,
+     "total": 3,
+     "loss": 0,
+     "rcv": 3,
+     "drop": 0
+    }
+   }
+  },
+  {
+   "probe": {
+    "continent": "AS",
+    "region": "Eastern Asia",
+    "country": "JP",
+    "state": null,
+    "city": "Tokyo",
+    "asn": 3258,
+    "longitude": 139.69,
+    "latitude": 35.69,
+    "network": "xTom",
+    "tags": [
+     "datacenter-network",
+     "u-zGato"
+    ],
+    "resolvers": [
+     "1.1.1.1",
+     "8.8.8.8",
+     "2606:4700:4700::1111",
+     "2001:4860:4860::8888"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "PING example.com (104.20.23.154) 56(84) bytes of data.",
+    "resolvedAddress": "104.20.23.154",
+    "resolvedHostname": "example.com",
+    "timings": [
+     {
+      "ttl": 57,
+      "rtt": 2.1
+     },
+     {
+      "ttl": 57,
+      "rtt": 2.1
+     },
+     {
+      "ttl": 57,
+      "rtt": 2.1
+     }
+    ],
+    "stats": {
+     "min": 2.1,
+     "max": 2.1,
+     "avg": 2.1,
+     "total": 3,
+     "loss": 0,
+     "rcv": 3,
+     "drop": 0
+    }
+   }
+  }
+ ]
+}

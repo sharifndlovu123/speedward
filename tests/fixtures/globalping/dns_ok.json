@@ -1,0 +1,121 @@
+{
+ "id": "fixture-dns",
+ "type": "dns",
+ "status": "finished",
+ "createdAt": "2026-11-01T17:58:46.120Z",
+ "updatedAt": "2026-11-01T17:58:46.450Z",
+ "target": "example.com",
+ "probesCount": 4,
+ "locations": [
+  {
+   "magic": "Berlin"
+  },
+  {
+   "magic": "Tokyo"
+  },
+  {
+   "magic": "aws-eu-west-1"
+  },
+  {
+   "magic": "eyeball-network+Brazil"
+  }
+ ],
+ "measurementOptions": null,
+ "results": [
+  {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Berlin",
+    "asn": 8560,
+    "longitude": 13.41,
+    "latitude": 52.52,
+    "network": "IONOS",
+    "tags": [
+     "datacenter-network",
+     "u-h0ger77"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "; <<>> DiG 9.18.47 <<>> example.com",
+    "statusCodeName": "NOERROR",
+    "statusCode": 0,
+    "answers": [
+     {
+      "name": "example.com.",
+      "type": "A",
+      "ttl": 56,
+      "class": "IN",
+      "value": "104.20.23.154"
+     },
+     {
+      "name": "example.com.",
+      "type": "A",
+      "ttl": 56,
+      "class": "IN",
+      "value": "172.66.147.243"
+     }
+    ],
+    "timings": {
+     "total": 0
+    },
+    "resolver": "private"
+   }
+  },
+  {
+   "probe": {
+    "continent": "AS",
+    "region": "Eastern Asia",
+    "country": "JP",
+    "state": null,
+    "city": "Tokyo",
+    "asn": 3258,
+    "longitude": 139.69,
+    "latitude": 35.69,
+    "network": "xTom",
+    "tags": [
+     "datacenter-network",
+     "u-zGato"
+    ],
+    "resolvers": [
+     "1.1.1.1",
+     "8.8.8.8",
+     "2606:4700:4700::1111",
+     "2001:4860:4860::8888"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "; <<>> DiG 9.18.47 <<>> example.com",
+    "statusCodeName": "NOERROR",
+    "statusCode": 0,
+    "answers": [
+     {
+      "name": "example.com.",
+      "type": "A",
+      "ttl": 56,
+      "class": "IN",
+      "value": "104.20.23.154"
+     },
+     {
+      "name": "example.com.",
+      "type": "A",
+      "ttl": 56,
+      "class": "IN",
+      "value": "172.66.147.243"
+     }
+    ],
+    "timings": {
+     "total": 1
+    },
+    "resolver": "private"
+   }
+  }
+ ]
+}
