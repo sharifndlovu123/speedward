@@ -655,3 +655,14 @@ def test_js_has_no_wording_of_its_own_for_the_strip():
                    "tests left", "ask you to confirm", "NaN"):
         assert phrase not in js, phrase
     assert "{minutes}" in js and "isNum" in js
+
+
+def test_index_has_map_picker_and_hidden_locations_input(client):
+    body = client.get(reverse("index")).content.decode()
+    assert 'class="sw-map sw-picker"' in body and body.count('class="sw-pick"') >= 30
+    m = re.search(r'<input type="hidden" id="locations" name="locations" value="([^"]*)"', body)
+    assert m and m.group(1).startswith("London,Frankfurt") and m.group(1).count(",") == 11
+    assert 'type="text" id="locations"' not in body and 'placeholder="London' not in body
+    assert body.count('data-preset=') == 4 and 'id="add-name"' in body
+    assert re.search(r'class="chip" data-place="Paris" aria-pressed="false"', body)
+    assert re.search(r'class="chip" data-place="London" data-default="1"[^>]*aria-pressed="true"', body)

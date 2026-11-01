@@ -1,4 +1,5 @@
 """The allowance strip: tests left, a countdown to the reset, and "last run" from this tab only."""
+from e2e.helpers import pick
 import re
 
 import pytest
@@ -34,9 +35,9 @@ def test_last_run_appears_after_a_scan_and_vanishes_with_the_tab(page, context, 
     page.goto(live_site + "/")
     expect(page.locator("#allowance-last-run")).to_be_hidden()
     page.fill("#url", TARGET)
-    page.fill("#locations", "Berlin,Tokyo")
+    pick(page, "Berlin", "Tokyo")
     page.click("#start")
-    expect(page.locator("#results-body svg.sw-map")).to_be_visible(timeout=30_000)
+    expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     strip = page.locator("#allowance-strip")
     expect(page.locator("#allowance-last-run")).to_be_visible()
     expect(page.locator("#allowance-last-run")).to_contain_text("last run just now")
@@ -77,7 +78,7 @@ def test_estimate_failure_marks_the_strip_stale(page, live_site, reset_in_10_min
     expect(page.locator("#allowance-stale")).to_be_hidden()
     watch.clear()  # the 500 below is on purpose
     page.route("**/estimate", lambda route: route.fulfill(status=500, body="{}", content_type="application/json"))
-    page.fill("#locations", "Berlin")
+    pick(page, "Berlin")
     expect(page.locator("#allowance-stale")).to_be_visible()
     expect(page.locator("#allowance-stale")).to_contain_text("could not refresh")
     watch.clear()

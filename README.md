@@ -58,7 +58,7 @@ Then run it. The default is 12 locations (London, Frankfurt, New York, Los Angel
 ```bash
 speedward scan https://example.com                                    # Markdown to the terminal
 speedward scan https://example.com --format html --out report.html    # HTML report with the map
-speedward scan https://example.com --locations Berlin,Tokyo,Brazil    # your own places
+speedward scan https://example.com --locations Berlin,Tokyo,Brazil    # your own places (the web UI picks places on the map instead)
 ```
 
 Options (all from `speedward scan --help`):

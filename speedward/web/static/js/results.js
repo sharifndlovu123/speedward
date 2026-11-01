@@ -80,6 +80,7 @@
     var el = $("form-error");
     setText(el, text || "");
     show(el, !!text);
+    if (text && hasResults) { setPicking(true); }  // the panel with the message must be on screen
   }
 
   function post(url, data, asJson) {
@@ -128,7 +129,8 @@
   function fillForm(saved) {
     var f = saved.form || {};
     form.elements.url.value = f.url || saved.result.target || "";
-    form.elements.locations.value = f.locations || "";
+    setPicks((f.locations || "").split(",").map(function (n) { return n.trim(); }).filter(Boolean),
+             !f.locations);
     form.elements.traceroute.checked = !!f.traceroute;
     form.elements.dns.checked = !!f.dns;
     var l = saved.limits || {};
@@ -246,6 +248,8 @@
   // --- estimate --------------------------------------------------------------------------------
   var lastCost = null;
   var estimateTimer = null;
+  var estimateSeq = 0;
+  var costStale = true;
 
   function runAgainLabels() {
     var text = lastCost === null ? "Run again" : "Run again (~" + lastCost + " tests)";
@@ -256,6 +260,8 @@
   function applyBudget(b) {
     applyView(b.view);
     lastCost = b.cost;
+    costStale = false;
+    renderSummary();
     runAgainLabels();
     setText($("estimate"), b.message || "");
     var over = $("over");
@@ -280,8 +286,15 @@
   function estimate() {
     var v = formValues();
     delete v.url;
+    if (!v.locations) {  // never ask for "no places": the server would read that as the default spread
+      setText($("estimate"), "");
+      refetching = false;
+      return Promise.resolve();
+    }
+    var seq = ++estimateSeq;
     return post("/estimate", v, false).then(function (r) {
       return r.json().then(function (data) {
+        if (seq !== estimateSeq) { return; }  // a newer pick superseded this answer
         if (r.ok) {
           applyBudget(data);
         } else {
@@ -305,18 +318,244 @@
     estimateTimer = setTimeout(estimate, 350);
   }
 
-  ["locations", "traceroute", "dns"].forEach(function (name) {
+  ["traceroute", "dns"].forEach(function (name) {
     form.elements[name].addEventListener("input", estimateSoon);
     form.elements[name].addEventListener("change", estimateSoon);
+  });
+
+  // --- location picker: map dots and chips share one selection ---------------------------------
+  // The chips are the source of truth for which places exist (server-rendered from the catalog);
+  // added places become extra chips with no dot. The hidden `locations` input carries the
+  // comma-separated selection, so /estimate and /scan are unchanged. Text goes in via textContent.
+  var ZERO_TEXT = "Pick at least one place";
+  var places = [];          // {name, chip, dot, isDefault, isLead}
+  var byName = {};
+  var selected = {};
+  var picksLocked = false;
+
+  function initPicker() {
+    var dots = {};
+    Array.prototype.forEach.call(document.querySelectorAll("#picker-map .sw-pick"), function (d) {
+      dots[d.getAttribute("data-place")] = d;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#chips .chip"), function (chip) {
+      var name = chip.getAttribute("data-place");
+      var pl = { name: name, chip: chip, dot: dots[name] || null,
+                 isDefault: chip.hasAttribute("data-default"), isLead: chip.hasAttribute("data-lead") };
+      places.push(pl);
+      byName[name] = pl;
+    });
+  }
+
+  function selectedNames() {
+    return places.filter(function (pl) { return selected[pl.name]; }).map(function (pl) { return pl.name; });
+  }
+
+  function pluralLocations(n) { return n + (n === 1 ? " location" : " locations"); }
+
+  function renderSummary() {
+    var n = selectedNames().length;
+    var text = pluralLocations(n);
+    if (n > 0 && !costStale && lastCost !== null) { text += " · about " + lastCost + " tests"; }
+    setText($("pick-summary"), text);
+  }
+
+  function renderPicks() {
+    var names = selectedNames();
+    places.forEach(function (pl) {
+      var on = !!selected[pl.name];
+      pl.chip.setAttribute("aria-pressed", on ? "true" : "false");
+      if (pl.dot) { pl.dot.setAttribute("aria-checked", on ? "true" : "false"); }
+    });
+    form.elements.locations.value = names.join(",");
+    var toggle = $("locations-toggle");
+    setText(toggle, "Locations (" + names.length + ")");
+    toggle.setAttribute("aria-label", "Locations: " + names.length + " selected (change and run again)");
+    renderSummary();
+  }
+
+  function addCustom(name) {
+    var lower = name.toLowerCase();
+    for (var i = 0; i < places.length; i++) {
+      if (places[i].name.toLowerCase() === lower) { return places[i]; }
+    }
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.setAttribute("data-place", name);
+    chip.setAttribute("aria-pressed", "false");
+    chip.textContent = name;
+    var group = $("custom-group");
+    group.appendChild(chip);
+    show(group, true);
+    var pl = { name: name, chip: chip, dot: null, isDefault: false, isLead: false };
+    places.push(pl);
+    byName[name] = pl;
+    return pl;
+  }
+
+  function setPicks(names, useDefault) {
+    selected = {};
+    if (useDefault) {
+      places.forEach(function (pl) { if (pl.isDefault) { selected[pl.name] = true; } });
+    } else {
+      names.forEach(function (n) { selected[addCustom(n).name] = true; });
+    }
+    renderPicks();
+  }
+
+  function picksChanged() {
+    renderPicks();
+    costStale = true;
+    renderSummary();
+    if (selectedNames().length === 0) {
+      estimateSeq++;  // drop any answer still on its way
+      formError(ZERO_TEXT);
+      setText($("estimate"), "");
+    } else {
+      if ($("form-error").textContent === ZERO_TEXT) { formError(""); }
+      estimateSoon();
+    }
+  }
+
+  function toggleName(name) {
+    if (picksLocked || !byName[name]) { return; }
+    selected[name] = !selected[name];
+    picksChanged();
+  }
+
+  function applyPreset(kind) {
+    if (picksLocked) { return; }
+    selected = {};
+    places.forEach(function (pl) {
+      if (kind === "all" ? !!pl.dot : kind === "default" ? pl.isDefault : kind === "continent" ? pl.isLead : false) {
+        selected[pl.name] = true;
+      }
+    });
+    picksChanged();
+  }
+
+  function addError(text) {
+    setText($("add-error"), text || "");
+    show($("add-error"), !!text);
+  }
+
+  function addPlace() {
+    if (picksLocked) { return; }
+    var input = $("add-name");
+    var name = input.value.trim();
+    if (!name) { addError("Type a place name first."); return; }
+    if (name.indexOf(",") !== -1) { addError("Add one place at a time, without commas."); return; }
+    if (name.length > 40) { addError("Use 40 characters or fewer."); return; }
+    addError("");
+    selected[addCustom(name).name] = true;
+    input.value = "";
+    picksChanged();
+  }
+
+  function lockPicks(on) {
+    picksLocked = on;
+    ["form-panel", "picker-strip"].forEach(function (id) {
+      var el = $(id);
+      if (on) { el.setAttribute("inert", ""); } else { el.removeAttribute("inert"); }
+    });
+    var svg = $("picker-map").querySelector("svg");
+    if (svg) {
+      svg.classList.toggle("sw-scanning", on);
+      svg.classList.toggle("sw-locked", on);
+    }
+    places.forEach(function (pl) {
+      if (pl.dot) {
+        pl.dot.setAttribute("tabindex", on ? "-1" : "0");
+        if (on) { pl.dot.setAttribute("aria-disabled", "true"); } else { pl.dot.removeAttribute("aria-disabled"); }
+      }
+    });
+  }
+
+  initPicker();
+  setPicks([], true);
+
+  var pickerMap = $("picker-map");
+  pickerMap.addEventListener("click", function (e) {
+    var dot = e.target.closest ? e.target.closest(".sw-pick") : null;
+    if (dot) { toggleName(dot.getAttribute("data-place")); }
+  });
+  pickerMap.addEventListener("keydown", function (e) {
+    var dot = e.target.closest ? e.target.closest(".sw-pick") : null;
+    if (dot && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      toggleName(dot.getAttribute("data-place"));
+    }
+  });
+  $("chips").addEventListener("click", function (e) {
+    var chip = e.target.closest ? e.target.closest(".chip") : null;
+    if (chip) { toggleName(chip.getAttribute("data-place")); }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-preset]"), function (b) {
+    b.addEventListener("click", function () { applyPreset(b.getAttribute("data-preset")); });
+  });
+  $("add-btn").addEventListener("click", addPlace);
+  $("add-name").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); addPlace(); }
+  });
+
+  // --- layout modes: map in front, panels over it ----------------------------------------------
+  var hasResults = false;
+  var picking = true;
+
+  function applyMode() {
+    var showPicker = !hasResults || picking;
+    show($("picker-map"), showPicker);
+    show($("results-map"), !showPicker);
+    show($("form-panel"), showPicker);
+    show($("picker-strip"), showPicker);
+    show($("results-panel"), hasResults && !picking);
+    show($("results-bar"), hasResults);
+    if (showPicker) { setDrawer(false); }  // otherwise the Table button and dots control the drawer
+    var t = $("locations-toggle");
+    t.setAttribute("aria-pressed", picking ? "true" : "false");
+    document.body.classList.toggle("has-results", hasResults);
+  }
+
+  function setPicking(on) {
+    picking = !!on;
+    applyMode();
+  }
+
+  function setDrawer(on) {
+    var d = $("drawer");
+    show(d, on && hasResults);
+    $("drawer-toggle").setAttribute("aria-expanded", on && hasResults ? "true" : "false");
+  }
+
+  $("locations-toggle").addEventListener("click", function () { setPicking(!picking); });
+  $("drawer-toggle").addEventListener("click", function () { setDrawer($("drawer").hidden); });
+  $("drawer-close").addEventListener("click", function () { setDrawer(false); $("drawer-toggle").focus(); });
+  $("sheet-toggle").addEventListener("click", function () {
+    var open = document.body.classList.toggle("sheet-open");
+    $("sheet-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+    setText($("sheet-toggle"), open ? "Less" : "More");
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-collapse]"), function (b) {
+    b.addEventListener("click", function () {
+      var panel = $(b.getAttribute("data-collapse"));
+      var collapsed = panel.classList.toggle("collapsed");
+      b.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      setText(b, collapsed ? "Show" : "Hide");
+    });
   });
 
   // --- results ---------------------------------------------------------------------------------
   var expiryTimer = null;
 
   function hideResults() {
-    show($("results"), false);
+    hasResults = false;
+    picking = true;
     $("results-body").replaceChildren();
+    $("results-map").replaceChildren();
+    $("results-summary").replaceChildren();
     show($("saved-banner"), false);
+    applyMode();
   }
 
   function showResults(saved) {
@@ -325,10 +564,26 @@
       return r.text();
     }).then(function (html) {
       var doc = new DOMParser().parseFromString(html, "text/html");
+      // The one fragment is split over the layout: map to the background, summary to the side
+      // panel, the rest (tables) to the details drawer.
+      function take(selector) {
+        var nodes = Array.prototype.slice.call(doc.querySelectorAll(selector));
+        nodes.forEach(function (n) { n.remove(); });
+        return nodes;
+      }
+      var mapNodes = take("section.map");
+      var panelNodes = take(".verdict, .failed-list, #map-detail, .tiles, .legend");
+      var rest = doc.querySelector(".fragment") || doc.body;
+      var mapBox = $("results-map");
+      mapBox.replaceChildren.apply(mapBox, mapNodes);
+      var summary = $("results-summary");
+      summary.replaceChildren.apply(summary, panelNodes);
       var target = $("results-body");
-      target.replaceChildren.apply(target, Array.prototype.slice.call(doc.body.childNodes));
+      target.replaceChildren.apply(target, Array.prototype.slice.call(rest.childNodes));
       setText($("results-title"), hostOf(saved.result.target));
-      show($("results"), true);
+      hasResults = true;
+      picking = false;
+      applyMode();
     }).catch(function () {
       removeSaved();
       current = null;
@@ -403,16 +658,19 @@
           return;
         }
         show($("progress"), false);
+        lockPicks(false);
         $("start").disabled = false;
         if (data.status === "done") {
           storeResult(data.result);
           estimate();  // the scan used tests: refresh the strip
         } else {
+          if (current) { showResults(current); }  // the earlier results are still saved: show them again
           formError(data.error || "The scan failed.");
         }
       })
       .catch(function () {
         show($("progress"), false);
+        lockPicks(false);
         $("start").disabled = false;
         formError("Lost contact with the server while waiting for the results.");
       });
@@ -423,6 +681,7 @@
     formError("");
     notice(storage ? "" : storageBlockedText);
     var v = formValues();
+    if (!v.locations) { formError(ZERO_TEXT); return; }
     if ($("confirm").checked) { v.confirm = "1"; }
     var lim = limitValues();  // checked by the server before any test is spent
     Object.keys(lim).forEach(function (k) { if (lim[k] !== null) { v[k] = String(lim[k]); } });
@@ -431,6 +690,8 @@
       return r.json().then(function (data) {
         if (r.status === 202) {
           show($("saved-banner"), false);
+          if (current) { hideResults(); }  // the map in front is the picker again while testing
+          lockPicks(true);
           progress(["Starting"]);
           show($("progress"), true);
           poll(data.id);
@@ -452,7 +713,6 @@
   });
 
   function runAgain() {
-    window.scrollTo(0, 0);
     if (typeof form.requestSubmit === "function") { form.requestSubmit(); } else { form.dispatchEvent(new Event("submit")); }
   }
 
@@ -499,6 +759,7 @@
 
   function select(dot) {
     describe(dot);
+    setDrawer(true);
     var rows = $("results-body").querySelectorAll("tr[data-row]");
     Array.prototype.forEach.call(rows, function (tr) {
       var on = tr.getAttribute("data-row") === dot.getAttribute("data-row");
@@ -507,7 +768,7 @@
     });
   }
 
-  var resultsBody = $("results-body");
+  var resultsBody = $("results-map");
   resultsBody.addEventListener("click", function (e) {
     var dot = dotOf(e.target);
     if (dot) { select(dot); }

@@ -30,13 +30,13 @@ from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.config import EndpointRefused, check_endpoint
 from speedward.core.geo import geolocator_from_env
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
-from speedward.core.locations import DEFAULT_LOCATIONS, parse_locations
+from speedward.core.locations import CATALOG, CONTINENTS, DEFAULT_LOCATIONS, parse_locations, per_continent
 from speedward.core.models import ScanReport
 from speedward.core.runner import ScanError, run_scan
 from speedward.core.target import normalise_target
 from speedward.reports import render as render_report
 from speedward.reports._view import context
-from speedward.reports.map import render_map
+from speedward.reports.map import render_map, render_picker_map
 
 from . import state
 
@@ -118,11 +118,18 @@ def index(request):
     strip_link = strip.endswith(KEY_PROMPT)  # the address becomes a real link in the template
     if strip_link:
         strip = strip[:-len("https://globalping.io")]
+    defaults = [loc["magic"] for loc in DEFAULT_LOCATIONS]
+    leads = set(per_continent())
+    groups = [{"continent": c, "places": [
+        {"name": p.name, "default": p.name in defaults, "lead": p.name in leads,
+         "on": "true" if p.name in defaults else "false"} for p in CATALOG if p.continent == c]}
+        for c in CONTINENTS]
     return render(request, "index.html", {
+        "groups": groups, "picker_svg": mark_safe(render_picker_map(defaults)),
         "strip_text": strip, "strip_link": strip_link,
         "notice": NOTICE,
         "ttl_seconds": settings.RESULT_TTL_SECONDS, "ttl_minutes": max(1, settings.RESULT_TTL_SECONDS // 60),
-        "default_locations": ", ".join(loc["magic"] for loc in DEFAULT_LOCATIONS),
+        "default_locations": ",".join(defaults),
     })
 
 
