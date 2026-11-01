@@ -522,15 +522,44 @@
     applyMode();
   }
 
-  function setDrawer(on) {
+  var drawerOpener = null;
+
+  function clearSelected() {
+    Array.prototype.forEach.call(document.querySelectorAll("#results-map .sw-sel"), function (c) {
+      c.classList.remove("sw-sel");
+    });
+  }
+
+  function setDrawer(on, opener) {
     var d = $("drawer");
-    show(d, on && hasResults);
-    $("drawer-toggle").setAttribute("aria-expanded", on && hasResults ? "true" : "false");
+    var open = !!(on && hasResults);
+    show(d, open);
+    $("drawer-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      if (opener) { drawerOpener = opener; }
+      $("drawer-close").focus();
+    } else {
+      clearSelected();
+    }
+  }
+
+  // Close the drawer; hand focus back to whatever opened it (the dot or the Table button).
+  function closeDrawer(returnFocus) {
+    if ($("drawer").hidden) { return; }
+    var back = drawerOpener && document.body.contains(drawerOpener) ? drawerOpener : $("drawer-toggle");
+    setDrawer(false);
+    drawerOpener = null;
+    if (returnFocus) { back.focus(); }
   }
 
   $("locations-toggle").addEventListener("click", function () { setPicking(!picking); });
-  $("drawer-toggle").addEventListener("click", function () { setDrawer($("drawer").hidden); });
-  $("drawer-close").addEventListener("click", function () { setDrawer(false); $("drawer-toggle").focus(); });
+  $("drawer-toggle").addEventListener("click", function () {
+    if ($("drawer").hidden) { setDrawer(true, $("drawer-toggle")); } else { closeDrawer(true); }
+  });
+  $("drawer-close").addEventListener("click", function () { closeDrawer(true); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("drawer").hidden) { e.preventDefault(); closeDrawer(true); }
+  });
   $("sheet-toggle").addEventListener("click", function () {
     var open = document.body.classList.toggle("sheet-open");
     $("sheet-toggle").setAttribute("aria-expanded", open ? "true" : "false");
@@ -765,7 +794,9 @@
 
   function select(dot) {
     describe(dot);
-    setDrawer(true);
+    clearSelected();
+    dot.classList.add("sw-sel");
+    setDrawer(true, dot);
     var rows = $("results-body").querySelectorAll("tr[data-row]");
     Array.prototype.forEach.call(rows, function (tr) {
       var on = tr.getAttribute("data-row") === dot.getAttribute("data-row");
@@ -777,7 +808,7 @@
   var resultsBody = $("results-map");
   resultsBody.addEventListener("click", function (e) {
     var dot = dotOf(e.target);
-    if (dot) { select(dot); }
+    if (dot) { select(dot); } else { closeDrawer(false); }
   });
   resultsBody.addEventListener("keydown", function (e) {
     var dot = dotOf(e.target);
