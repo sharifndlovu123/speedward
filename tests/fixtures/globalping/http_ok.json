@@ -1,0 +1,173 @@
+{
+ "id": "2rHSUZZ7eQHs8sWVD00021QQg",
+ "type": "http",
+ "status": "finished",
+ "createdAt": "2026-11-01T17:58:46.120Z",
+ "updatedAt": "2026-11-01T17:58:46.450Z",
+ "target": "example.com",
+ "probesCount": 4,
+ "locations": [
+  {
+   "magic": "Berlin"
+  },
+  {
+   "magic": "Tokyo"
+  },
+  {
+   "magic": "aws-eu-west-1"
+  },
+  {
+   "magic": "eyeball-network+Brazil"
+  }
+ ],
+ "measurementOptions": {
+  "request": {
+   "method": "GET"
+  }
+ },
+ "results": [
+  {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Berlin",
+    "asn": 8560,
+    "longitude": 13.41,
+    "latitude": 52.52,
+    "network": "IONOS",
+    "tags": [
+     "datacenter-network",
+     "u-h0ger77"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "resolvedAddress": "172.66.147.243",
+    "headers": {
+     "date": "Sun, 01 Nov 2026 17:58:46 GMT",
+     "content-type": "text/html; charset=utf-8",
+     "transfer-encoding": "chunked",
+     "connection": "close",
+     "server": "cloudflare",
+     "last-modified": "Thu, 29 Oct 2026 13:15:03 GMT",
+     "allow": "GET, HEAD",
+     "age": "13619",
+     "cf-cache-status": "HIT",
+     "content-encoding": "br",
+     "cf-ray": "a53cca1a6ccf518e-TXL",
+     "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "rawHeaders": "Date: Sun, 01 Nov 2026 17:58:46 GMT\nContent-Type: text/html; charset=utf-8\nTransfer-Encoding: chunked\nConnection: close\nServer: cloudflare\nlast-modified: Thu, 29 Oct 2026 13:15:03 GMT\nallow: GET, HEAD\nAge: 13619\ncf-cache-status: HIT\nContent-Encoding: br\nCF-RAY: a53cca1a6ccf518e-TXL\nalt-svc: h3=\":443",
+    "rawBody": "<!doctype html><html lang=en><head><meta charset=utf-8><link rel=icon href=data:,><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Example Domain</title><style>html{color-scheme:light dark;background:light-dark(#eee,#222)}body{font:16px/1.6 system-ui,sans-serif;max-width:26em;",
+    "rawOutput": "HTTP/1.1 200\nDate: Sun, 01 Nov 2026 17:58:46 GMT\nContent-Type: text/html; charset=utf-8\nTransfer-Encoding: chunked\nConnection: close\nServer: cloudflare\nlast-modified: Thu, 29 Oct 2026 13:15:03 GMT\nallow: GET, HEAD\nAge: 13619\ncf-cache-status: HIT\nContent-Encoding: br\nCF-RAY: a53cca1a6ccf518e-TXL\nalt-",
+    "truncated": false,
+    "statusCode": 200,
+    "statusCodeName": "OK",
+    "timings": {
+     "total": 22,
+     "dns": 3,
+     "tcp": 0,
+     "tls": 11,
+     "firstByte": 5,
+     "download": 3
+    },
+    "tls": {
+     "authorized": true,
+     "protocol": "TLSv1.3",
+     "cipherName": "TLS_AES_256_GCM_SHA384",
+     "createdAt": "2026-09-26T22:49:11.000Z",
+     "expiresAt": "2026-12-25T22:56:35.000Z",
+     "issuer": {
+      "C": "US",
+      "O": "SSL Corporation",
+      "CN": "Cloudflare TLS Issuing ECC CA 3"
+     },
+     "subject": {
+      "CN": "example.com",
+      "alt": "DNS:example.com, DNS:*.example.com"
+     },
+     "keyType": "EC",
+     "keyBits": 256
+    }
+   }
+  },
+  {
+   "probe": {
+    "continent": "AS",
+    "region": "Eastern Asia",
+    "country": "JP",
+    "state": null,
+    "city": "Tokyo",
+    "asn": 3258,
+    "longitude": 139.69,
+    "latitude": 35.69,
+    "network": "xTom",
+    "tags": [
+     "datacenter-network",
+     "u-zGato"
+    ],
+    "resolvers": [
+     "1.1.1.1",
+     "8.8.8.8",
+     "2606:4700:4700::1111",
+     "2001:4860:4860::8888"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "resolvedAddress": "172.66.147.243",
+    "headers": {
+     "date": "Sun, 01 Nov 2026 17:58:46 GMT",
+     "content-type": "text/html; charset=utf-8",
+     "transfer-encoding": "chunked",
+     "connection": "close",
+     "server": "cloudflare",
+     "last-modified": "Thu, 29 Oct 2026 13:15:03 GMT",
+     "allow": "GET, HEAD",
+     "age": "7",
+     "cf-cache-status": "HIT",
+     "content-encoding": "br",
+     "cf-ray": "a53cca1b5a96cb50-NRT",
+     "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "rawHeaders": "Date: Sun, 01 Nov 2026 17:58:46 GMT\nContent-Type: text/html; charset=utf-8\nTransfer-Encoding: chunked\nConnection: close\nServer: cloudflare\nlast-modified: Thu, 29 Oct 2026 13:15:03 GMT\nallow: GET, HEAD\nAge: 7\ncf-cache-status: HIT\nContent-Encoding: br\nCF-RAY: a53cca1b5a96cb50-NRT\nalt-svc: h3=\":443\"; m",
+    "rawBody": "<!doctype html><html lang=en><head><meta charset=utf-8><link rel=icon href=data:,><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Example Domain</title><style>html{color-scheme:light dark;background:light-dark(#eee,#222)}body{font:16px/1.6 system-ui,sans-serif;max-width:26em;",
+    "rawOutput": "HTTP/1.1 200\nDate: Sun, 01 Nov 2026 17:58:46 GMT\nContent-Type: text/html; charset=utf-8\nTransfer-Encoding: chunked\nConnection: close\nServer: cloudflare\nlast-modified: Thu, 29 Oct 2026 13:15:03 GMT\nallow: GET, HEAD\nAge: 7\ncf-cache-status: HIT\nContent-Encoding: br\nCF-RAY: a53cca1b5a96cb50-NRT\nalt-svc:",
+    "truncated": false,
+    "statusCode": 200,
+    "statusCodeName": "OK",
+    "timings": {
+     "total": 56,
+     "dns": 10,
+     "tcp": 3,
+     "tls": 18,
+     "firstByte": 18,
+     "download": 7
+    },
+    "tls": {
+     "authorized": true,
+     "protocol": "TLSv1.3",
+     "cipherName": "TLS_AES_256_GCM_SHA384",
+     "createdAt": "2026-09-26T22:49:11.000Z",
+     "expiresAt": "2026-12-25T22:56:35.000Z",
+     "issuer": {
+      "C": "US",
+      "O": "SSL Corporation",
+      "CN": "Cloudflare TLS Issuing ECC CA 3"
+     },
+     "subject": {
+      "CN": "example.com",
+      "alt": "DNS:example.com, DNS:*.example.com"
+     },
+     "keyType": "EC",
+     "keyBits": 256
+    }
+   }
+  }
+ ]
+}

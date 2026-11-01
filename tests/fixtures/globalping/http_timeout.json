@@ -1,0 +1,64 @@
+{
+ "id": "2FNFVRK3xYijoUdja00021QQh",
+ "type": "http",
+ "status": "finished",
+ "createdAt": "2026-11-01T17:59:44.672Z",
+ "updatedAt": "2026-11-01T17:59:59.691Z",
+ "target": "example.com",
+ "probesCount": 1,
+ "locations": [
+  {
+   "magic": "Berlin"
+  }
+ ],
+ "measurementOptions": {
+  "request": {
+   "method": "GET"
+  },
+  "protocol": "HTTP",
+  "port": 81
+ },
+ "results": [
+  {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Berlin",
+    "asn": 8560,
+    "longitude": 13.41,
+    "latitude": 52.52,
+    "network": "IONOS",
+    "tags": [
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private",
+     "private"
+    ]
+   },
+   "result": {
+    "status": "failed",
+    "failureSource": "target",
+    "resolvedAddress": "172.66.147.243",
+    "headers": {},
+    "rawHeaders": null,
+    "rawBody": null,
+    "rawOutput": "Request timed out while establishing the TCP connection.",
+    "truncated": false,
+    "statusCode": null,
+    "statusCodeName": null,
+    "timings": {
+     "total": 15000,
+     "dns": 0,
+     "tcp": null,
+     "tls": null,
+     "firstByte": null,
+     "download": null
+    },
+    "tls": null
+   }
+  }
+ ]
+}
