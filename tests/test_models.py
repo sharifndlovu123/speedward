@@ -158,3 +158,13 @@ def test_from_dict_does_not_share_input():
     before = copy.deepcopy(r)
     d["options"]["traceroute"] = "changed"
     assert r == before
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda d: d["locations"][0]["location"].update(lat=10**400),
+    lambda d: d["locations"][0]["location"].update(lon=10**400),
+    lambda d: d["locations"][0]["stages"].update(first_byte=10**400),
+])
+def test_from_dict_rejects_oversized_integers(mutate):
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(_broken(mutate))

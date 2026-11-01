@@ -482,3 +482,24 @@ def test_wsgi_requires_secret_key_outside_debug():
         require_secret_key({"DEBUG": "0"})
     require_secret_key({"DEBUG": "0", "SECRET_KEY": "x"})
     require_secret_key({"DEBUG": "1"})
+
+
+def test_oversized_number_returns_400_without_traceback(client, caplog):
+    caplog.set_level(logging.DEBUG)
+    big = "1" + "0" * 400
+    for path in (("locations", 0, "location", "lat"), ("locations", 0, "stages", "first_byte")):
+        d = report_dict()
+        d[path[0]][path[1]][path[2]][path[3]] = "BIG"
+        body = json.dumps({"result": d}).replace('"BIG"', big)
+        for url in (reverse("render"), reverse("export", args=["json"])):
+            r = client.post(url, data=body, content_type="application/json")
+            assert r.status_code == 400, (url, path)
+            assert "Traceback" not in r.content.decode()
+    assert not [rec for rec in caplog.records if rec.levelno >= logging.ERROR]
+    assert "Traceback" not in caplog.text
+
+
+def test_x_frame_options_setting_is_deny(client):
+    from django.conf import settings as dj_settings
+    assert dj_settings.X_FRAME_OPTIONS == "DENY"
+    assert client.get(reverse("index"))["X-Frame-Options"] == "DENY"

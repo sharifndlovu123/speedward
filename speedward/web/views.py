@@ -233,7 +233,7 @@ def _posted(request) -> dict:
 def _report(data: dict) -> ScanReport:
     try:
         return ScanReport.from_dict(data.get("result"))
-    except (TypeError, RecursionError):
+    except (TypeError, RecursionError, ArithmeticError):
         raise ValueError("bad report") from None
 
 

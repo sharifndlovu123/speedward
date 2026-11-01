@@ -241,8 +241,14 @@ def _num_or_none(d: dict, key: str, lo: float = -math.inf, hi: float = math.inf)
     value = d.get(key)
     if value is None:
         return None
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
         raise ValueError(f"{key} must be a number or null")
+    try:  # a huge JSON integer (e.g. 10**400) overflows float conversion
+        finite = math.isfinite(value)
+    except ArithmeticError:
+        finite = False
+    if not finite:
+        raise ValueError(f"{key} must be a finite number or null")
     if not lo <= value <= hi:
         raise ValueError(f"{key} is out of range")
     return value
