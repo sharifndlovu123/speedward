@@ -10,6 +10,7 @@ from functools import lru_cache
 from html import escape
 from pathlib import Path
 
+from speedward.core.locations import CATALOG
 from speedward.core.models import LocationResult, ScanReport
 
 FAST_MS = 300
@@ -123,5 +124,43 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         names = ", ".join(escape(_city(r)) for r in unplaced)
         out.append(f'<text x="{_num(8 * k)}" y="{_num(H + 17 * k)}" font-size="{_num(fs)}">'
                    f"Not shown on map: {names}</text>")
+    out.append("</svg>")
+    return "".join(out)
+
+
+_PICK_STYLE = (
+    ".sw-pick{fill:var(--bg);stroke:var(--off);stroke-width:2;cursor:pointer}"
+    '.sw-pick[aria-checked="true"]{fill:var(--pin);stroke:var(--bg)}'
+    ".sw-pick:focus{outline:2px solid var(--pin);outline-offset:2px}"
+    "@keyframes sw-pulse{50%{opacity:.35}}"
+    ".sw-scanning .sw-pick[aria-checked=\"true\"]{animation:sw-pulse 1.2s ease-in-out infinite}"
+    ".sw-locked .sw-pick{cursor:default}"
+)
+
+
+def render_picker_map(selected: list[str], width: int = 1000) -> str:
+    """The location picker: one toggle dot per catalog place, filled blue when selected, grey ring when not.
+
+    Same land and style as render_map. No outside resources; every dynamic string is escaped.
+    """
+    W = width
+    H = W / 2
+    k = W / 1000
+    chosen = set(selected)
+    out = [
+        f'<svg class="sw-map sw-picker" viewBox="0 0 {_num(W)} {_num(H)}" '
+        f'role="group" aria-label="World map: choose test locations">',
+        f"<style>{_STYLE}{_PICK_STYLE}</style>",
+        f'<rect width="{_num(W)}" height="{_num(H)}" fill="var(--bg)"/>',
+    ]
+    scale = f' transform="scale({k:g})"' if W != 1000 else ""
+    out.append(f'<g fill="var(--land)"{scale}>' + "".join(f'<path d="{d}"/>' for d in _land()) + "</g>")
+    for p in CATALOG:
+        x = (p.lon + 180) / 360 * W
+        y = (90 - p.lat) / 180 * H
+        on = "true" if p.name in chosen else "false"
+        out.append(f'<circle class="sw-pick" data-place="{escape(p.name, quote=True)}" tabindex="0" '
+                   f'role="checkbox" aria-checked="{on}" cx="{_num(x)}" cy="{_num(y)}" r="{_num(7 * k)}">'
+                   f"<title>{escape(p.name)}, {escape(p.country)}</title></circle>")
     out.append("</svg>")
     return "".join(out)
