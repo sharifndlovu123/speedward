@@ -39,7 +39,7 @@ Only test sites you own or are authorised to test.
 
 ## What a scan looks like
 
-This run was made on 2026-11-01 against `https://example.com` with a Globalping key. Results vary from run to run and with the hour of day; these numbers are from one run and are not a benchmark.
+This run was made on 2026-11-01 against `https://example.com` with a Globalping key. The estimate before it read "about 36 tests". Results vary from run to run and with the hour of day; these numbers are from one run and are not a benchmark.
 
 ### 1. Check the cost
 
@@ -49,7 +49,7 @@ speedward scan https://example.com --estimate
 
 ```
 Only test sites you own or are authorised to test.
-This scan uses about 36 tests. You have 500 left this hour.
+This scan uses about 36 tests. You have 412 left this hour.
 Globalping credits: 0.
 ```
 
@@ -61,12 +61,12 @@ It stops there, using no tests. Without a key the second line starts with a note
 speedward scan https://example.com --format html --out docs/demo-report.html
 ```
 
-Progress goes to standard error ("Testing the first visit from 12 locations", "Repeating the test on the same probes", "Measuring network delay", "Finished"). The exit code was 0 (no limits set); this run used about 36 tests. The saved report is [docs/demo-report.html](docs/demo-report.html) (open it in a browser to see the map). The default Markdown format prints this to the terminal; the table and summary below are from a Markdown render of the same kind of scan (a second real run with the same options, whose HTML is the saved file):
+(In this demo the run was made with `--format json` and rendered to HTML and Markdown afterwards, so one scan gave both; it cost the same.) Progress goes to standard error ("Testing the first visit from 12 locations", "Repeating the test on the same probes", "Measuring network delay", "Finished"). The exit code was 0 (no limits set); this run used about 36 tests (the allowance counter dropped by 36). The saved report is [docs/demo-report.html](docs/demo-report.html) (open it in a browser to see the map). The default Markdown format prints this to the terminal; the table and summary below are the Markdown render of the same run. That run was saved once as JSON and then rendered to both Markdown and HTML, so the table and `docs/demo-report.html` match exactly:
 
 ## Summary
 
-- Average first byte: 28 ms
-- Cache gain: -3%
+- Average first byte: 20 ms
+- Cache gain: 4%
 - Blocked: 0
 - 0 locations excluded from the figures (0 blocked); 12 measured.
 - Repeat request from the same test machine; not a browser cache test.
@@ -75,38 +75,64 @@ Progress goes to standard error ("Testing the first visit from 12 locations", "R
 
 | Location | No cache | Cache | Delay | CDN | Status |
 | --- | --- | --- | --- | --- | --- |
-| London, GB | 19 ms | 9 ms | not available | HIT | HTTP 200 |
-| Frankfurt, DE | 16 ms | 18 ms | not available | HIT | HTTP 200 |
-| New York, US | 9 ms | 8 ms | not available | HIT | HTTP 200 |
-| Los Angeles, US | 12 ms | 13 ms | not available | HIT | HTTP 200 |
-| Sao Paulo, BR | 6 ms | 9 ms | not available | HIT | HTTP 200 |
-| Johannesburg, ZA | 7 ms | 7 ms | not available | HIT | HTTP 200 |
-| Lagos, NG | 110 ms | 127 ms | not available | HIT | HTTP 200 |
-| Mumbai, IN | 7 ms | 11 ms | not available | HIT | HTTP 200 |
-| Singapore, SG | 14 ms | 12 ms | not available | HIT | HTTP 200 |
-| Tokyo, JP | 6 ms | 5 ms | not available | HIT | HTTP 200 |
-| Sydney, AU | 8 ms | 6 ms | not available | HIT | HTTP 200 |
-| Dubai, AE | 127 ms | 125 ms | not available | HIT | HTTP 200 |
+| London, GB | 22 ms | 17 ms | 1 ms | HIT | HTTP 200 |
+| Frankfurt, DE | 10 ms | 12 ms | 1 ms | HIT | HTTP 200 |
+| New York, US | 12 ms | 8 ms | 3 ms | HIT | HTTP 200 |
+| Los Angeles, US | 15 ms | 12 ms | 1 ms | HIT | HTTP 200 |
+| Sao Paulo, BR | 10 ms | 8 ms | 1 ms | HIT | HTTP 200 |
+| Johannesburg, ZA | 7 ms | 7 ms | 2 ms | HIT | HTTP 200 |
+| Lagos, NG | 114 ms | 115 ms | 105 ms | HIT | HTTP 200 |
+| Mumbai, IN | 8 ms | 6 ms | 1 ms | HIT | HTTP 200 |
+| Singapore, SG | 12 ms | 9 ms | 2 ms | HIT | HTTP 200 |
+| Tokyo, JP | 7 ms | 9 ms | 2 ms | HIT | HTTP 200 |
+| Sydney, AU | 6 ms | 7 ms | 1 ms | HIT | HTTP 200 |
+| Dubai, AE | 13 ms | 16 ms | 106 ms | HIT | HTTP 200 |
 
 ## Stage breakdown (average over measured locations)
 
-- DNS: 24 ms
-- Connect: 20 ms
-- TLS: 30 ms
-- First byte: 28 ms
+- DNS: 11 ms
+- Connect: 11 ms
+- TLS: 20 ms
+- First byte: 20 ms
 - Download: 1 ms
 
-The report also lists the server identity (answering IPs 104.20.23.154 and 172.66.147.243, TLS 1.3, HTTP/1.1, no redirect on the first response).
+The report also lists the server identity (answering IPs 172.66.147.243 and 104.20.23.154, TLS 1.3, HTTP/1.1, no redirect on the first response).
 
 ## How to read it
 
 - **The map** (top of the HTML report) has one dot per location, coloured by first-byte time. Green is fast, amber is middling, red is slow, against `FAST_MS` (300) and `SLOW_MS` (800).
 - **No cache / Cache** are first-byte times for the first visit and a repeat request from the same test machine. The repeat is not a browser cache test. "Cache gain" in the summary can be negative, as here (-3%): the repeat was not faster.
 - **Dimmed, dashed grey lines** on the map are places that could not reach the site (blocked, test failed or did not run). Their rows say "no data" with a reason. They show no number and are left out of averages and limits. Every location in this run was measured, so none were dimmed here.
-- **Delay** shows "not available" in this run. It is never filled in with a guess.
+- **Delay** is the network round-trip time from that location to the site (a ping), separate from the page timings. In this run it was 1 to 3 ms in most places and about 105 ms for Lagos and Dubai. If a delay could not be measured it shows "not available", never a guess.
 - **Status**: measured, blocked (the site refused or timed out), test failed (a Globalping problem) or did not run.
 - **Cost**: 12 locations cost about 36 tests. Add `--traceroute` or `--dns` for more. The cost is shown before every scan, and a scan that does not fit your remaining allowance is refused unless you pass `--yes`.
 - **Exit codes**: 0 done and every limit passed (or none set); 1 a limit failed (for example `--max-ttfb 200`); 2 the scan could not run or nothing could be measured.
+
+## Extra checks: path and DNS
+
+```bash
+speedward scan https://example.com --traceroute --dns --locations "London,Tokyo"
+```
+
+Estimate: about 10 tests; exit code 0. Output trimmed (summary and stage breakdown omitted; the route from London is cut to its first and last hops, and hop names shown are what the probe saw):
+
+```
+## DNS
+
+- London, GB: 172.66.147.243, 104.20.23.154 (0 ms)
+- Tokyo, JP: 172.66.147.243, 104.20.23.154 (3 ms)
+
+## Route from London, GB
+
+1. _gateway 1 ms, loss 0%
+2. 192.168.143.254 0 ms, loss 0%
+   ... (hops 3 to 10 omitted)
+11. 141.101.71.174 1 ms, loss 0%
+12. 141.101.71.219 2 ms, loss 0%
+13. example.com 2 ms, loss 0%
+```
+
+A hop that did not answer shows as "not available" with 100% loss, and the Tokyo route shows two of those plus one hop with 66.7% loss.
 
 ## The web UI
 
