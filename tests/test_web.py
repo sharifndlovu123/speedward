@@ -466,6 +466,14 @@ def test_unknown_export_format_404(client):
     assert post_json(client, "/export/pdf", {"result": report_dict()}).status_code == 404
 
 
+# --- static script ----------------------------------------------------------------------------
+
+def test_results_js_never_uses_inner_html():
+    js = STATIC_JS.read_text()
+    assert "innerHTML" not in js and "outerHTML" not in js and "insertAdjacentHTML" not in js
+    assert "speedward:result" in js and "sessionStorage" in js and "beforeunload" in js
+
+
 def test_wsgi_requires_secret_key_outside_debug():
     from django.core.exceptions import ImproperlyConfigured
 
