@@ -81,7 +81,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         if r in unplaced:
             continue
         x, y = proj(r.location.lat, r.location.lon)
-        name = escape(_city(r))
+        name = _city(r)
         fb = r.stages.first_byte if (r.status == "measured" and r.stages is not None) else None
         if fb is not None:
             col = _colour(fb, fast_ms, slow_ms)

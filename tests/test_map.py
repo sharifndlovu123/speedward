@@ -68,3 +68,10 @@ def test_missing_first_byte_on_measured_is_not_a_number():
     r = report([LocationResult(loc("Oslo"), "measured", stages=Stages())])
     svg = render_map(r)
     assert "no data" in svg and "ms" not in svg.replace("transform", "")
+
+
+def test_labels_are_escaped_exactly_once():
+    svg = render_map(report([LocationResult(loc("Côte d'Ivoire"), "blocked", 'AT&T said "no"')]))
+    assert "d&#x27;Ivoire" in svg and "AT&amp;T" in svg and "&quot;no&quot;" in svg
+    for bad in ("&amp;amp;", "&amp;#x27;", "&amp;quot;"):
+        assert bad not in svg
