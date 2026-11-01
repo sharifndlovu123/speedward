@@ -31,7 +31,7 @@ speedward = "speedward.cli.main:app"
 include = ["speedward*"]
 
 [tool.setuptools.package-data]
-speedward = ["reports/*.j2", "web/templates/**/*", "web/static/**/*"]
+speedward = ["reports/*.j2", "reports/*.json", "web/templates/**/*", "web/static/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

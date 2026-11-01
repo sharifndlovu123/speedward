@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speed report: {{ target }}</title>
+<style>
+:root{--bg:#fff;--ink:#1f2933;--mute:#5f6b7a;--line:#d8dee6;--card:#f6f8fa;--bar:#2b5fd9;--warn:#b45309}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2b3340;--card:#161b22;--bar:#7aa2ff;--warn:#f0b429}}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 8px}
+.mute{color:var(--mute)}.map svg{width:100%;height:auto;display:block;border-radius:8px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:16px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.tile b{display:block;font-size:1.4rem}.tile small{color:var(--mute)}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+tr.excluded{opacity:.6;font-style:italic}.scroll{overflow-x:auto}
+.bar{background:var(--bar);height:14px;border-radius:3px}.stage{display:grid;grid-template-columns:90px 1fr 80px;gap:8px;align-items:center;margin:4px 0}
+.flag{color:var(--warn);font-weight:600}
+footer{margin-top:32px;color:var(--mute);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Speed report: {{ target }}</h1>
+<div class="mute">{{ r.started.isoformat() }} &middot; speedward {{ r.version }}</div>
+</header>
+
+<section class="map" aria-label="Map">{{ map_svg }}</section>
+
+<section class="tiles" aria-label="Summary">
+<div class="tile"><small>Average first byte</small><b>{{ avg }}</b><small>measured locations only</small></div>
+<div class="tile"><small>Cache gain</small><b>{{ cache }}</b>{% if cache_na %}<small>{{ cache_na_note }}</small>{% endif %}</div>
+<div class="tile"><small>Blocked</small><b>{{ s.blocked }}</b><small>the site refused or timed out</small></div>
+{% if browser %}<div class="tile"><small>Page weight</small><b>{{ browser.weight }}</b><small>{{ browser.requests }}</small></div>{% endif %}
+</section>
+<p>{{ excluded_line }}</p>
+<p class="mute">{{ cache_note }}</p>
+
+<section>
+<h2>Locations</h2>
+<div class="scroll"><table>
+<thead><tr><th>Location</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Status</th></tr></thead>
+<tbody>
+{% for row in rows %}<tr{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.status }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+</section>
+
+<section>
+<h2>Stage breakdown</h2>
+<p class="mute">Average over measured locations. A stage the API did not return is left out.</p>
+{% for st in stages %}<div class="stage"><span>{{ st.name }}</span><span><div class="bar" style="width:{{ st.pct }}%"></div></span><span>{{ st.text }}</span></div>
+{% else %}<p>no data</p>{% endfor %}
+</section>
+
+<section>
+<h2>Server identity</h2>
+<dl>{% for k, v in identity %}<dt class="mute">{{ k }}</dt><dd>{{ v }}</dd>
+{% endfor %}</dl>
+</section>
+
+{% if dns %}<section>
+<h2>DNS</h2>
+{% if dns_differs %}<p class="flag">Answers differ between locations (common with CDNs that answer by region).</p>{% endif %}
+<div class="scroll"><table><thead><tr><th>Location</th><th>Answers</th><th>Lookup</th></tr></thead><tbody>
+{% for d in dns %}<tr><td>{{ d.location }}</td><td>{{ d.answers }}</td><td>{{ d.lookup }}</td></tr>
+{% endfor %}</tbody></table></div>
+</section>{% endif %}
+
+{% if paths %}<section>
+<h2>Routes</h2>
+{% for p in paths %}<h3>{{ p.location }}</h3>
+{% if p.note %}<p>{{ p.note }}</p>{% else %}<div class="scroll"><table><thead><tr><th>Hop</th><th>Host</th><th>RTT</th><th>Loss</th></tr></thead><tbody>
+{% for h in p.hops %}<tr><td>{{ h.n }}</td><td>{{ h.host }}</td><td>{{ h.rtt }}</td><td>{{ h.loss }}</td></tr>
+{% endfor %}</tbody></table></div>{% endif %}
+{% endfor %}
+</section>{% endif %}
+
+{% if browser %}<section>
+<h2>Browser</h2>
+<p>Page weight {{ browser.weight }}, {{ browser.requests }}, load {{ browser.load }}.</p>
+{% if browser.biggest %}<ul>{% for u, n in browser.biggest %}<li>{{ u }}: {{ n }}</li>{% endfor %}</ul>{% endif %}
+</section>{% endif %}
+
+<footer>Tested from probes on the <a href="https://globalping.io">Globalping</a> network. Land outlines: Natural Earth, public domain.</footer>
+</main>
+</body>
+</html>
