@@ -666,3 +666,51 @@ def test_index_has_map_picker_and_hidden_locations_input(client):
     assert body.count('data-preset=') == 4 and 'id="add-name"' in body
     assert re.search(r'class="chip" data-place="Paris" aria-pressed="false"', body)
     assert re.search(r'class="chip" data-place="London" data-default="1"[^>]*aria-pressed="true"', body)
+
+
+# --- server pin --------------------------------------------------------------------------------
+
+PIN_BAD = "The server pin is not a valid position. Drop it again on the map or choose a city."
+
+
+def test_scan_with_pin_records_manual_pin_source(client):
+    result = run_full_scan(client, server_lat="-26.2", server_lon="28.04")
+    assert result["server"] == {"lat": -26.2, "lon": 28.04, "source": "manual (pin)"}
+
+
+def test_scan_without_pin_has_no_server(client):
+    assert run_full_scan(client)["server"] is None
+
+
+def test_configured_position_beats_pin(client, settings):
+    settings.SERVER_LAT, settings.SERVER_LON = "10", "20"
+    result = run_full_scan(client, server_lat="-26.2", server_lon="28.04")
+    assert result["server"] == {"lat": 10.0, "lon": 20.0, "source": "manual"}
+
+
+@pytest.mark.parametrize("extra", [
+    {"server_lat": "91", "server_lon": "0"}, {"server_lat": "0", "server_lon": "181"},
+    {"server_lat": "nan", "server_lon": "0"}, {"server_lat": "abc", "server_lon": "0"},
+    {"server_lat": "5"}, {"server_lon": "5"}, {"server_lat": "inf", "server_lon": "inf"}])
+def test_bad_pin_refused_before_any_test_is_spent(client, fake, extra):
+    r = start(client, **extra)
+    assert r.status_code == 400 and r.json()["error"] == PIN_BAD
+    assert fake.posts() == []
+
+
+def test_bad_pin_message_and_log_do_not_echo_values(client, caplog):
+    with caplog.at_level(logging.DEBUG):
+        r = start(client, server_lat="99.123", server_lon="7")
+    assert "99.123" not in r.content.decode() and "99.123" not in caplog.text
+
+
+def test_estimate_ignores_the_pin(client):
+    r = client.post(reverse("estimate"), form(server_lat="999", server_lon="x"))
+    assert r.status_code == 200
+
+
+def test_index_offers_server_select_with_not_set_and_cities(client):
+    page = client.get(reverse("index")).content.decode()
+    assert 'id="server-city"' in page and "Not set" in page
+    assert re.search(r'<option value="Johannesburg" data-lat="-?[\d.]+" data-lon="-?[\d.]+"', page)
+    assert 'id="pin-help"' in page

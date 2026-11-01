@@ -28,7 +28,7 @@ from speedward.core.allowance_view import KEY_PROMPT, describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.config import EndpointRefused, check_endpoint
-from speedward.core.geo import geolocator_from_env
+from speedward.core.geo import geolocator_from_env, parse_pin
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
 from speedward.core.locations import CATALOG, CONTINENTS, DEFAULT_LOCATIONS, parse_locations, per_continent
 from speedward.core.models import ScanReport
@@ -52,6 +52,7 @@ BAD_LIMITS = ("Pass/fail limits must be numbers of 1 or more (max blocked: a who
 GONE = "This scan is no longer on the server. Results are kept only in your browser."
 UNREACHABLE = ("Globalping could not be reached, or it rejected the key. "
                "Check the server's network and its GLOBALPING_TOKEN setting.")
+BAD_PIN = "The server pin is not a valid position. Drop it again on the map or choose a city."
 BAD_SERVER_POSITION = "The server position settings (SERVER_LAT, SERVER_LON) are not valid."
 CREDITS_ZERO = ("Refused: this scan is over the tests left and you have no Globalping credits. "
                 "Credits are needed to go over the hourly allowance.")
@@ -121,7 +122,7 @@ def index(request):
     defaults = [loc["magic"] for loc in DEFAULT_LOCATIONS]
     leads = set(per_continent())
     groups = [{"continent": c, "places": [
-        {"name": p.name, "default": p.name in defaults, "lead": p.name in leads,
+        {"name": p.name, "lat": p.lat, "lon": p.lon, "default": p.name in defaults, "lead": p.name in leads,
          "on": "true" if p.name in defaults else "false"} for p in CATALOG if p.continent == c]}
         for c in CONTINENTS]
     return render(request, "index.html", {
@@ -180,11 +181,16 @@ def scan(request):
         _limits(request.POST)
     except ValueError:
         return _error(BAD_LIMITS, 400)
+    try:  # the fixed message never repeats the posted numbers
+        pin = parse_pin(request.POST.get("server_lat"), request.POST.get("server_lon"))
+    except ValueError:
+        return _error(BAD_PIN, 400)
     try:
         geo = geolocator_from_env({"GEOIP_DB": settings.GEOIP_DB or "", "SERVER_LAT": settings.SERVER_LAT or "",
                                    "SERVER_LON": settings.SERVER_LON or ""})
     except ValueError:
         return _error(BAD_SERVER_POSITION, 500)
+    geo.pin = pin  # lowest precedence: a configured position or geo-IP result still wins
     try:
         client = _client()
         allowance = client.allowance()

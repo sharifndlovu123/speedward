@@ -35,20 +35,45 @@ def _valid_override(override):
     return lat, lon
 
 
+def parse_pin(lat, lon):
+    """A (lat, lon) pair from the web form's server pin, or None when both are absent.
+
+    Accepts numbers or numeric text. ValueError (fixed text, never the values) when only one is given
+    or either is not a finite number in range.
+    """
+    absent = (None, "")
+    if lat in absent and lon in absent:
+        return None
+    if lat in absent or lon in absent or isinstance(lat, bool) or isinstance(lon, bool):
+        raise ValueError("server pin needs both a latitude and a longitude")
+    try:
+        return _valid_override((lat, lon))
+    except ValueError:
+        raise ValueError("server pin is not a valid position") from None
+
+
 class Geolocator:
-    def __init__(self, db_path: str | None, override: tuple[float, float] | None):
+    """Where the server is. Precedence: configured override, then the geo-IP database, then a manual
+    pin from the web form (lowest, so it is never mistaken for a measured location)."""
+
+    def __init__(self, db_path: str | None, override: tuple[float, float] | None,
+                 pin: tuple[float, float] | None = None):
         self.db_path = db_path
         self.override = _valid_override(override)
+        self.pin = None if pin is None else parse_pin(*pin)
+
+    def _pinned(self) -> ServerPosition | None:
+        return None if self.pin is None else ServerPosition(self.pin[0], self.pin[1], "manual (pin)")
 
     def locate(self, ip: str | None) -> ServerPosition | None:
         if self.override is not None:
             return ServerPosition(self.override[0], self.override[1], "manual")
         if not self.db_path or not _public_ip(ip):
-            return None
+            return self._pinned()
         try:
             import os
             if not os.path.isfile(self.db_path):
-                return None
+                return self._pinned()
             import maxminddb  # optional "geoip" extra
             reader = maxminddb.open_database(self.db_path)
             try:
@@ -58,10 +83,10 @@ class Geolocator:
             loc = record["location"]
             lat, lon = float(loc["latitude"]), float(loc["longitude"])
             if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-                return None
+                return self._pinned()
             return ServerPosition(lat, lon, "database")
         except Exception:
-            return None
+            return self._pinned()
 
 
 def geolocator_from_env(environ: Mapping[str, str]) -> Geolocator:

@@ -342,3 +342,10 @@ def test_cold_results_unreadable_marks_every_location_test_failed(fake, monkeypa
     assert [r.status for r in rep.locations] == ["test_failed", "test_failed"]
     assert all(r.stages is None for r in rep.locations)
     assert evaluate_limits(rep, Limits()).exit_code == 2
+
+
+def test_pin_applies_even_when_no_measured_ip(fake):
+    fake.by_type["http"] = http_with({0: failure("http_timeout"), 1: failure("http_timeout")})
+    rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, None, pin=(5.0, 6.0)))
+    assert rep.server is not None and rep.server.source == "manual (pin)"
+    assert (rep.server.lat, rep.server.lon) == (5.0, 6.0)

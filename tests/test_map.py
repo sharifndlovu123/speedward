@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from speedward.core.models import (Location, LocationResult, ScanReport, ServerPosition, Stages)
@@ -90,3 +91,15 @@ def test_focus_ring_rule_comes_after_the_checked_rule_for_picks():
     checked = _PICK_STYLE.index('.sw-pick[aria-checked="true"]{')
     ring = _PICK_STYLE.index('[aria-checked="true"]:focus-visible{stroke:var(--ink)')
     assert ring > checked
+
+
+def test_unknown_server_position_says_how_to_fix_and_draws_no_lines():
+    svg = render_map(report([ok("Tokyo", 100)], server=None))
+    assert "Server position unknown: drop the pin or set SERVER_LAT/SERVER_LON" in svg
+    assert not re.search(r'<path d="M[^"]* Q', svg)
+
+
+def test_pinned_server_draws_one_arc_per_place_and_says_pin():
+    svg = render_map(report([ok("Tokyo", 100), ok("Lagos", 900)], server=ServerPosition(1, 2, "manual (pin)")))
+    assert len(re.findall(r'<path d="M[^"]* Q', svg)) == 2
+    assert "Server (pin)" in svg

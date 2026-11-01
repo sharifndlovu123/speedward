@@ -100,6 +100,7 @@ main{max-width:none;padding:0}
 .add-place label{margin:0}
 .add-place input{width:12em}
 .pick-summary{margin:10px 0 0;font-weight:600}
+.server-pin{margin:10px 0 0}.server-pin label{display:inline;margin-right:6px}.server-pin select{max-width:100%}.server-pin p{margin:4px 0 0}
 .drawer{position:fixed;left:8px;right:8px;bottom:8px;z-index:3;height:70vh;height:70dvh;overflow:auto;background:var(--card);box-shadow:0 -4px 16px rgba(0,0,0,.25)}
 .drawer .panel-head{justify-content:space-between;margin-bottom:6px}
 .drawer .panel-head button{margin-left:auto}

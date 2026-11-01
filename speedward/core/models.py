@@ -318,11 +318,18 @@ def _dns(d: dict) -> DnsResult:
                      _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0))
 
 
+# What Geolocator emits: a configured position, a geo-IP database, or the web form's pin.
+SERVER_SOURCES = ("manual", "manual (pin)", "database")
+
+
 def _server(d: dict) -> ServerPosition:
     lat, lon = _num_or_none(d, "lat", -90, 90), _num_or_none(d, "lon", -180, 180)
     if lat is None or lon is None:
         raise ValueError("server position needs lat and lon")
-    return ServerPosition(lat, lon, _s(d, "source"))
+    source = _s(d, "source")
+    if source not in SERVER_SOURCES:
+        raise ValueError("server position source is not known")
+    return ServerPosition(lat, lon, source)
 
 
 def _browser(d: dict) -> BrowserResult:

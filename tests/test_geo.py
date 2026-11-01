@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from speedward.core.geo import Geolocator, geolocator_from_env
+from speedward.core.geo import Geolocator, geolocator_from_env, parse_pin
 from speedward.core.models import ServerPosition
 
 
@@ -131,3 +131,64 @@ def test_env_one_without_other_raises(env):
 def test_env_non_numeric_raises():
     with pytest.raises(ValueError):
         geolocator_from_env({"SERVER_LAT": "x", "SERVER_LON": "1"})
+
+
+# --- manual pin (the web form's server pin) ----------------------------------------------------
+
+def test_pin_used_when_nothing_else_known():
+    pos = Geolocator(None, None, pin=(-26.2, 28.0)).locate(None)
+    assert pos == ServerPosition(-26.2, 28.0, "manual (pin)")
+
+
+def test_override_beats_pin():
+    assert Geolocator(None, (1, 2), pin=(3, 4)).locate("8.8.8.8") == ServerPosition(1, 2, "manual")
+
+
+def test_database_beats_pin(tmp_path, monkeypatch):
+    db = tmp_path / "x.mmdb"
+    db.write_bytes(b"x")
+    install_fake_maxminddb(monkeypatch, {"location": {"latitude": 51.5, "longitude": -0.12}})
+    assert Geolocator(str(db), None, pin=(3, 4)).locate("8.8.8.8").source == "database"
+
+
+def test_pin_fills_in_when_database_has_no_answer(tmp_path, monkeypatch):
+    db = tmp_path / "x.mmdb"
+    db.write_bytes(b"x")
+    install_fake_maxminddb(monkeypatch, None)
+    assert Geolocator(str(db), None, pin=(3, 4)).locate("8.8.8.8") == ServerPosition(3, 4, "manual (pin)")
+
+
+def test_no_pin_no_position():
+    assert Geolocator(None, None).locate(None) is None
+
+
+@pytest.mark.parametrize("lat,lon", [("12.5", "-33"), (12.5, -33), ("90", "180"), ("-90", "-180")])
+def test_parse_pin_accepts(lat, lon):
+    assert parse_pin(lat, lon) == (float(lat), float(lon))
+
+
+@pytest.mark.parametrize("lat,lon", [("91", "0"), ("0", "181"), ("-90.1", "0"), ("nan", "0"), ("0", "inf"),
+                                     ("abc", "0"), ("", "5"), ("5", ""), (None, "5"), ("1e999", "0"),
+                                     (True, 0)])
+def test_parse_pin_rejects(lat, lon):
+    with pytest.raises(ValueError):
+        parse_pin(lat, lon)
+
+
+def test_parse_pin_none_when_both_absent():
+    assert parse_pin(None, None) is None
+    assert parse_pin("", "") is None
+
+
+def test_bad_pin_rejected_by_geolocator():
+    with pytest.raises(ValueError):
+        Geolocator(None, None, pin=(100, 0))
+
+
+@pytest.mark.parametrize("pin", [(True, 0), (0, False), ("x", 1), (float("nan"), 0)])
+def test_geolocator_pin_goes_through_parse_pin_with_fixed_message(pin):
+    with pytest.raises(ValueError) as exc:
+        Geolocator(None, None, pin=pin)
+    assert "nan" not in str(exc.value) and "x" != str(exc.value)
+    assert str(exc.value) in ("server pin is not a valid position",
+                              "server pin needs both a latitude and a longitude")
