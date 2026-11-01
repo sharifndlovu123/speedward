@@ -17,10 +17,11 @@ def to_markdown(report) -> str:
         L.append(f"- Page weight: {c['browser']['weight']}")
     L += [f"- {c['excluded_line']}", f"- {CACHE_NOTE}", "",
           "## Locations", "",
-          "| Location | No cache | Cache | Delay | CDN | Status |", "| --- | --- | --- | --- | --- | --- |"]
+          "| Location | No cache | Cache | Delay | CDN | Answered by | Position source | Status |",
+          "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in c["rows"]:
         L.append(f"| {_c(r['location'])} | {r['cold']} | {r['warm']} | {r['delay']} | {_c(r['cdn'])} "
-                 f"| {_c(r['status'])} |")
+                 f"| {_c(r['answered'])} | {_c(r['source'])} | {_c(r['status'])} |")
     L += ["", "## Stage breakdown (average over measured locations)", ""]
     L += [f"- {s['name']}: {s['text']}" for s in c["stages"]] or ["- no data"]
     L += ["", "## Server identity", ""] + [f"- {k}: {_c(v)}" for k, v in c["identity"]]

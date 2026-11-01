@@ -39,6 +39,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .map circle[data-row]{cursor:pointer}
 .map-detail{min-height:1.5em;font-weight:600}
 .legend{font-size:.9rem}
+.position-note{border:1px solid var(--mute);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:.9rem}
+.position-note p{margin:0 0 6px}.position-note ol{margin:6px 0;padding-left:1.2em}
+.position-note code{overflow-wrap:anywhere}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:16px 0}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 .tile b{display:block;font-size:1.4rem}.tile small{color:var(--mute)}

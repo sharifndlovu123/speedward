@@ -42,9 +42,9 @@ footer{margin-top:32px;color:var(--mute);font-size:.85rem}
 <section>
 <h2>Locations</h2>
 <div class="scroll"><table>
-<thead><tr><th>Location</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Status</th></tr></thead>
+<thead><tr><th>Location</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Answered by</th><th>Position source</th><th>Status</th></tr></thead>
 <tbody>
-{% for row in rows %}<tr{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.status }}</td></tr>
+{% for row in rows %}<tr{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 </section>

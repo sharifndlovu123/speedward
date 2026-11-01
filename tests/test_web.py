@@ -731,3 +731,56 @@ def test_index_offers_server_select_with_not_set_and_cities(client):
     assert 'id="server-city"' in page and "Not set" in page
     assert re.search(r'<option value="Johannesburg" data-lat="-?[\d.]+" data-lon="-?[\d.]+"', page)
     assert 'id="pin-help"' in page
+
+
+# --- answering-server positions in the results fragment (Task 16) -------------------------------
+
+NOTE_TEXT = "No server positions yet. Results still show every number; lines need the free offline location file."
+
+
+def rendered(client, result):
+    return post_json(client, reverse("render"), {"result": result, "limits": {}}).content.decode()
+
+
+def with_tokyo(**fields):
+    d = report_dict()
+    d["locations"][0].update(fields)
+    return d
+
+
+def test_fragment_has_answered_by_and_position_source_columns(client):
+    html = rendered(client, with_tokyo(edge_code="NRT",
+                                       server_position={"lat": 35.77, "lon": 140.39, "source": "cdn header"}))
+    assert "<th>Answered by</th><th>Position source</th>" in html
+    assert "<td>edge NRT (Tokyo)</td><td>CDN header (cf-ray -NRT)</td>" in html
+    assert 'class="sw-sq"' in html
+    assert NOTE_TEXT not in html
+
+
+def test_fallback_note_when_no_database_is_set(client):
+    html = rendered(client, with_tokyo(edge_note="position not available", edge_reason="no geo-IP database set"))
+    assert NOTE_TEXT in html
+    assert "How to set it up" in html and "Place a server manually (your own claim)" in html
+    assert "GEOIP_DB" in html and "GeoLite2 City" in html and "DB-IP Lite City" in html
+    assert 'data-place-pin' in html
+
+
+def test_fallback_note_for_an_old_report_without_positions(client):
+    assert NOTE_TEXT in rendered(client, report_dict())
+
+
+def test_uncertain_positions_get_their_own_note_not_the_setup_one(client):
+    html = rendered(client, with_tokyo(edge_note="edge location uncertain", edge_reason="shared address"))
+    assert NOTE_TEXT not in html
+    assert "could not be placed with confidence" in html and "Place a server manually (your own claim)" in html
+    assert "<td>edge location uncertain (shared address)</td>" in html
+
+
+def test_no_fallback_note_with_a_configured_position(client):
+    html = rendered(client, report_dict(server={"lat": 1, "lon": 2, "source": "manual"}))
+    assert NOTE_TEXT not in html and "Server (manual setting)" in html
+
+
+def test_legend_explains_circles_squares_and_lines(client):
+    html = rendered(client, report_dict())
+    assert "Circle = test location. Square = server that answered it" in html
