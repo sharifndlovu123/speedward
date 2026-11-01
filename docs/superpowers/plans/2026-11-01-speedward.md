@@ -295,6 +295,17 @@ Behaviour (author's decisions): web status strip "N of M tests left this hour ·
 7. CSP unchanged (no inline script or style attributes; classes only). Text set with `textContent` only. CLI `--locations` unchanged.
 8. Tests: unit tests for catalog (unique, defaults subset, continents known, lat/lon in range), picker map (escaping, selected state, no external URL), view renders map and hidden input; e2e: click a dot toggles chip and estimate, presets, add custom place, zero-selection error, picks restored after refresh.
 
+### Task 14: Bigger closable results drawer and SVG focus ring (author-approved mockup page-9-table-drawer.html)
+
+**Files:** `speedward/web/static/js/results.js`, `speedward/web/static/css/app.css`, `speedward/reports/map.py` (focus style for `.sw-pick` / `.sw-dot`), tests in `tests/` and `e2e/test_picker.py` (or a new e2e file).
+
+**Requirements:**
+1. The results details drawer opens to about 70% of the viewport height (90% on phone width), table scrolls inside it, map stays visible above it, the clicked dot stays highlighted. Use dvh with a vh fallback.
+2. Close: a visible "Close" button with accessible name, Escape key, and clicking the map outside the drawer. Opening moves focus into the drawer; closing returns focus to the dot or button that opened it.
+3. Focus ring on SVG dots (`.sw-pick`, `.sw-dot`) must be visible in Firefox and Chromium: use a stroke-based style (for example `:focus-visible{stroke:...;stroke-width:...}`), at least 3:1 contrast against the map; keep it keyboard-only (`:focus-visible`).
+4. CSP unchanged: no inline script or style attributes, textContent only.
+5. Tests: e2e that the drawer opens taller than before (height >= 60% of viewport), Close button closes it, Escape closes it, focus returns; unit/e2e that the focus style rule exists and the focused dot has a non-default stroke.
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).
