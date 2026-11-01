@@ -373,6 +373,7 @@
       if (pl.dot) { pl.dot.setAttribute("aria-checked", on ? "true" : "false"); }
     });
     form.elements.locations.value = names.join(",");
+    if (previewEl) { renderPreview(); }
     var toggle = $("locations-toggle");
     setText(toggle, "Locations (" + names.length + ")");
     toggle.setAttribute("aria-label", "Locations: " + names.length + " selected (change and run again)");
@@ -469,6 +470,10 @@
       svg.classList.toggle("sw-scanning", on);
       svg.classList.toggle("sw-locked", on);
     }
+    if (pinEl) {
+      pinEl.setAttribute("tabindex", on ? "-1" : "0");
+      if (on) { pinEl.setAttribute("aria-disabled", "true"); } else { pinEl.removeAttribute("aria-disabled"); }
+    }
     places.forEach(function (pl) {
       if (pl.dot) {
         pl.dot.setAttribute("tabindex", on ? "-1" : "0");
@@ -477,8 +482,178 @@
     });
   }
 
+  // --- server pin: where the tested server is, so lines can draw from it -------------------------
+  // Two numbers kept in this tab only (sessionStorage "speedward:pin", same expiry as results) and
+  // posted with /scan as server_lat/server_lon. A configured position or geo-IP result still wins on
+  // the server. Preview lines are SVG built here from the page's own dots; no outside data.
+  var PIN_KEY = "speedward:pin";
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var pinBox = $("picker-map");
+  var pinSvg = pinBox.querySelector("svg");
+  var pinEl = pinBox.querySelector(".sw-pin");
+  var previewEl = pinBox.querySelector(".sw-preview");
+  var pinHome = (pinEl.getAttribute("data-home") || "0,0").split(",").map(Number);
+  var vb = pinSvg.viewBox.baseVal;
+  var pin = null;           // {lat, lon} or null
+  var pinTimer = null;
+  var dragging = false;
+
+  function clampNum(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+  function pinOk(p) {
+    return !!p && typeof p.lat === "number" && typeof p.lon === "number" && isFinite(p.lat) && isFinite(p.lon) &&
+      p.lat >= -90 && p.lat <= 90 && p.lon >= -180 && p.lon <= 180;
+  }
+  function toX(lon) { return (lon + 180) / 360 * vb.width; }
+  function toY(lat) { return (90 - lat) / 180 * vb.height; }
+  function round4(n) { return Math.round(n * 10000) / 10000; }
+
+  function readPin() {
+    if (!storage) { return null; }
+    try {
+      var raw = storage.getItem(PIN_KEY);
+      if (!raw) { return null; }
+      var saved = JSON.parse(raw);
+      if (!saved || typeof saved.savedAt !== "number" || !pinOk(saved) || Date.now() - saved.savedAt > TTL_MS) {
+        storage.removeItem(PIN_KEY);
+        return null;
+      }
+      return { lat: saved.lat, lon: saved.lon, savedAt: saved.savedAt };
+    } catch (e) {
+      try { storage.removeItem(PIN_KEY); } catch (e2) { /* nothing to do */ }
+      return null;
+    }
+  }
+
+  function savePin() {
+    if (pinTimer) { clearTimeout(pinTimer); pinTimer = null; }
+    if (!storage) { return; }
+    try {
+      if (pin) {
+        storage.setItem(PIN_KEY, JSON.stringify({ lat: pin.lat, lon: pin.lon, savedAt: Date.now() }));
+        pinTimer = setTimeout(function () { clearPin(); }, TTL_MS);
+      } else {
+        storage.removeItem(PIN_KEY);
+      }
+    } catch (e) { /* kept for this page view only */ }
+  }
+
+  function arcPath(sx, sy, x, y) {
+    var dist = Math.sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
+    return "M" + sx + "," + sy + " Q" + (sx + x) / 2 + "," + ((sy + y) / 2 - dist * 0.25) + " " + x + "," + y;
+  }
+
+  function renderPreview() {
+    previewEl.replaceChildren();
+    if (!pin) { return; }
+    var sx = toX(pin.lon), sy = toY(pin.lat);
+    places.forEach(function (pl) {
+      if (!selected[pl.name] || !pl.dot) { return; }
+      var path = document.createElementNS(SVGNS, "path");
+      path.setAttribute("d", arcPath(sx, sy, Number(pl.dot.getAttribute("cx")), Number(pl.dot.getAttribute("cy"))));
+      previewEl.appendChild(path);
+    });
+  }
+
+  function dir(n, pos, neg) { return Math.abs(n).toFixed(2) + " " + (n >= 0 ? pos : neg); }
+
+  function renderPin() {
+    var x = pin ? toX(pin.lon) : pinHome[0];
+    var y = pin ? toY(pin.lat) : pinHome[1];
+    pinEl.setAttribute("transform", "translate(" + x + "," + y + ")");
+    pinEl.style.opacity = pin ? "1" : "0.8";
+    var label = pinEl.querySelector("text");  // flips to the left near the right edge so it never clips
+    var flip = x > vb.width * 0.88;
+    label.setAttribute("text-anchor", flip ? "end" : "start");
+    label.setAttribute("x", String((flip ? -15 : 15) * vb.width / 1000));
+    var where = pin ? dir(pin.lat, "north", "south") + ", " + dir(pin.lon, "east", "west") : "not set";
+    pinEl.setAttribute("aria-label", "Server position pin, " + where);
+    setText($("pin-status"), pin ? "Server pin: " + where + ". Kept in this tab only." : "");
+    var sel = $("server-city");
+    var value = "";
+    if (pin) {
+      value = "custom";
+      Array.prototype.forEach.call(sel.options, function (o) {
+        if (o.hasAttribute("data-lat") && Math.abs(Number(o.getAttribute("data-lat")) - pin.lat) < 0.01 &&
+            Math.abs(Number(o.getAttribute("data-lon")) - pin.lon) < 0.01) { value = o.value; }
+      });
+    }
+    sel.value = value;
+    renderPreview();
+  }
+
+  function setPin(lat, lon, persist) {
+    var p = { lat: round4(clampNum(lat, -90, 90)), lon: round4(clampNum(lon, -180, 180)) };
+    if (!pinOk(p)) { return; }
+    pin = p;
+    renderPin();
+    if (persist) { savePin(); }
+  }
+
+  function clearPin() {
+    pin = null;
+    savePin();
+    renderPin();
+  }
+
+  function pinPoint(e) {
+    var pt = pinSvg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    var m = pinSvg.getScreenCTM();
+    return m ? pt.matrixTransform(m.inverse()) : null;
+  }
+
+  function dragTo(e) {
+    var pt = pinPoint(e);
+    if (!pt) { return; }
+    setPin(90 - clampNum(pt.y, 0, vb.height) / vb.height * 180, clampNum(pt.x, 0, vb.width) / vb.width * 360 - 180, false);
+  }
+
+  pinEl.addEventListener("pointerdown", function (e) {
+    if (picksLocked || (e.button !== undefined && e.button !== 0)) { return; }
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = true;
+    pinEl.classList.add("sw-drag");
+    try { pinEl.setPointerCapture(e.pointerId); } catch (err) { /* no capture: still works inside the map */ }
+    pinEl.focus();
+    dragTo(e);
+  });
+  pinEl.addEventListener("pointermove", function (e) { if (dragging) { dragTo(e); } });
+  function endDrag() {
+    if (!dragging) { return; }
+    dragging = false;
+    pinEl.classList.remove("sw-drag");
+    savePin();
+  }
+  pinEl.addEventListener("pointerup", endDrag);
+  pinEl.addEventListener("pointercancel", endDrag);
+  pinEl.addEventListener("click", function (e) { e.stopPropagation(); });
+  pinEl.addEventListener("keydown", function (e) {
+    if (picksLocked) { return; }
+    var step = e.shiftKey ? 10 : 2;
+    var dLat = 0, dLon = 0;
+    if (e.key === "ArrowUp") { dLat = step; }
+    else if (e.key === "ArrowDown") { dLat = -step; }
+    else if (e.key === "ArrowLeft") { dLon = -step; }
+    else if (e.key === "ArrowRight") { dLon = step; }
+    else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); clearPin(); return; }
+    else { return; }
+    e.preventDefault();
+    var base = pin || { lat: 0, lon: 0 };
+    setPin(base.lat + dLat, base.lon + dLon, true);
+  });
+  $("server-city").addEventListener("change", function () {
+    var opt = this.options[this.selectedIndex];
+    if (!opt.value) { clearPin(); return; }
+    if (opt.value === "custom") { return; }
+    setPin(Number(opt.getAttribute("data-lat")), Number(opt.getAttribute("data-lon")), true);
+  });
+
   initPicker();
   setPicks([], true);
+  var saved0 = readPin();
+  if (saved0) { setPin(saved0.lat, saved0.lon, false); pinTimer = setTimeout(function () { clearPin(); }, Math.max(0, saved0.savedAt + TTL_MS - Date.now())); } else { renderPin(); }
 
   var pickerMap = $("picker-map");
   pickerMap.addEventListener("click", function (e) {
@@ -649,6 +824,7 @@
   function clearNow() {
     if (expiryTimer) { clearTimeout(expiryTimer); }
     removeSaved();
+    clearPin();
     current = null;
     updateGuard();
     hideResults();
@@ -723,6 +899,7 @@
     var v = formValues();
     if (!v.locations) { formError(ZERO_TEXT); return; }
     if ($("confirm").checked) { v.confirm = "1"; }
+    if (pin) { v.server_lat = String(pin.lat); v.server_lon = String(pin.lon); }
     var lim = limitValues();  // checked by the server before any test is spent
     Object.keys(lim).forEach(function (k) { if (lim[k] !== null) { v[k] = String(lim[k]); } });
     $("start").disabled = true;

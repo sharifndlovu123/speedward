@@ -180,8 +180,9 @@ def render_picker_map(selected: list[str], width: int = 1000) -> str:
         out.append(f'<circle class="sw-pick" data-place="{escape(p.name, quote=True)}" tabindex="0" '
                    f'role="checkbox" aria-checked="{on}" cx="{_num(x)}" cy="{_num(y)}" r="{_num(7 * k)}">'
                    f"<title>{escape(p.name)}, {escape(p.country)}</title></circle>")
-    # Resting place of the unset pin is bottom left; the script moves it (data-home is that spot).
-    hx, hy = _num(22 * k), _num(H - 22 * k)
+    # Resting place of the unset pin: open Pacific on the right, clear of the side panels and the
+    # bottom strip so it can be grabbed. The script moves it (data-home is that spot).
+    hx, hy = _num(345 / 360 * W), _num(H / 2)
     out.append(f'<g class="sw-pin" tabindex="0" role="button" aria-roledescription="draggable pin" '
                f'aria-label="Server position pin, not set" aria-describedby="pin-help" '
                f'data-home="{hx},{hy}" transform="translate({hx},{hy})">'
