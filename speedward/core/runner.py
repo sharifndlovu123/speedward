@@ -308,8 +308,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
     server = None
     if geo is not None:
         ip = next((r.server_ip for r in results if r.status == "measured" and r.server_ip), None)
-        if ip:
-            server = geo.locate(ip)
+        server = geo.locate(ip)  # also with no IP: a configured position or a pin needs none
     progress("Finished")
     return _report(target, started, plan, scan, server, results, paths, dns)
 
