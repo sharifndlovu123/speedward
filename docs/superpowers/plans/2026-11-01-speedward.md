@@ -319,6 +319,21 @@ Behaviour (author's decisions): web status strip "N of M tests left this hour ·
 6. Tests: unit (validation, precedence, report source label, arcs drawn when pin given, none when unknown), views (bad values refused with a fixed message), e2e (drag/keys move pin, select sets it, lines appear in picker and results, survives refresh, cleared with results).
 7. Update README and demo.md (how lines work and the setting).
 
+### Task 16: Lines to the server that answered each probe (author-approved mockup page-11-answering-server.html)
+
+**Problem / intent:** the author does not want a dragged server pin as the main path. Position should come from where the content was actually found: each measured result's answering IP (`server_ip`, from Globalping `resolvedAddress`), located offline. A CDN or anycast address makes the offline database unreliable (shared IPs are registered at one place), so uncertain cases must draw nothing and say so. Never a guess.
+
+**Requirements:**
+1. Per-result server position: add to `LocationResult` an optional `server_position` (lat, lon, source in a fixed set: "database", "cdn header") plus an `edge_note`/uncertain flag; strict `from_dict`/`to_dict` validation like the existing fields; old reports without it still load.
+2. Resolution in core (no Django, no network): for each measured result with a public IP, use the geo-IP database (existing Geolocator/GEOIP_DB) -> "database". Where a CDN header names the edge city, prefer it -> "cdn header": parse Cloudflare `cf-ray` suffix (airport code, e.g. `-NRT`) via a small BUNDLED IATA code to lat/lon table (a few hundred major codes, static, with a data-source note); other CDNs only if the header format is certain, else skip. Headers must be kept long enough for this (store only the derived code, never raw headers in the report).
+3. Uncertain rule: if the same IP is returned to probes on 2+ continents (anycast/shared), or the database position is more than ~2,500 km from a cdn-header position for the same result, or the IP is private/not in the database, draw no square and mark "edge location uncertain" / "position not available" in the table. Document thresholds as named constants.
+4. Map (reports/map.py): a circle per test location (as now), a square at each result's server position, a speed-coloured line between them (dashed grey for unreachable, with no square). When all located results share one IP, draw one "Server" square with lines from every probe to it (the single-origin case in the mockup). Tooltip on a square: IP, source, and "CDN edge, not necessarily your origin" when IPs differ between probes. All text escaped.
+5. Results table: new "Answered by" and "Position source" columns exactly as the mockup; values "not available" when unknown.
+6. The existing server pin and "Server is in:" list stay but only as a fallback when NO result has a located position and no override: labelled "manual (pin)" as now, and the UI shows the mockup note "No server positions yet... How to set it up / Place a server manually (your own claim)". A configured SERVER_LAT/LON override still wins for the single "Server" square.
+7. Exports (HTML, JSON, Markdown) carry the new fields and sources; Markdown includes the columns.
+8. README and demo.md: a short "download the location file" step (MaxMind GeoLite2 City or DB-IP Lite City, licence note), the Docker/.env setting, and an explanation of CDN edge vs origin and the uncertain cases. CSP unchanged, textContent only, keyboard/WCAG: squares have titles and accessible names.
+9. Tests (fake server, never real Globalping; fake geo DB or monkeypatched reader): unit for cf-ray parsing, IATA table sanity (codes unique, lat/lon in range), uncertain rules, strict from_dict, map output (squares, lines, escaping), markdown/json export; e2e that results show squares/columns and the fallback note when no database is set.
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).
