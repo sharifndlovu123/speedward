@@ -279,6 +279,22 @@ Behaviour (author's decisions): web status strip "N of M tests left this hour ·
 
 ---
 
+### Task 13: Map-first location picker (added at the author's request; mockups page-1 to page-4 approved)
+
+**Intent:** the map is always on the page. Before a scan it is the location picker (replaces the free-text "Locations" input); during a scan the same map shows progress; after, results. Spec files: mockups in `.superpowers/brainstorm/122437-1793561144/content/` (`page-1-home.html` .. `page-4-return-mobile.html`, `map-always.html`).
+
+**Files:** `speedward/core/locations.py` (add `CATALOG`), `speedward/reports/map.py` (add `render_picker_map`), `speedward/web/views.py`, `templates/index.html`, `static/js/results.js` (or new `static/js/picker.js`), `static/css/app.css`, tests in `tests/` and `e2e/`, README/demo.md/CLAUDE.md wording.
+
+**Requirements:**
+1. `CATALOG`: about 40 `Place(name, country, continent, lat, lon)` entries covering all 12 defaults plus extras on every continent (for example Paris, Stockholm, Madrid, Toronto, Chicago, Mexico City, Santiago, Cairo, Nairobi, Cape Town, Seoul, Hong Kong, Delhi, Jakarta, Melbourne, Auckland). `name` is the string sent as `{"magic": name}`. Defaults must be a subset. No network lookups; coordinates are static. Names must be unique.
+2. `render_picker_map(selected: list[str]) -> str`: same bundled land and style as `render_map`, one `<circle class="sw-pick" data-place="NAME" tabindex="0" role="checkbox" aria-checked=...>` per catalog place with a `<title>`; selected = filled blue (`var(--pin)`), unselected = grey ring. All dynamic text escaped. No outside resources.
+3. Index page: map first (below the header strip), then presets (Default 12, One per continent, All, Clear), chips grouped by continent (real `<button type="button" aria-pressed>` toggles, same state as the dots), an "Add another place" text box + Add button (adds a chip without a dot, trimmed, no commas, max 40 chars), then the address box, extra checks, limits, estimate, Start test (as the mockup page-1). The old visible text input is removed; a hidden `locations` input holds the comma-separated selection so `/estimate` and `/scan` are unchanged. Zero selected is an error ("Pick at least one place"), never silently the default.
+4. Live estimate: every toggle calls the existing estimate flow; summary line "N locations · about M tests".
+5. During a scan the form and picker are disabled and the map stays visible; after a scan the results map (existing `/render` fragment) appears in the same position as the picker, and the picker collapses to a one-line summary "Locations: N selected (change and run again)" that reopens it. Saved results restore the picks.
+6. Phone width: map full width, chips stack below, no horizontal page scroll. Keyboard: dots and chips focusable and toggle with Space/Enter.
+7. CSP unchanged (no inline script or style attributes; classes only). Text set with `textContent` only. CLI `--locations` unchanged.
+8. Tests: unit tests for catalog (unique, defaults subset, continents known, lat/lon in range), picker map (escaping, selected state, no external URL), view renders map and hidden input; e2e: click a dot toggles chip and estimate, presets, add custom place, zero-selection error, picks restored after refresh.
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).
