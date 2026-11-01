@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 from collections.abc import Mapping
 
-from speedward.core.models import ServerPosition
+from speedward.core.models import DB_UNREADABLE, NO_DB, NOT_IN_DB, ServerPosition
 
 
 def _public_ip(ip: str | None) -> bool:
@@ -65,28 +65,41 @@ class Geolocator:
     def _pinned(self) -> ServerPosition | None:
         return None if self.pin is None else ServerPosition(self.pin[0], self.pin[1], "manual (pin)")
 
-    def locate(self, ip: str | None) -> ServerPosition | None:
-        if self.override is not None:
-            return ServerPosition(self.override[0], self.override[1], "manual")
-        if not self.db_path or not _public_ip(ip):
-            return self._pinned()
+    def lookup(self, ip: str) -> tuple[float, float] | str:
+        """The geo-IP database alone: (lat, lon), or the reason there is none (a fixed text from
+        models.EDGE_REASONS). The override and the pin play no part here."""
+        if not self.db_path:
+            return NO_DB
         try:
             import os
             if not os.path.isfile(self.db_path):
-                return self._pinned()
+                return DB_UNREADABLE
             import maxminddb  # optional "geoip" extra
             reader = maxminddb.open_database(self.db_path)
             try:
                 record = reader.get(ip.strip())
             finally:
                 reader.close()
+        except Exception:
+            return DB_UNREADABLE
+        try:
             loc = record["location"]
             lat, lon = float(loc["latitude"]), float(loc["longitude"])
-            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-                return self._pinned()
-            return ServerPosition(lat, lon, "database")
-        except Exception:
+        except (TypeError, KeyError, ValueError):
+            return NOT_IN_DB
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return NOT_IN_DB
+        return lat, lon
+
+    def locate(self, ip: str | None) -> ServerPosition | None:
+        if self.override is not None:
+            return ServerPosition(self.override[0], self.override[1], "manual")
+        if not _public_ip(ip):
             return self._pinned()
+        found = self.lookup(ip)
+        if isinstance(found, str):
+            return self._pinned()
+        return ServerPosition(found[0], found[1], "database")
 
 
 def geolocator_from_env(environ: Mapping[str, str]) -> Geolocator:

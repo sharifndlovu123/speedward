@@ -16,7 +16,22 @@ from functools import lru_cache
 from pathlib import Path
 
 from speedward.core.geo import _public_ip
-from speedward.core.models import EDGE_NOTES, EDGE_REASONS, POSITION_SOURCES, ServerPosition
+from speedward.core.models import (  # noqa: F401 - re-exported
+    DB_UNREADABLE,
+    DISAGREE,
+    EDGE_NOTES,
+    EDGE_REASONS,
+    NO_DB,
+    NO_IP,
+    NOT_AVAILABLE,
+    NOT_IN_DB,
+    POSITION_SOURCES,
+    PRIVATE,
+    SHARED,
+    TOO_FAST,
+    UNCERTAIN,
+    ServerPosition,
+)
 
 # --- thresholds -------------------------------------------------------------------------------
 
@@ -30,10 +45,8 @@ LIGHT_KM_PER_RTT_MS = 150
 # Geo-IP positions are city level; this much error is allowed before the delay check counts.
 DB_SLACK_KM = 300
 
-# --- fixed wording (stored in reports, so the sets live in models and are validated on load) -----
-
-UNCERTAIN, NOT_AVAILABLE = EDGE_NOTES
-(SHARED, DISAGREE, TOO_FAST, PRIVATE, NO_IP, NO_DB, NOT_IN_DB, DB_UNREADABLE) = EDGE_REASONS
+# The fixed wording (EDGE_NOTES, EDGE_REASONS, POSITION_SOURCES) is stored in reports, so it lives in
+# models and is validated on load; the names are re-exported here.
 DATABASE, CDN_HEADER = POSITION_SOURCES
 
 # --- the airport table ------------------------------------------------------------------------

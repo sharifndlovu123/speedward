@@ -22,10 +22,16 @@ STATUSES = ("measured", "blocked", "test_failed", "not_run")
 
 # Where the server that answered one result is (see speedward/core/edge.py, which uses these).
 POSITION_SOURCES = ("database", "cdn header")
-EDGE_NOTES = ("edge location uncertain", "position not available")
-EDGE_REASONS = ("shared address", "geo-IP database and CDN header disagree",
-                "delay too short for the database position", "private address", "no answering IP",
-                "no geo-IP database set", "not in the geo-IP database", "geo-IP database could not be read")
+UNCERTAIN, NOT_AVAILABLE = EDGE_NOTES = ("edge location uncertain", "position not available")
+SHARED = "shared address"
+DISAGREE = "geo-IP database and CDN header disagree"
+TOO_FAST = "delay too short for the database position"
+PRIVATE = "private address"
+NO_IP = "no answering IP"
+NO_DB = "no geo-IP database set"
+NOT_IN_DB = "not in the geo-IP database"
+DB_UNREADABLE = "geo-IP database could not be read"
+EDGE_REASONS = (SHARED, DISAGREE, TOO_FAST, PRIVATE, NO_IP, NO_DB, NOT_IN_DB, DB_UNREADABLE)
 _EDGE_CODE = re.compile(r"[A-Z]{3}")
 
 
