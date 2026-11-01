@@ -40,6 +40,7 @@ class Allowance:
     remaining: int | None
     authenticated: bool
     credits: int | None = None
+    reset_seconds: int | None = None  # seconds until the allowance resets; None when not reported
 
 
 def _int(value) -> int | None:
@@ -47,6 +48,11 @@ def _int(value) -> int | None:
         return int(float(value))
     except (TypeError, ValueError):
         return None
+
+
+def _reset(value) -> int | None:
+    n = _int(value)
+    return n if n is not None and n >= 0 else None
 
 
 def parse_rate_headers(headers) -> dict:
@@ -144,7 +150,7 @@ class GlobalpingClient:
         authed = self._token is not None
         fallback = Allowance(KEY_TESTS_PER_HOUR if authed else ANON_TESTS_PER_HOUR,
                              KEY_MAX_PROBES if authed else ANON_MAX_PROBES,
-                             self.last_rate.get("remaining"), authed, None)
+                             self.last_rate.get("remaining"), authed, None, _reset(self.last_rate.get("reset")))
         try:
             resp = self._request("GET", "/limits")
         except RateLimited:
@@ -161,10 +167,11 @@ class GlobalpingClient:
             limit = _int(create.get("limit"))
             remaining = _int(create.get("remaining"))
             credits = _int((doc.get("credits") or {}).get("remaining"))
+            reset = _reset(create.get("reset"))
         except Exception:  # noqa: BLE001
             return fallback
         return Allowance(limit if limit is not None else fallback.tests_per_hour, fallback.max_probes,
-                         remaining, authed, credits if authed else None)
+                         remaining, authed, credits if authed else None, reset)
 
 
 # --- classification ---------------------------------------------------

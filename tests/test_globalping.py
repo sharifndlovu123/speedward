@@ -247,3 +247,21 @@ def test_strict_fake_rejects_null_options(fake):
     r = httpx.post(fake.base_url + "/measurements", json={
         "type": "ping", "target": "x", "locations": [{"magic": "Berlin"}], "measurementOptions": None})
     assert r.status_code == 400 and r.json()["error"]["message"] == "Parameter validation failed."
+
+
+def test_allowance_reads_reset_seconds_from_limits(fake):
+    fake.reset = 1800
+    assert client(fake).allowance().reset_seconds == 1800
+
+
+def test_allowance_reset_unknown_when_limits_omit_it(fake):
+    fake.omit_reset = True
+    assert client(fake).allowance().reset_seconds is None
+
+
+def test_allowance_fallback_uses_reset_header_from_last_post(fake):
+    c = client(fake)
+    fake.reset = 900
+    c.create("http", "example.com", [{"magic": "Berlin"}], HTTP_OPTS)
+    fake.limits_status = 500
+    assert c.allowance().reset_seconds == 900

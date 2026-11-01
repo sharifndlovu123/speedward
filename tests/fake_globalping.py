@@ -28,6 +28,8 @@ class FakeGlobalping:
         self.limit = None  # overrides the limit in /limits and the POST headers
         self.remaining = None
         self.credits = None
+        self.reset = None  # seconds until the allowance resets, in /limits and the POST headers
+        self.omit_reset = False  # /limits answers without a reset value
         self.by_type: dict[str, dict] = {}  # per measurement type template, overrides `template`
         self.queued: dict[str, list[dict]] = {}  # one-shot docs per type, used before templates
         self.rate_limit_after: int | None = None  # accept this many POSTs, then answer 429
@@ -73,7 +75,9 @@ class FakeGlobalping:
         if self.limit is not None:
             create["limit"] = self.limit
         create["remaining"] = self.remaining if self.remaining is not None else create["limit"]
-        create["reset"] = 0
+        create["reset"] = self.reset if self.reset is not None else 0
+        if self.omit_reset:
+            del create["reset"]
         if self.credits is not None and authed:
             doc["credits"] = {"remaining": self.credits}
         return doc
@@ -162,7 +166,7 @@ class FakeGlobalping:
                     "Location": f"{outer.url}/v1/measurements/{mid}",
                     "x-request-cost": cost, "x-ratelimit-limit": limit,
                     "x-ratelimit-consumed": cost, "x-ratelimit-remaining": remaining,
-                    "x-ratelimit-reset": 3600,
+                    "x-ratelimit-reset": outer.reset if outer.reset is not None else 3600,
                 })
 
             def log_message(self, *args):
