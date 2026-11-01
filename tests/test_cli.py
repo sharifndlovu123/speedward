@@ -82,9 +82,11 @@ def test_passing_limit_listed(fake):
 
 
 def test_max_blocked(fake):
-    fake.by_type["http"] = fixture("http_timeout")
-    r = scan("--max-blocked", "0")
-    assert r.exit_code == 2  # nothing measured at all -> could not test
+    doc = fixture("http_ok")
+    doc["results"][1]["result"] = fixture("http_timeout")["results"][0]["result"]
+    fake.by_type["http"] = doc
+    assert scan("--max-blocked", "0").exit_code == 1
+    assert scan("--max-blocked", "1").exit_code == 0
 
 
 def test_all_locations_failed_exits_2(fake):
@@ -92,6 +94,7 @@ def test_all_locations_failed_exits_2(fake):
     r = scan()
     assert r.exit_code == 2
     assert "Could not test" in r.stderr
+    assert r.stdout.strip()
 
 
 def test_token_never_in_output(fake, monkeypatch):
@@ -203,3 +206,57 @@ def test_dotenv_allowlist(tmp_path, monkeypatch):
     assert env["GLOBALPING_TOKEN"] == "t" and env["SLOW_MS"] == "2" and env["GEOIP_DB"] == "/x"
     assert "OTHER" not in env and "GLOBALPING_BASE_URL" not in env
     assert env["PATH"] != "/evil"
+
+
+# --- robustness -------------------------------------------------------
+
+def test_app_hides_locals():
+    assert app.pretty_exceptions_show_locals is False
+
+
+def test_unwritable_out_falls_back_to_stdout(fake, tmp_path):
+    r = scan("--out", str(tmp_path / "no" / "such" / "dir" / "r.md"))
+    assert r.exit_code == 2
+    assert "Could not write the report file." in r.stderr
+    assert r.stdout.strip()
+    assert "Traceback" not in r.stdout + r.stderr
+
+
+def test_non_utf8_dotenv_ignored(fake, tmp_path):
+    (tmp_path / ".env").write_bytes(b"GLOBALPING_TOKEN=\xff\xfe\x80\n")
+    r = scan("--estimate")
+    assert r.exit_code == 0
+    assert ".env file could not be read" in r.stderr
+    assert "Traceback" not in r.stderr
+
+
+@pytest.mark.parametrize("exc", [KeyError("tok-xyz-secret"), __import__("httpx").ConnectError("boom tok-xyz-secret")])
+def test_unexpected_error_fixed_message(fake, monkeypatch, exc):
+    monkeypatch.setenv("GLOBALPING_TOKEN", "tok-xyz-secret")
+    def boom(*a, **k):
+        raise exc
+    monkeypatch.setattr("speedward.cli.main.run_scan", boom)
+    r = scan()
+    assert r.exit_code == 2
+    assert "The scan failed unexpectedly." in r.stderr
+    assert "tok-xyz-secret" not in r.stdout + r.stderr
+    assert "Traceback" not in r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("args", [["--max-ttfb", "0"], ["--max-load", "-5"], ["--max-page-weight", "0"],
+                                  ["--max-blocked", "-1"]])
+def test_invalid_limits_exit_2(fake, args):
+    r = scan(*args)
+    assert r.exit_code == 2
+    assert fake.posts() == []
+
+
+def test_notice_before_bad_format(fake):
+    r = scan("--format", "pdf")
+    assert r.stderr.index("Only test sites") < r.stderr.index("--format")
+
+
+def test_dotenv_inline_comments_and_empty(tmp_path):
+    p = tmp_path / ".env"
+    p.write_text("A=abc # note\nB=\"x # y\" # c\nC=\nD='q'\nE=a#b\n")
+    assert load_dotenv(p) == {"A": "abc", "B": "x # y", "C": "", "D": "q", "E": "a#b"}

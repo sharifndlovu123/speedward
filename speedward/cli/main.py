@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -16,7 +17,7 @@ from speedward.core.runner import ScanError, run_scan
 from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
 
-app = typer.Typer(add_completion=False, help="Test a website's speed from locations around the world.")
+app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False, help="Test a website's speed from locations around the world.")
 NOTICE = "Only test sites you own or are authorised to test."
 NO_KEY = ("No Globalping key set (limits: 250 tests/hour, 50 locations). "
           "A key is free up to a limit: https://globalping.io")
@@ -39,6 +40,9 @@ def load_dotenv(path: Path) -> dict[str, str]:
         text = Path(path).read_text(encoding="utf-8")
     except OSError:
         return out
+    except UnicodeDecodeError:
+        _err("Note: the .env file could not be read as text and was ignored.")
+        return out
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -47,8 +51,10 @@ def load_dotenv(path: Path) -> dict[str, str]:
             line = line[7:].lstrip()
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-            value = value[1:-1]
+        if value[:1] in ("'", '"') and value.find(value[0], 1) > 0:
+            value = value[1:value.find(value[0], 1)]
+        else:
+            value = re.split(r"\s#", value, maxsplit=1)[0].strip()
         if key:
             out[key] = value
     return out
@@ -75,18 +81,30 @@ def scan(
     browser: bool = typer.Option(False, "--browser", help="Also run the browser test."),
     fmt: str = typer.Option("md", "--format", help="Report format: json, md or html."),
     out: Path | None = typer.Option(None, "--out", help="Write the report to this file instead of stdout."),
-    max_ttfb: float | None = typer.Option(None, "--max-ttfb", help="Fail if first byte takes longer than this (ms)."),
-    max_load: float | None = typer.Option(None, "--max-load", help="Fail if load takes longer than this (ms)."),
-    max_blocked: int | None = typer.Option(None, "--max-blocked", help="Fail if more locations than this were blocked."),
-    max_page_weight: int | None = typer.Option(None, "--max-page-weight", help="Fail if the page is heavier than this (bytes)."),
+    max_ttfb: float | None = typer.Option(None, "--max-ttfb", min=1, help="Fail if first byte takes longer than this (ms)."),
+    max_load: float | None = typer.Option(None, "--max-load", min=1, help="Fail if load takes longer than this (ms)."),
+    max_blocked: int | None = typer.Option(None, "--max-blocked", min=0, help="Fail if more locations than this were blocked."),
+    max_page_weight: int | None = typer.Option(None, "--max-page-weight", min=1, help="Fail if the page is heavier than this (bytes)."),
     yes: bool = typer.Option(False, "--yes", help="Go ahead even if the scan costs more than the tests left."),
     estimate: bool = typer.Option(False, "--estimate", help="Print the cost and allowance, then stop."),
     verbose: bool = typer.Option(False, "--verbose", help="Show more detail when something goes wrong."),
 ):
+    try:
+        _run(**locals())
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - never let a traceback (with locals) reach the terminal
+        _err("The scan failed unexpectedly.")
+        if verbose:
+            _err(f"Detail: {clean(str(exc))}")
+        raise typer.Exit(2)
+
+
+def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load, max_blocked, max_page_weight, yes, estimate, verbose):
+    _err(NOTICE)
     if fmt not in FORMATS:
         _err(f"Error: --format must be one of {', '.join(FORMATS)}")
         raise typer.Exit(2)
-    _err(NOTICE)
     try:
         normalise_target(url)
         specs = parse_locations(locations)
@@ -156,8 +174,13 @@ def scan(
 
     text = render(report, fmt)
     if out:
-        out.write_text(text, encoding="utf-8")
-        _err(f"Report written to {out}")
+        try:
+            out.write_text(text, encoding="utf-8")
+            _err(f"Report written to {out}")
+        except OSError:
+            _err("Could not write the report file.")
+            typer.echo(text)
+            raise typer.Exit(2)
     else:
         typer.echo(text)
 
