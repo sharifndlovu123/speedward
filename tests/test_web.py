@@ -549,3 +549,24 @@ def test_scan_rejects_non_finite_form_limits(client, fake, data):
 def test_valid_form_limits_accepted(client):
     r = client.post(reverse("estimate"), form(max_ttfb="800", max_load="", max_blocked="0"))
     assert r.status_code == 200
+
+
+@pytest.mark.parametrize("key, label, unit", [("max_ttfb", "max first byte", " ms"), ("max_load", "max load", " ms"),
+                                              ("max_page_weight", "max page weight", " bytes"),
+                                              ("max_blocked", "max blocked", "")])
+@pytest.mark.parametrize("value", [1234567, 1000000000])  # 7 digits; 10 digits (the 10**9 cap)
+def test_pass_fail_line_prints_large_limits_exactly(client, key, label, unit, value):
+    html = post_json(client, reverse("render"), {"result": report_dict(), "limits": {key: value}}).content.decode()
+    assert f"(limits: {label} {value}{unit})" in html
+    assert "e+" not in re.sub(r"<svg.*?</svg>", "", html, flags=re.S)
+
+
+def test_pass_fail_line_prints_fractional_limit(client):
+    html = post_json(client, reverse("render"), {"result": report_dict(), "limits": {"max_ttfb": 250.5}}).content.decode()
+    assert "Pass/fail: passed (limits: max first byte 250.5 ms)" in html
+
+
+def test_map_legend_prints_thresholds_exactly(client, settings):
+    settings.FAST_MS, settings.SLOW_MS = 1234567.0, 5000000.0
+    html = post_json(client, reverse("render"), {"result": report_dict(), "limits": {}}).content.decode()
+    assert "green up to 1234567 ms" in html and "red from 5000000 ms" in html

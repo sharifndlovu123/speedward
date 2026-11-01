@@ -23,7 +23,7 @@ from django.utils.safestring import mark_safe
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from speedward.core.analysis import Limits, evaluate_limits
+from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.config import EndpointRefused, check_endpoint
 from speedward.core.geo import geolocator_from_env
@@ -300,7 +300,7 @@ def _pass_fail(report: ScanReport, limits: Limits) -> tuple[str, list[str]]:
     if outcome.exit_code == 2:
         return "Pass/fail: could not test, so no limit was judged", []
     word = "FAILED" if outcome.failed else "passed"
-    listed = ", ".join(f"{label} {value:g}{unit}" for label, value, unit in set_limits)
+    listed = ", ".join(f"{label} {plain_number(value)}{unit}" for label, value, unit in set_limits)
     return f"Pass/fail: {word} (limits: {listed})", outcome.failed
 
 
@@ -323,7 +323,7 @@ def render_result(request):
     # render_map escapes every dynamic string itself (see speedward/reports/map.py).
     ctx.update(map_svg=mark_safe(render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)),
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
-               fast_ms=f"{settings.FAST_MS:g}", slow_ms=f"{settings.SLOW_MS:g}")
+               fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
     return render(request, "_results.html", ctx)
 
 

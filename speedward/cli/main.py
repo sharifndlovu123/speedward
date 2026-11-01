@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 import typer
 
 from speedward.core import config
-from speedward.core.analysis import Limits, evaluate_limits
+from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.geo import geolocator_from_env
 from speedward.core.globalping import DEFAULT_BASE_URL, GlobalpingClient, GlobalpingError
@@ -171,5 +171,5 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         _err("Pass/fail: could not test, so no limit was judged")
     else:
         verdict_word = "FAILED" if outcome.failed else "passed"
-        _err("Pass/fail: " + verdict_word + " (limits: " + ", ".join(f"{n} {v:g}" for n, v in set_limits) + ")")
+        _err("Pass/fail: " + verdict_word + " (limits: " + ", ".join(f"{n} {plain_number(v)}" for n, v in set_limits) + ")")
     raise typer.Exit(outcome.exit_code)

@@ -123,6 +123,13 @@ class LimitOutcome:
     exit_code: int = 0
 
 
+def plain_number(value: float) -> str:
+    """A number as people read it: whole numbers exactly, fractions to at most 2 places. Never 1e+06."""
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def _check_timing(measured: list[LocationResult], limit: float, stage: str, what: str) -> list[str]:
     out = []
     for r in measured:
@@ -130,7 +137,7 @@ def _check_timing(measured: list[LocationResult], limit: float, stage: str, what
         if value is None:
             out.append(f"{what} not available for {_label(r)}, so the {what} limit cannot pass there")
         elif value > limit:
-            out.append(f"{what} {value:g} ms from {_label(r)} is over the limit of {limit:g} ms")
+            out.append(f"{what} {plain_number(value)} ms from {_label(r)} is over the limit of {plain_number(limit)} ms")
     return out
 
 

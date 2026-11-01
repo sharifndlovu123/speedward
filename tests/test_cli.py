@@ -260,3 +260,15 @@ def test_dotenv_inline_comments_and_empty(tmp_path):
     p = tmp_path / ".env"
     p.write_text("A=abc # note\nB=\"x # y\" # c\nC=\nD='q'\nE=a#b\n")
     assert load_dotenv(p) == {"A": "abc", "B": "x # y", "C": "", "D": "q", "E": "a#b"}
+
+
+@pytest.mark.parametrize("args, text", [
+    (["--max-ttfb", "1234567"], "max-ttfb 1234567"),
+    (["--max-load", "5000000"], "max-load 5000000"),
+    (["--max-blocked", "1234567890"], "max-blocked 1234567890"),
+    (["--max-ttfb", "250.5"], "max-ttfb 250.5"),
+])
+def test_pass_fail_line_prints_limits_exactly(fake, args, text):
+    r = scan(*args)
+    assert f"(limits: {text})" in r.stderr
+    assert "e+" not in r.stderr

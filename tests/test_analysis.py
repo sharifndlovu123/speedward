@@ -149,3 +149,24 @@ def test_cdn_status_none_without_signal():
     assert cdn_status({"age": "0"}) is None
     assert cdn_status({"age": "soon"}) is None
     assert cdn_status({}) is None
+
+
+# --- exact number text (never scientific notation) ---------------------------------------------
+
+from speedward.core.analysis import plain_number  # noqa: E402
+
+
+@pytest.mark.parametrize("value, text", [(1234567, "1234567"), (1000000000, "1000000000"), (5000000.0, "5000000"),
+                                         (250.5, "250.5"), (40.125, "40.12"), (10, "10"), (0, "0"),
+                                         (1e20, "100000000000000000000")])
+def test_plain_number(value, text):
+    assert plain_number(value) == text
+
+
+def test_failure_message_prints_large_numbers_exactly():
+    from tests.test_web import report_dict
+    from speedward.core.models import ScanReport
+    d = report_dict()
+    d["locations"][0]["stages"]["first_byte"] = 9876543.0
+    out = evaluate_limits(ScanReport.from_dict(d), Limits(max_ttfb=1234567))
+    assert out.failed == ["first byte 9876543 ms from Tokyo, JP is over the limit of 1234567 ms"]
