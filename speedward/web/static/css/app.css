@@ -1,3 +1,4 @@
+[hidden]{display:none !important}
 :root{--bg:#fff;--ink:#1f2933;--mute:#5f6b7a;--line:#d8dee6;--card:#f6f8fa;--bar:#2b5fd9;--warn:#b45309;
   --err:#b42318;--accent:#2b5fd9;--accent-ink:#fff;--hl:#fff4cc}
 @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2b3340;--card:#161b22;

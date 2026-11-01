@@ -91,9 +91,10 @@
     } else {
       payload = new URLSearchParams(data);
     }
-    // The page sends Referrer-Policy: no-referrer; with that policy Chromium sends "Origin: null" on
-    // POST, which Django's CSRF check rejects. A same-origin policy on these requests only keeps the
-    // Origin header for our own server.
+    // The page sends Referrer-Policy: no-referrer. Under that policy a browser may send "Origin: null"
+    // on POST (siteward saw this with form posts), which Django's CSRF check rejects. A same-origin
+    // policy on these requests keeps a real Origin header, and only for our own server. (Chromium's
+    // fetch was seen to pass either way; this is for the other browsers.)
     return fetch(url, {
       method: "POST", headers: headers, body: payload, credentials: "same-origin",
       referrerPolicy: "same-origin", cache: "no-store"

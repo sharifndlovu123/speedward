@@ -105,8 +105,7 @@ CSRF_COOKIE_NAME = "speedward_csrftoken"  # own name: other Django apps on local
 CSRF_COOKIE_HTTPONLY = True  # the page carries the token in a <meta> tag instead
 CSRF_COOKIE_SAMESITE = "Strict"
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_REFERRER_POLICY = "no-referrer"  # results.js sends POSTs with referrerPolicy "same-origin"
-X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "no-referrer"  # results.js sends its POSTs with referrerPolicy "same-origin"X_FRAME_OPTIONS = "DENY"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # a saved result posted back for render/export
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 # Logs never contain targets or results: our code logs only exception type names, and Django's own
