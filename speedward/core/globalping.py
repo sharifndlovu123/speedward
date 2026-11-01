@@ -111,7 +111,7 @@ class GlobalpingClient:
         `locations` is a list of location dicts, or a previous measurement id (a plain string) to
         repeat the test on the same probes.
         """
-        body = {"type": type, "target": target, "locations": locations, "measurementOptions": options}
+        body = {"type": type, "target": target, "locations": locations, "measurementOptions": options or {}}  # the API rejects null
         resp = self._request("POST", "/measurements", json=body)
         if resp.status_code == 422 and isinstance(locations, str):
             raise ProbeReuseUnavailable("the earlier measurement's probes are no longer available")

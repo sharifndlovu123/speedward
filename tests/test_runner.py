@@ -60,6 +60,9 @@ def test_default_scan_runs_cold_warm_ping_with_one_target(fake):
     assert len(rep.locations) == 2 and all(r.status == "measured" for r in rep.locations)
     assert [r.location.city for r in rep.locations] == [p["probe"]["city"] for p in fixture("http_ok")["results"]]
     assert rep.paths == [] and rep.dns == [] and rep.browser is None
+    # ping/mtr/dns pass no options; the strict fake 400s on null, so this proves {} is sent
+    assert all(r.ping_ms is not None for r in rep.locations)
+    assert all(isinstance(p.get("measurementOptions"), dict) for p in posts)
 
 
 def test_path_query_and_port_go_into_http_options(fake):

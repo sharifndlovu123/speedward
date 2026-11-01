@@ -135,6 +135,9 @@ class FakeGlobalping:
                     return
                 if self.path != "/v1/measurements":
                     return self._send(404, {})
+                if "measurementOptions" in body and not isinstance(body["measurementOptions"], dict):
+                    return self._send(400, {"error": {"type": "validation_error",
+                                                      "message": "Parameter validation failed."}})
                 if outer.force_429 is not None:
                     headers, raw = outer.force_429
                     return self._send(429, raw, headers)

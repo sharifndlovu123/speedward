@@ -235,3 +235,15 @@ def test_classify_handles_missing_tls_and_status_code():
 
 def test_classify_unfinished_result_is_test_failed():
     assert classify({"probe": {}, "result": {"status": "in-progress"}})[0] == "test_failed"
+
+
+def test_create_with_no_options_sends_empty_object_not_null(fake):
+    c = client(fake)
+    c.create("ping", "example.com", [{"magic": "Berlin"}], None)
+    assert [r[3] for r in fake.requests if r[0] == "POST"][0]["measurementOptions"] == {}
+
+
+def test_strict_fake_rejects_null_options(fake):
+    r = httpx.post(fake.base_url + "/measurements", json={
+        "type": "ping", "target": "x", "locations": [{"magic": "Berlin"}], "measurementOptions": None})
+    assert r.status_code == 400 and r.json()["error"]["message"] == "Parameter validation failed."
