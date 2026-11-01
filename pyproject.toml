@@ -35,5 +35,5 @@ speedward = ["reports/*.j2", "reports/*.json", "web/templates/**/*", "web/static
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# DJANGO_SETTINGS_MODULE = "speedward.web.settings"  # enable once speedward/web/settings.py exists (web task)
+DJANGO_SETTINGS_MODULE = "speedward.web.settings"
 filterwarnings = ["ignore:No directory at:UserWarning"]

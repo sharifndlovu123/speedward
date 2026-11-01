@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="top">
+  <h1>speedward</h1>
+  <p class="mute">How fast your site loads from around the world.</p>
+  <p class="notice-line">{{ notice }}</p>
+  <p class="status" id="status-line">{{ status_line }}{% if status_link %}<a href="https://globalping.io" rel="noopener noreferrer">https://globalping.io</a>{% endif %}</p>
+</header>
+
+<div id="notice" class="notice" role="status" hidden></div>
+
+<section id="saved-banner" class="banner" hidden aria-label="Saved results">
+  <p id="saved-text"></p>
+  <div class="actions">
+    <button type="button" id="banner-run-again">Run again</button>
+    <button type="button" id="banner-clear" class="secondary">Clear now</button>
+  </div>
+</section>
+
+<form id="scan-form" class="card" autocomplete="off" novalidate>
+  <label for="url">Site address</label>
+  <input id="url" name="url" type="url" inputmode="url" placeholder="https://example.com" required>
+
+  <label for="locations">Locations <span class="mute">(comma-separated; leave empty for the default spread)</span></label>
+  <input id="locations" name="locations" type="text" placeholder="{{ default_locations }}">
+
+  <fieldset>
+    <legend>Extra checks <span class="mute">(use more tests)</span></legend>
+    <label class="check"><input type="checkbox" name="traceroute" value="on"> Network path and packet loss</label>
+    <label class="check"><input type="checkbox" name="dns" value="on"> DNS answers in each region</label>
+  </fieldset>
+
+  <details>
+    <summary>Pass/fail limits</summary>
+    <div class="limits">
+      <label for="max_ttfb">Max first byte (ms)<input id="max_ttfb" name="max_ttfb" type="number" min="1" step="any"></label>
+      <label for="max_load">Max load (ms)<input id="max_load" name="max_load" type="number" min="1" step="any"></label>
+      <label for="max_blocked">Max blocked locations<input id="max_blocked" name="max_blocked" type="number" min="0" step="1"></label>
+    </div>
+    <p class="mute">Checked against every location that was measured. Locations that could not be tested never count as passing.</p>
+  </details>
+
+  <p id="estimate" class="estimate" aria-live="polite"></p>
+  <p id="over" class="warn" hidden></p>
+  <label class="check" id="confirm-wrap" hidden><input type="checkbox" id="confirm" name="confirm" value="1"> Go ahead anyway. Tests over the hourly allowance use Globalping credits if you have them; otherwise they will not run.</label>
+  <p id="form-error" class="error" role="alert" hidden></p>
+  <button type="submit" id="start">Start test</button>
+</form>
+
+<section id="progress" class="card" hidden aria-live="polite">
+  <h2>Testing</h2>
+  <ul id="progress-lines"></ul>
+</section>
+
+<section id="results" hidden>
+  <div class="results-head">
+    <h2 id="results-title"></h2>
+    <div class="actions">
+      <span class="mute">Export:</span>
+      <button type="button" data-export="html">HTML report</button>
+      <button type="button" data-export="json">JSON</button>
+      <button type="button" data-export="md">Markdown</button>
+      <button type="button" id="results-run-again">Run again</button>
+      <button type="button" id="results-clear" class="secondary">Clear now</button>
+    </div>
+  </div>
+  <p class="mute">Kept only until you close this tab ({{ ttl_minutes }} minutes at most). Export now if you want to keep these results.</p>
+  <div id="results-body"></div>
+</section>
+
+<footer class="mute">Tests run on the <a href="https://globalping.io" rel="noopener noreferrer">Globalping</a> network. Nothing about the sites you test is stored on this server.</footer>
+{% endblock %}

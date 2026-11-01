@@ -77,8 +77,8 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         server_label = "Server position unknown"
 
     arcs, dots, labels = [], [], []
-    for r in report.locations:
-        if r in unplaced:
+    for row, r in enumerate(report.locations):
+        if r.location.lat is None or r.location.lon is None:
             continue
         x, y = proj(r.location.lat, r.location.lon)
         name = _city(r)
@@ -105,7 +105,9 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             dist = ((x - sx) ** 2 + (y - sy) ** 2) ** 0.5
             cy = my - dist * 0.25
             arcs.append(f'<path d="M{_num(sx)},{_num(sy)} Q{_num(mx)},{_num(cy)} {_num(x)},{_num(y)}" {line}/>')
-        dots.append(f'<circle cx="{_num(x)}" cy="{_num(y)}" r="{_num(4 * k)}" {dot}>'
+        # data-row ties the dot to its row in the results table (the web UI highlights it on click).
+        dots.append(f'<circle class="sw-dot" data-row="{row}" tabindex="0" cx="{_num(x)}" cy="{_num(y)}" '
+                    f'r="{_num(4 * k)}" {dot}>'
                     f"<title>{escape(title)}</title></circle>")
         dim = "" if fb is not None else ' opacity="0.7"'
         labels.append(f'<text x="{_num(x + 6 * k)}" y="{_num(y - 6 * k)}" font-size="{_num(fs)}"'
