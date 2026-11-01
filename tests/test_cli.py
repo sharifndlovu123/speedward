@@ -168,3 +168,38 @@ def test_env_file_token_used_but_real_env_wins(fake, monkeypatch, tmp_path):
     monkeypatch.setenv("GLOBALPING_TOKEN", "from-env")
     scan("--estimate")
     assert fake.tokens_seen()[0] == "Bearer from-env"
+
+
+# --- endpoint safety --------------------------------------------------
+
+def test_dotenv_cannot_redirect_endpoint(fake, tmp_path):
+    (tmp_path / ".env").write_text("GLOBALPING_BASE_URL=http://evil.example/\nGLOBALPING_TOKEN=tok-file\n")
+    r = scan("--estimate")
+    assert r.exit_code == 0
+    assert "evil.example" not in r.stderr
+    assert fake.tokens_seen()[0] == "Bearer tok-file"
+
+
+def test_remote_override_with_token_refused(fake, monkeypatch):
+    monkeypatch.setenv("GLOBALPING_BASE_URL", "http://evil.example/v1")
+    monkeypatch.setenv("GLOBALPING_TOKEN", TOKEN)
+    r = scan("--estimate")
+    assert r.exit_code == 2
+    assert "Refusing to send a Globalping key to a non-default, non-local endpoint." in r.stderr
+    assert "Using a custom Globalping endpoint: evil.example" in r.stderr
+    assert TOKEN not in r.stdout + r.stderr
+    assert fake.requests == []
+
+
+def test_dotenv_allowlist(tmp_path, monkeypatch):
+    from speedward.cli.main import _environment
+    (tmp_path / ".env").write_text("GLOBALPING_TOKEN=t\nGEOIP_DB=/x\nSERVER_LAT=1\nSERVER_LON=2\n"
+                                   "FAST_MS=1\nSLOW_MS=2\nGLOBALPING_BASE_URL=http://e/\nPATH=/evil\nOTHER=1\n")
+    monkeypatch.chdir(tmp_path)
+    for k in ("GLOBALPING_TOKEN", "GEOIP_DB", "SERVER_LAT", "SERVER_LON", "FAST_MS", "SLOW_MS", "OTHER"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.delenv("GLOBALPING_BASE_URL", raising=False)
+    env = _environment()
+    assert env["GLOBALPING_TOKEN"] == "t" and env["SLOW_MS"] == "2" and env["GEOIP_DB"] == "/x"
+    assert "OTHER" not in env and "GLOBALPING_BASE_URL" not in env
+    assert env["PATH"] != "/evil"

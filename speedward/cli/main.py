@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import typer
 
 from speedward.core.analysis import Limits, evaluate_limits
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.geo import geolocator_from_env
-from speedward.core.globalping import GlobalpingClient, GlobalpingError
+from speedward.core.globalping import DEFAULT_BASE_URL, GlobalpingClient, GlobalpingError
 from speedward.core.locations import parse_locations
 from speedward.core.models import clean
 from speedward.core.runner import ScanError, run_scan
@@ -53,9 +54,16 @@ def load_dotenv(path: Path) -> dict[str, str]:
     return out
 
 
+# Only these keys may come from a `.env` in the current directory, which may be untrusted
+# (e.g. a cloned repo). Anything that could move an endpoint or path is deliberately absent.
+DOTENV_ALLOWED = ("GLOBALPING_TOKEN", "GEOIP_DB", "SERVER_LAT", "SERVER_LON", "FAST_MS", "SLOW_MS")
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
 def _environment() -> dict[str, str]:
-    """The real environment, with `.env` in the current directory filling gaps (never overriding)."""
-    return {**load_dotenv(Path(".env")), **os.environ}
+    """The real environment, with allowlisted `.env` keys filling gaps (never overriding)."""
+    file_env = {k: v for k, v in load_dotenv(Path(".env")).items() if k in DOTENV_ALLOWED}
+    return {**file_env, **os.environ}
 
 
 @app.command()
@@ -92,8 +100,17 @@ def scan(
 
     env = _environment()
     # GLOBALPING_BASE_URL is for tests only (points at a local fake); deliberately not in --help.
-    kwargs = {"base_url": env["GLOBALPING_BASE_URL"]} if env.get("GLOBALPING_BASE_URL") else {}
+    # Read from the real process environment only, never from `.env`.
+    base_url = os.environ.get("GLOBALPING_BASE_URL") or None
+    kwargs = {}
     token = env.get("GLOBALPING_TOKEN") or None
+    if base_url and base_url.rstrip("/") != DEFAULT_BASE_URL:
+        host = urlsplit(base_url).hostname or ""
+        _err(f"Using a custom Globalping endpoint: {clean(host)}")
+        if token and host not in LOOPBACK_HOSTS:
+            _err("Refusing to send a Globalping key to a non-default, non-local endpoint.")
+            raise typer.Exit(2)
+        kwargs["base_url"] = base_url
     client = GlobalpingClient(token=token, **kwargs)
 
     try:
