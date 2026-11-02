@@ -195,14 +195,14 @@ def test_remote_override_with_token_refused(fake, monkeypatch):
 
 
 def test_dotenv_allowlist(tmp_path, monkeypatch):
-    from speedward.cli.main import _environment
+    from speedward.cli.main import environment
     (tmp_path / ".env").write_text("GLOBALPING_TOKEN=t\nGEOIP_DB=/x\nSERVER_LAT=1\nSERVER_LON=2\n"
                                    "FAST_MS=1\nSLOW_MS=2\nGLOBALPING_BASE_URL=http://e/\nPATH=/evil\nOTHER=1\n")
     monkeypatch.chdir(tmp_path)
     for k in ("GLOBALPING_TOKEN", "GEOIP_DB", "SERVER_LAT", "SERVER_LON", "FAST_MS", "SLOW_MS", "OTHER"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.delenv("GLOBALPING_BASE_URL", raising=False)
-    env = _environment()
+    env = environment()
     assert env["GLOBALPING_TOKEN"] == "t" and env["SLOW_MS"] == "2" and env["GEOIP_DB"] == "/x"
     assert "OTHER" not in env and "GLOBALPING_BASE_URL" not in env
     assert env["PATH"] != "/evil"
@@ -353,3 +353,13 @@ def test_max_page_weight_refused_while_browser_test_is_missing(fake):
     assert r.exit_code == 2
     assert "--max-page-weight needs the browser test, which is not available in this build yet" in r.stderr
     assert fake.posts() == []
+
+
+def test_smoke_script_uses_only_public_names():
+    import ast
+    from pathlib import Path
+    tree = ast.parse((Path(__file__).resolve().parent.parent / "scripts" / "smoke_live.py").read_text())
+    imported = [a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names]
+    assert imported and not [name for name in imported if name.startswith("_")]
+    from speedward.cli.main import environment
+    assert callable(environment)

@@ -46,7 +46,7 @@ def load_dotenv(path: Path) -> dict[str, str]:
     return config.load_dotenv(path, on_warning=_err)
 
 
-def _environment() -> dict[str, str]:
+def environment() -> dict[str, str]:
     """The real environment, with allowlisted `.env` keys filling gaps (never overriding)."""
     return config.build_environment(Path(".env"), on_warning=_err)
 
@@ -113,7 +113,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         _err("Note: the browser test is not available in this build yet; continuing without it.")
     plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False)
 
-    env = _environment()
+    env = environment()
     try:  # checked before any test is spent
         fast_ms, slow_ms = config.speed_thresholds(env)
     except ValueError as exc:
