@@ -86,7 +86,7 @@ def report_dict(**overrides):
              "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None,
              "repeat_probe": None, "ping_probe": None},
             {"location": dict(loc, city="Lagos", country="NG", lat=6.5, lon=3.4), "status": "blocked",
-             "reason": "timed out the connection", "stages": None, "repeat_stages": None, "ping_ms": None,
+             "reason": "connection timed out", "stages": None, "repeat_stages": None, "ping_ms": None,
              "http_status": None, "cdn": None, "server_ip": None, "tls_version": None, "http_version": None,
              "redirects": [], "repeat_same_probe": False,
              "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None,

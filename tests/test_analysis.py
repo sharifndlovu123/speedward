@@ -21,7 +21,7 @@ def measured(city, first_byte, total=None, repeat_fb=None, same=False, **stages)
     )
 
 
-def failed(city, status="blocked", reason="timed out the connection"):
+def failed(city, status="blocked", reason="connection timed out"):
     return LocationResult(loc(city), status, reason)
 
 

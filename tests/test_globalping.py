@@ -265,3 +265,32 @@ def test_allowance_fallback_uses_reset_header_from_last_post(fake):
     c.create("http", "example.com", [{"magic": "Berlin"}], HTTP_OPTS)
     fake.limits_status = 500
     assert c.allowance().reset_seconds == 900
+
+
+# --- final review: header overflow and tighter failure matching ----------------------------------
+
+@pytest.mark.parametrize("value", ["inf", "-inf", "1e400", "nan", "Infinity"])
+def test_rate_headers_ignore_malformed_numbers(value):
+    from speedward.core.globalping import parse_rate_headers
+    assert parse_rate_headers({"x-ratelimit-remaining": value, "x-ratelimit-limit": "250"}) == {"limit": 250}
+
+
+def _failed(raw):
+    return {"probe": {}, "result": {"status": "failed", "failureSource": "target", "rawOutput": raw}}
+
+
+@pytest.mark.parametrize("raw, status, reason", [
+    ("Request timed out while establishing the TCP connection.", "blocked", "connection timed out"),
+    ("connect ETIMEDOUT 1.2.3.4:443", "blocked", "connection timed out"),
+    ("queryA ENODATA does-not-exist.example.com", "blocked", "DNS lookup failed"),
+    ("getaddrinfo ENOTFOUND nowhere.example", "blocked", "DNS lookup failed"),
+    # Probe-side resolver trouble is not the site's doing.
+    ("queryA ETIMEOUT example.com", "test_failed", "the test machine's DNS lookup timed out"),
+    ("queryAAAA ETIMEOUT example.com", "test_failed", "the test machine's DNS lookup timed out"),
+    ("getaddrinfo EAI_AGAIN example.com", "test_failed", "the test machine's DNS resolver failed"),
+    # A host name that merely contains "dns" or "tls" says nothing about the cause.
+    ("something odd happened at dns.example.com", "test_failed", "the test failed for an unrecognised reason"),
+    ("strange error for outlets.example", "test_failed", "the test failed for an unrecognised reason"),
+])
+def test_classify_failure_causes(raw, status, reason):
+    assert classify(_failed(raw)) == (status, reason)

@@ -5,6 +5,8 @@ only ever sent as a bearer header: it is kept out of repr, exception messages an
 """
 from __future__ import annotations
 
+import math
+import re
 import time
 from dataclasses import dataclass
 
@@ -49,9 +51,11 @@ class Allowance:
 
 
 def _int(value) -> int | None:
+    """A header number, or None for anything missing or malformed (including inf, nan and 1e400)."""
     try:
-        return int(float(value))
-    except (TypeError, ValueError):
+        number = float(value)
+        return int(number) if math.isfinite(number) else None
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -182,20 +186,25 @@ class GlobalpingClient:
 
 # --- classification ---------------------------------------------------
 
-# Causes on the site's side, matched against the probe's rawOutput text.
+# Failure causes, matched as whole words against the probe's rawOutput text (which may also hold the
+# target's host name, so loose substrings such as "dns" or "tls" would match a name like dns.example).
+# Probe-side resolver trouble comes first: it is not the site's doing, so it is "test failed".
+_PROBE_CAUSES = (
+    ("the test machine's DNS lookup timed out", (r"query(?:a|aaaa)\s+etimeout",)),
+    ("the test machine's DNS resolver failed", (r"eai_again",)),
+)
 _TARGET_CAUSES = (
-    ("timed out the connection", ("timed out", "etimedout", "timeout")),
-    ("DNS lookup failed", ("enodata", "enotfound", "queryA", "queryAAAA", "eai_again", "nxdomain", "dns")),
-    ("connection refused", ("econnrefused", "refused")),
-    ("connection reset", ("econnreset", "reset by peer")),
-    ("TLS handshake failed", ("tls", "ssl", "certificate", "cert_", "handshake")),
+    ("DNS lookup failed", (r"enodata", r"enotfound", r"nxdomain", r"query(?:a|aaaa)")),
+    ("connection timed out", (r"timed out", r"etimedout", r"timeout")),
+    ("connection refused", (r"econnrefused", r"refused")),
+    ("connection reset", (r"econnreset", r"reset by peer")),
+    ("TLS handshake failed", (r"tls", r"ssl", r"certificate", r"cert_\w*", r"handshake")),
 )
 
 
-def _target_cause(raw: str) -> str | None:
-    low = raw.lower()
-    for label, needles in _TARGET_CAUSES:
-        if any(n.lower() in low for n in needles):
+def _match(raw: str, causes) -> str | None:
+    for label, patterns in causes:
+        if any(re.search(rf"\b{p}\b", raw, re.IGNORECASE) for p in patterns):
             return label
     return None
 
@@ -223,7 +232,10 @@ def classify(raw_probe_result: dict) -> tuple[str, str]:
     if status == "failed":
         if result.get("failureSource") != "target":
             return "test_failed", "the test failed on the Globalping side"
-        cause = _target_cause(raw)
+        probe_cause = _match(raw, _PROBE_CAUSES)
+        if probe_cause is not None:
+            return "test_failed", probe_cause
+        cause = _match(raw, _TARGET_CAUSES)
         if cause is None:
             return "test_failed", "the test failed for an unrecognised reason"
         return "blocked", cause
