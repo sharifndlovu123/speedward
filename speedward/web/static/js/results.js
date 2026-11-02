@@ -81,6 +81,7 @@
     setText(el, text || "");
     show(el, !!text);
     if (text && hasResults) { setPicking(true); }  // the panel with the message must be on screen
+    if (text && el.scrollIntoView) { el.scrollIntoView({ block: "nearest" }); }  // short windows scroll the column
   }
 
   function post(url, data, asJson) {

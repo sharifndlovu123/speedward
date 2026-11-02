@@ -78,3 +78,36 @@ def test_error_state(page, live_site, fake_globalping, watch, scheme):
     expect(page.locator("#form-error")).to_be_visible()
     expect(page.locator("#form-error")).to_be_in_viewport()
     check(page, f"error {scheme}")
+
+
+# 320 px wide (WCAG reflow), and 1280x800 at 200% zoom, which lays out like a 640x400 window.
+REFLOW = [{"width": 320, "height": 640}, {"width": 640, "height": 400}]
+CLIPPED = """() => {
+  const w = document.documentElement.clientWidth, out = [];
+  if (document.documentElement.scrollWidth > w) out.push('page scrolls sideways');
+  // Only the export buttons row and the wide tables scroll sideways on purpose.
+  const sideways = '.results-bar .actions, .scroll';
+  for (const el of document.querySelectorAll('.panel, .left-col, .panel-body')) {
+    if (el.closest('[hidden]') || el.closest(sideways)) continue;
+    if (el.scrollWidth > el.clientWidth + 1) out.push('sideways overflow in #' + (el.id || el.className));
+  }
+  for (const el of document.querySelectorAll('button, input:not([type=hidden]), select, summary, a')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || el.closest('[hidden]') || el.closest(sideways)) continue;
+    if (r.left < -1 || r.right > w + 1) out.push(el.outerHTML.slice(0, 80));
+  }
+  return out;
+}"""
+
+
+@pytest.mark.parametrize("size", REFLOW, ids=["320", "zoom200"])
+def test_reflow_no_sideways_scroll_or_clipped_controls(page, live_site, watch, size):
+    page.set_viewport_size(size)
+    page.emulate_media(reduced_motion="reduce")
+    start_scan(page, live_site)
+    expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
+    assert page.evaluate(CLIPPED) == []
+    page.click("#drawer-toggle")
+    assert page.evaluate(CLIPPED) == []
+    page.goto(live_site + "/")
+    assert page.evaluate(CLIPPED) == []
