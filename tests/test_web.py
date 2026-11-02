@@ -19,7 +19,7 @@ from tests.fake_globalping import FakeGlobalping, fixture
 TOKEN = "tok-web-secret-123"
 TARGET = "https://secret-target.example/page"
 HOSTILE = "<script>alert(1)</script>"
-START_FAILED = "The scan could not start. Check the address and your Globalping key."
+START_FAILED = "The scan could not start because Globalping could not be used. Try again later."
 STATIC_JS = Path(__file__).resolve().parent.parent / "speedward" / "web" / "static" / "js" / "results.js"
 
 
@@ -358,6 +358,19 @@ def test_scan_error_text_not_echoed(client, monkeypatch, caplog):
     done = wait_done(client, start(client).json()["id"])
     assert done.json() == {"status": "error", "error": START_FAILED, "progress": []}
     assert "secret-site" not in done.content.decode() and "secret-site" not in caplog.text
+
+
+@pytest.mark.parametrize("setup, message", [
+    (lambda f: setattr(f, "rate_limit_after", 0), "Globalping limit reached"),
+    (lambda f: setattr(f, "create_error", (422, {"error": {"type": "no_probes_found"}})),
+     "no test machine found for one of the places you chose"),
+])
+def test_start_failure_says_why(client, fake, setup, message):
+    setup(fake)
+    done = wait_done(client, start(client).json()["id"])
+    assert done.json()["status"] == "error"
+    assert message in done.json()["error"]
+    assert "Check the address and your Globalping key" not in done.json()["error"]
 
 
 def test_unexpected_error_fixed_message(client, monkeypatch, caplog):

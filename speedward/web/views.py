@@ -32,7 +32,7 @@ from speedward.core.geo import geolocator_from_env, parse_pin
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
 from speedward.core.locations import CATALOG, CONTINENTS, DEFAULT_LOCATIONS, parse_locations, per_continent
 from speedward.core.models import ScanReport
-from speedward.core.runner import ScanError, run_scan
+from speedward.core.runner import ScanError, run_scan, start_message
 from speedward.core.target import normalise_target
 from speedward.reports import render as render_report
 from speedward.reports._view import context
@@ -43,7 +43,6 @@ from . import state
 logger = logging.getLogger(__name__)
 
 NOTICE = "Only test sites you own or are authorised to test."
-START_FAILED = "The scan could not start. Check the address and your Globalping key."
 GLOBALPING_FAILED = "The scan failed because Globalping could not be used."
 UNEXPECTED = "The scan failed unexpectedly."
 BUSY = "The scanner is busy with other scans. Please try again in a minute."
@@ -159,8 +158,8 @@ def _run(st: state.ScanState, entry: state.Entry, url: str, plan: Plan, client: 
     try:
         report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo)
         st.finish(entry.id, report.to_dict())
-    except ScanError:
-        st.fail(entry.id, START_FAILED)
+    except ScanError as exc:  # only the fixed message for its kind; the text may hold the target
+        st.fail(entry.id, start_message(exc.kind))
     except GlobalpingError:
         st.fail(entry.id, GLOBALPING_FAILED)
     except Exception as exc:  # noqa: BLE001 - the text may contain the target; never log it

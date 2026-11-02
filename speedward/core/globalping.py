@@ -16,7 +16,12 @@ KEY_TESTS_PER_HOUR, KEY_MAX_PROBES = 500, 500
 
 
 class GlobalpingError(Exception):
-    """Anything that stopped a Globalping call. Messages never contain the token."""
+    """Anything that stopped a Globalping call. Messages never contain the token. `status` is the
+    HTTP status Globalping answered with, when there was one."""
+
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 class RateLimited(GlobalpingError):
@@ -24,7 +29,7 @@ class RateLimited(GlobalpingError):
 
     def __init__(self, message: str = "Globalping limit reached", remaining: int | None = None,
                  retry_after: int | None = None):
-        super().__init__(message)
+        super().__init__(message, 429)
         self.remaining = remaining
         self.retry_after = retry_after  # seconds, from retry-after or x-ratelimit-reset
 
@@ -99,7 +104,7 @@ class GlobalpingClient:
             raise RateLimited(remaining=rate.get("remaining"),
                               retry_after=retry if retry is not None else rate.get("reset"))
         if resp.status_code == 401:
-            raise GlobalpingError("Globalping rejected the API key (401)")
+            raise GlobalpingError("Globalping rejected the API key (401)", 401)
         return resp
 
     @staticmethod
@@ -120,9 +125,10 @@ class GlobalpingClient:
         body = {"type": type, "target": target, "locations": locations, "measurementOptions": options or {}}  # the API rejects null
         resp = self._request("POST", "/measurements", json=body)
         if resp.status_code == 422 and isinstance(locations, str):
-            raise ProbeReuseUnavailable("the earlier measurement's probes are no longer available")
+            raise ProbeReuseUnavailable("the earlier measurement's probes are no longer available", 422)
         if resp.status_code != 202:
-            raise GlobalpingError(f"Globalping refused the test ({resp.status_code}) {self._api_message(resp)}".strip())
+            raise GlobalpingError(f"Globalping refused the test ({resp.status_code}) {self._api_message(resp)}".strip(),
+                                  resp.status_code)
         self.last_rate = parse_rate_headers(resp.headers)
         try:
             return resp.json()["id"]

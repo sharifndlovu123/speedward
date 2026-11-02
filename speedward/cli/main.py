@@ -15,7 +15,7 @@ from speedward.core.geo import geolocator_from_env
 from speedward.core.globalping import DEFAULT_BASE_URL, GlobalpingClient, GlobalpingError
 from speedward.core.locations import parse_locations
 from speedward.core.models import clean
-from speedward.core.runner import ScanError, run_scan
+from speedward.core.runner import ScanError, run_scan, start_message
 from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
 from speedward.reports._view import skipped
@@ -25,7 +25,6 @@ app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_e
 NOTICE = "Only test sites you own or are authorised to test."
 NO_KEY = ("No Globalping key set (limits: 250 tests/hour, 50 locations). "
           "A key is free up to a limit: https://globalping.io")
-START_FAILED = "The scan could not start. Check the address and your Globalping key."
 
 
 @app.callback()
@@ -151,7 +150,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         report = run_scan(url, plan, client, on_progress=lambda line: _err(f"  {line}"),
                           geo=geolocator_from_env(env))
     except ScanError as exc:
-        _err(START_FAILED)
+        _err(start_message(exc.kind))
         if verbose:
             _err(f"Detail: {clean(str(exc))}")
         raise typer.Exit(2) from None

@@ -145,7 +145,7 @@ def test_scan_error_text_not_echoed(fake, monkeypatch):
     monkeypatch.setattr("speedward.cli.main.run_scan", boom)
     r = scan()
     assert r.exit_code == 2
-    assert "The scan could not start. Check the address and your Globalping key." in r.stderr
+    assert "The scan could not start because Globalping could not be used. Try again later." in r.stderr
     assert "secret-site.example" not in r.stderr
     r = scan("--verbose")
     assert "secret-site.example" in r.stderr and "\x1b" not in r.stderr
@@ -305,3 +305,18 @@ def test_cli_says_when_repeats_ran_on_other_probes(fake):
     assert "repeat request (different probe)" in r.stdout
     assert ("Note: 2 locations were repeated on a different test machine; "
             "they are left out of the cache gain.") in r.stderr
+
+
+def test_cli_start_failure_names_the_limit(fake):
+    fake.rate_limit_after = 0
+    r = scan()
+    assert r.exit_code == 2
+    assert "The scan could not start: Globalping limit reached." in r.stderr
+    assert "Check the address and your Globalping key" not in r.stderr
+
+
+def test_cli_start_failure_names_a_place_without_probes(fake):
+    fake.create_error = (422, {"error": {"type": "no_probes_found"}})
+    r = scan()
+    assert r.exit_code == 2
+    assert "no test machine found for one of the places you chose" in r.stderr

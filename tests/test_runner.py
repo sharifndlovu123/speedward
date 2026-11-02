@@ -452,3 +452,39 @@ def test_same_city_fallback_is_labelled(fake):
     rep = run_scan("example.com", plan(), client(fake))
     assert [r.repeat_probe for r in rep.locations] == ["same probe", "different probe, same city"]
     assert [r.repeat_same_probe for r in rep.locations] == [True, False]
+
+
+# --- start failures say why (final review item 3) ------------------------------------------------
+
+NO_PROBES = (422, {"error": {"type": "no_probes_found", "message": "No matching IPv4 probes available."}})
+INVALID = (400, {"error": {"type": "validation_error", "message": "Parameter validation failed."}})
+
+
+@pytest.mark.parametrize("setup, kind", [
+    (lambda f: setattr(f, "rate_limit_after", 0), "limit"),
+    (lambda f: setattr(f, "create_error", NO_PROBES), "no_probe"),
+    (lambda f: setattr(f, "create_error", INVALID), "address"),
+    (lambda f: setattr(f, "create_error", (500, {})), "other"),
+    (lambda f: setattr(f, "valid_token", "another-token"), "key"),
+])
+def test_scan_error_kind_says_why_the_start_failed(fake, setup, kind):
+    setup(fake)
+    with pytest.raises(ScanError) as e:
+        run_scan("example.com", plan(), client(fake))
+    assert e.value.kind == kind
+    assert TOKEN not in str(e.value)
+
+
+def test_bad_address_is_an_address_scan_error():
+    with pytest.raises(ScanError) as e:
+        run_scan("not a url at all", plan(), GlobalpingClient(base_url="http://127.0.0.1:9/v1"))
+    assert e.value.kind == "address"
+
+
+def test_start_messages_are_fixed_and_distinct():
+    from speedward.core.runner import START_MESSAGES, start_message
+    assert len(set(START_MESSAGES.values())) == len(START_MESSAGES)
+    assert "limit reached" in start_message("limit")
+    assert "no test machine found for one of the places you chose" in start_message("no_probe")
+    assert "key" in start_message("key") and "address" in start_message("address")
+    assert start_message("unknown kind") == START_MESSAGES["other"]

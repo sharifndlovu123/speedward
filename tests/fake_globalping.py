@@ -34,6 +34,7 @@ class FakeGlobalping:
         self.queued: dict[str, list[dict]] = {}  # one-shot docs per type, used before templates
         self.rate_limit_after: int | None = None  # accept this many POSTs, then answer 429
         self.reuse_expired = False  # every POST with a measurement id as locations gets 422
+        self.create_error: tuple[int, dict] | None = None  # (status, body) for every POST
         self._accepted = 0
         self._polls: dict[str, int] = {}
         self._counter = 0
@@ -142,6 +143,8 @@ class FakeGlobalping:
                 if "measurementOptions" in body and not isinstance(body["measurementOptions"], dict):
                     return self._send(400, {"error": {"type": "validation_error",
                                                       "message": "Parameter validation failed."}})
+                if outer.create_error is not None:
+                    return self._send(*outer.create_error)
                 if outer.force_429 is not None:
                     headers, raw = outer.force_429
                     return self._send(429, raw, headers)

@@ -45,8 +45,32 @@ from speedward.core.target import normalise_target
 _HTTP_VERSION = re.compile(r"^HTTP/(\d(?:\.\d)?)\s")
 
 
+# Why a scan could not start, in fixed words (no target, no exception text): shown by the web UI and CLI.
+START_MESSAGES = {
+    "limit": "The scan could not start: Globalping limit reached. Try again when the hourly allowance resets.",
+    "no_probe": ("The scan could not start: no test machine found for one of the places you chose. "
+                 "Change or remove that place and try again."),
+    "key": "The scan could not start: Globalping rejected the API key. Check the GLOBALPING_TOKEN setting.",
+    "address": "The scan could not start: the address was not accepted. Check it and try again.",
+    "other": "The scan could not start because Globalping could not be used. Try again later.",
+}
+
+
+def start_message(kind: str) -> str:
+    return START_MESSAGES.get(kind, START_MESSAGES["other"])
+
+
+def _start_kind(e: GlobalpingError) -> str:
+    return {429: "limit", 422: "no_probe", 401: "key", 400: "address"}.get(getattr(e, "status", None), "other")
+
+
 class ScanError(Exception):
-    """The scan could not start at all. The message is safe to show (no token)."""
+    """The scan could not start at all. The message is safe to show (no token) but may hold the target,
+    so the web UI and CLI show start_message(kind) instead; `kind` is a START_MESSAGES key."""
+
+    def __init__(self, message: str = "", kind: str = "other"):
+        super().__init__(message)
+        self.kind = kind if kind in START_MESSAGES else "other"
 
 
 # --- small parsers -------------------------------------------------------
@@ -236,7 +260,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
     try:
         target = normalise_target(url)
     except ValueError as e:
-        raise ScanError(str(e)) from None
+        raise ScanError(str(e), "address") from None
     parts = urlsplit(target)
     host = parts.hostname or ""
     if ":" in host:  # IPv6 literal; Globalping takes it bare
@@ -251,9 +275,9 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
     try:
         cold_id = client.create("http", host, plan.locations, http_opts)
     except RateLimited:
-        raise ScanError(f"{LIMIT_REACHED}; no test could be started") from None
+        raise ScanError(f"{LIMIT_REACHED}; no test could be started", "limit") from None
     except GlobalpingError as e:
-        raise ScanError(f"The test could not be started: {e}") from None
+        raise ScanError(f"The test could not be started: {e}", _start_kind(e)) from None
     try:
         cold_doc = client.wait(cold_id)
     except GlobalpingError:
