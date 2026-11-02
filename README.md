@@ -315,7 +315,9 @@ The cost of each ticked check and the total are shown before every scan (for exa
 `speedward scan URL --checks consistency,mtr --estimate`), and the over-allowance confirmation applies.
 A check the address cannot use (HTTP/2 on a plain `http://` address; IPv6, DNS resolvers and the DNS
 trace on an IP address) is skipped and counted as 0 in the estimate. Ticking both "Network path" (or
-`--traceroute`) and "Path loss and jitter" runs two separate mtr tests per place, and both are counted.
+`--traceroute`) and "Path loss and jitter" runs one mtr test per place (with the larger packet count, 5)
+that fills both the routes and the path check; the estimate counts it once ("shares the Network path
+test = 0").
 TLS 1.2 seen in the main test adds "TLS 1.2 costs one more round trip" to the TLS block once any speed
 check ran. The notes sit under each block's own text and never change its mark (biggest / possible block).
 

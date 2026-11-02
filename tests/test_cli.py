@@ -442,3 +442,12 @@ def test_estimate_leaves_out_checks_the_address_cannot_use(fake):
     assert "about 8 tests" in r.stderr  # 6 default + mtr 2; the rest cannot run on this address
     assert "HTTP/2 against HTTP/1.1: not run for this address = 0" in r.stderr
     assert fake.posts() == []
+
+
+def test_estimate_counts_one_mtr_when_network_path_and_mtr_are_both_ticked(fake):
+    r = scan("--estimate", "--traceroute", "--checks", "mtr")
+    assert r.exit_code == 0
+    assert "Network path +1 per place = 2" in r.stderr
+    assert "Path loss and jitter (mtr): shares the Network path test = 0" in r.stderr
+    assert "about 8 tests" in r.stderr
+    assert fake.posts() == []

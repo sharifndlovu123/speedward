@@ -26,6 +26,7 @@ from speedward.core.checks import (
     IPV6,
     MTR,
     MTR_PACKETS,
+    PATH_PACKETS,
     PLAIN_HTTP,
     PORT,
     PORT_PACKETS,
@@ -347,11 +348,18 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
                 fields[i].update(ping_ms=avg, ping_probe=_probe_match(ping_reused, same))
 
     # 4. Optional path (mtr: gives per-hop ASN and loss, traceroute does not).
+    # With the mtr check ticked as well, this one measurement serves both (plan.shared): one test per
+    # place, with the larger of the two packet counts.
     paths: list[PathResult] = []
+    shared_mtr = None
     if plan.traceroute:
         progress("Tracing the network path")
-        doc, reused, why = scan.measure("network path", "mtr", cold_id, None, fallback_locations=plan.locations)
+        shared = plan.shared(MTR)
+        options = {"packets": max(PATH_PACKETS, MTR_PACKETS)} if shared else None
+        doc, reused, why = scan.measure("network path", "mtr", cold_id, options, fallback_locations=plan.locations)
         paths = _paths(cold, doc, why, reused)
+        if shared:
+            shared_mtr = (doc, reused, why)
 
     # 5. Optional DNS answers.
     dns: list[DnsResult] = []
@@ -363,7 +371,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
     # 6. The ticked "More checks", on the same probes.
     reach = _reach(scan, cold, cold_id, parts, http_opts, plan) if _reach_on(plan) else None
     # 6b. The ticked "Is it fast?" checks, on the same probes.
-    speed = _speed(scan, cold, cold_id, parts, http_opts, plan) if _speed_on(plan) else None
+    speed = _speed(scan, cold, cold_id, parts, http_opts, plan, shared_mtr) if _speed_on(plan) else None
 
     # 7. Where the server that answered each measured result is (offline: airport table, geo-IP).
     _place_servers(cold, fields, geo)
@@ -807,7 +815,8 @@ def _mtr_failed(res: dict, status: str, reason: str):
     return "test_failed", f"the path test failed: {reason}"
 
 
-def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) -> list[SpeedResult]:
+def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan,
+           shared_mtr: tuple | None = None) -> list[SpeedResult]:
     is_ip = is_ip_host(scan.host)
     out: list[SpeedResult] = []
 
@@ -835,7 +844,10 @@ def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) 
         else:
             scan.progress("Tracing the DNS lookup")
             run("DNS trace check", "dns", {"trace": True}, _trace_fields, _trace_failed, check=DNS_TRACE)
-    if MTR in plan.checks:
+    if MTR in plan.checks and shared_mtr is not None:  # the Network path measurement, read again
+        doc, reused, why = shared_mtr
+        out.extend(_speed_results(cold, doc, why, reused, _mtr_fields, _mtr_failed, check=MTR))
+    elif MTR in plan.checks:
         scan.progress("Measuring loss along the path")
         run("path loss check", "mtr", {"packets": MTR_PACKETS}, _mtr_fields, _mtr_failed, check=MTR)
     return out

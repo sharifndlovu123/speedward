@@ -108,3 +108,21 @@ def test_target_traits():
     assert target_traits("http://example.com/") == (True, False)
     assert target_traits("https://192.0.2.10/") == (False, True)
     assert target_traits("http://[2001:db8::1]:8080/") == (True, True)
+
+
+# --- Task 22: Network path and the mtr check share one mtr test -----------------------------------
+
+def test_network_path_and_mtr_check_are_counted_once():
+    from speedward.core.budget import describe_breakdown
+    both = Plan(LOCS, traceroute=True, checks=("mtr",))
+    rows = cost_breakdown(both)
+    assert [(r.key, r.per_place, r.cost) for r in rows] == [("base", 3, 30), ("traceroute", 1, 10), ("mtr", 0, 0)]
+    assert estimate_cost(both) == 40
+    assert estimate_cost(Plan(LOCS, traceroute=True)) == estimate_cost(Plan(LOCS, checks=("mtr",))) == 40
+    text = describe_breakdown(both)
+    assert "Path loss and jitter (mtr): shares the Network path test = 0" in text
+    assert text.endswith("10 places: about 40 tests")
+
+
+def test_mtr_alone_is_still_charged():
+    assert [(r.key, r.cost) for r in cost_breakdown(Plan(LOCS, checks=("mtr",)))] == [("base", 30), ("mtr", 10)]

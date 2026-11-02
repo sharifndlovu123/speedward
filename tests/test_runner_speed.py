@@ -310,3 +310,40 @@ def test_a_model_error_in_a_reach_check_is_contained_too(fake, monkeypatch):
     monkeypatch.setattr(runner, "_port_fields", broken)
     report = scan(fake, checks=("port",))
     assert {(x.status, x.reason) for x in report.reach} == {("test_failed", "the answer could not be read")}
+
+
+# --- Task 22: one mtr per place when Network path and the mtr check are both ticked ---------------
+
+def test_network_path_and_mtr_check_share_one_measurement(fake):
+    report = scan(fake, checks=("mtr",), traceroute=True)
+    mtrs = fake.posts(type="mtr")
+    assert len(mtrs) == 1  # one test per place, not two
+    assert mtrs[0]["measurementOptions"] == {"packets": 5}  # the larger packet count (default 3 vs 5)
+    assert mtrs[0]["locations"] == "fake0001"
+    # Both outputs are filled from that one measurement.
+    assert [p.status for p in report.paths] == ["measured", "measured"]
+    paths = by(report, "mtr")
+    assert [x.status for x in paths] == ["measured", "measured"]
+    assert [h.host for h in report.paths[0].hops if h.host != "*"] == [h.host for h in paths[0].hops if h.host != "*"]
+    assert report.options["traceroute"] is True and report.options["checks"] == ["mtr"]
+
+
+def test_shared_mtr_cost_is_counted_once_and_matches_what_was_spent(fake):
+    plan = Plan([dict(x) for x in TWO], traceroute=True, checks=("mtr",))
+    assert estimate_cost(plan) == 2 * 4
+    scan(fake, checks=("mtr",), traceroute=True)
+    spent = sum(len(fake.measurements[f"fake{i:04d}"]["results"]) for i in range(1, len(fake.posts()) + 1))
+    assert spent == 8
+
+
+def test_network_path_alone_keeps_its_own_request(fake):
+    scan(fake, checks=(), traceroute=True)
+    mtrs = fake.posts(type="mtr")
+    assert len(mtrs) == 1 and not mtrs[0].get("measurementOptions")
+
+
+def test_shared_mtr_that_cannot_run_leaves_both_without_figures(fake):
+    fake.rate_limit_after = 3  # cold, warm and ping only; the shared mtr hits the limit
+    report = scan(fake, checks=("mtr",), traceroute=True)
+    assert all(p.status == "not_run" for p in report.paths)
+    assert all(x.status == "not_run" and x.stages is None and not x.hops for x in by(report, "mtr"))

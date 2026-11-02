@@ -20,6 +20,7 @@ ALL_CHECKS = REACH_CHECKS + SPEED_CHECKS
 
 CONSISTENCY_EXTRA = 4  # extra http runs per place; with the main test's repeat that makes 5
 MTR_PACKETS = 5  # packets per hop for the path test (the API allows 1 to 16)
+PATH_PACKETS = 3  # the "Network path" option sends no count, so Globalping's default (3) applies
 
 PER_PLACE = {IPV6: 1, PLAIN_HTTP: 1, RESOLVERS_CHECK: len(RESOLVERS), PORT: 1,
              CONSISTENCY: CONSISTENCY_EXTRA, HTTP2: 1, COMPRESSION: 1, DNS_TRACE: 1, MTR: 1}
@@ -48,7 +49,7 @@ QUESTION = {
     # The approved mockup gives these two a note; the others show only their cost.
     COMPRESSION: "size on the wire is not available",
     DNS_TRACE: "where a slow lookup spends its time",
-    MTR: "a separate test from Network path below: ticking both runs two",
+    MTR: "shares one test with Network path below when both are ticked",
 }
 
 

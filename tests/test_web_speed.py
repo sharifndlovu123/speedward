@@ -104,3 +104,13 @@ def test_scan_cost_follows_the_posted_address_and_matches_what_is_spent(client, 
 def test_a_posted_address_wins_over_the_flags(client):
     body = client.post(reverse("estimate"), form(url="https://example.com/", checks="http2", plain="1")).json()
     assert body["cost"] == 2 * (3 + 1)
+
+
+def test_estimate_and_hints_count_one_mtr_for_network_path_and_the_mtr_check(client):
+    body = client.post(reverse("estimate"), form(checks="mtr", traceroute="on")).json()
+    assert body["cost"] == 2 * (3 + 1)
+    assert [(p["key"], p["cost"]) for p in body["parts"]] == [("base", 6), ("traceroute", 2), ("mtr", 0)]
+    assert "Path loss and jitter (mtr): shares the Network path test = 0" in body["breakdown"]
+    page = client.get(reverse("index")).content.decode()
+    assert "ticking both runs two" not in page
+    assert page.count("shares one test with") == 2
