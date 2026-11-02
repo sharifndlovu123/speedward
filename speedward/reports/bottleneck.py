@@ -13,7 +13,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from speedward.core.bottleneck import STAGES, Diagnosis, PlaceFigure, StageFigure
 
-from .speed import notes_for
+from .speed import md_text, notes_for
 
 NAME = {"dns": "DNS", "connect": "Connect", "tls": "TLS", "server_wait": "Server wait", "download": "Download"}
 WORD = {"dns": "DNS", "connect": "connect", "tls": "TLS", "server_wait": "server wait", "download": "download"}
@@ -314,7 +314,7 @@ def markdown_lines(report) -> list[str]:
     if report.diagnosis is None:
         return []
     d = report.diagnosis
-    v = view(d, notes_for(report))
+    v = view(d, notes_for(report, md_text))  # names in the speed notes are escaped for Markdown
     L = ["## Where the time goes", "", f"**{v['headline']}** {v['detail']}", ""]
     if v["overall"] is not None:
         g = v["overall"]

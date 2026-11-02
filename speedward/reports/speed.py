@@ -7,6 +7,8 @@ without speed checks (or from before they existed) renders nothing.
 """
 from __future__ import annotations
 
+import copy
+import re
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -299,18 +301,57 @@ def render_speed(report, interactive: bool = False, heading: str = "h2") -> str:
                                                      h=heading, css=css)
 
 
-def notes_for(report) -> dict | None:
-    return None if report.speed is None else diagram_notes(speed_summary(report))
+_MD_SPECIAL = re.compile(r"([\\`*_\[\]()<>|!])")
+_MD_LEADING = re.compile(r"^(\s*)([#+-])")
+
+
+def md_text(text: str) -> str:
+    """Untrusted text (a place name, a hop or server name) made inert in Markdown: link, image, emphasis,
+    code, HTML and table syntax are backslash-escaped, and so is a heading or list mark at the start."""
+    text = _MD_SPECIAL.sub(r"\\\1", str(text).replace("\n", " ").replace("\r", " "))
+    return _MD_LEADING.sub(r"\1\\\2", text)
+
+
+def _escaped(s: SpeedSummary, esc) -> SpeedSummary:
+    """A copy with every untrusted name passed through `esc` (the figures are untouched)."""
+    s = copy.deepcopy(s)
+    s.tls12 = [esc(x) for x in s.tls12]
+    for o in s.overall:
+        o.places = [esc(x) for x in o.places]
+    for p in s.places:
+        p.place = esc(p.place)
+        for gone in p.gone.values():  # a reason in a posted report is untrusted text too
+            gone.reason = esc(gone.reason)
+        if p.dns_trace is not None:
+            steps = list(p.dns_trace.steps)
+            if p.dns_trace.slowest is not None and all(x is not p.dns_trace.slowest for x in steps):
+                steps.append(p.dns_trace.slowest)  # deepcopy keeps the slowest step shared with steps
+            for step in steps:
+                step.server = esc(step.server)
+        if p.path is not None:
+            for h in (p.path.bad_hop, p.path.long_link, p.path.worst_loss):
+                if h is not None:
+                    h.host = esc(h.host)
+    return s
+
+
+def notes_for(report, esc=None) -> dict | None:
+    """The diagram notes; esc (e.g. md_text) is applied to every untrusted name in them."""
+    if report.speed is None:
+        return None
+    s = speed_summary(report)
+    return diagram_notes(_escaped(s, esc) if esc is not None else s)
 
 
 def _md(text: str) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+    """For text already made safe (fixed words and md_text names): only line breaks are folded."""
+    return str(text).replace("\n", " ").replace("\r", " ")
 
 
 def markdown_lines(report) -> list[str]:
     if report.speed is None:
         return []
-    v = view(speed_summary(report))
+    v = view(_escaped(speed_summary(report), md_text))
     L = ["## Is it fast? Speed checks", ""]
     L += [_md(f["text"] + (" " + f["prompt"] if f["prompt"] else "")) for f in v["findings"]]
     if v["headers"]:

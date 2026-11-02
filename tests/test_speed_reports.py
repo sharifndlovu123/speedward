@@ -181,3 +181,34 @@ def test_a_report_without_speed_checks_renders_nothing():
 def test_cli_lines():
     lines = cli_lines(full())
     assert len(lines) == 5 and all(line.startswith("Is it fast? ") for line in lines)
+
+
+def test_markdown_escapes_untrusted_names():
+    evil = "[x](http://evil)"
+    r = full()
+    r.locations[1].location.city = evil
+    r.speed = [x for x in r.speed if x.check != "dnstrace"] + [
+        sr("dnstrace", i, trace=[TraceStep("local", "l", 0), TraceStep("tld", "*a*_b_ `c` <i>", 9)]) for i in range(3)]
+    r.speed = [x if not (x.check == "mtr" and x.row == 1) else
+               sr("mtr", 1, hops=[hop(1, 1), hop(2, 5, loss=20, host="# [h](x)"), hop(3, 9, loss=20)]) for x in r.speed]
+    for x in r.speed:
+        if x.check == "http2" and x.row == 0:
+            x.status, x.reason, x.h2_offered, x.stages, x.http_version, x.probe = (
+                "test_failed", "a|b [c](d)", None, None, None, None)
+    md = render(r, "md")
+    # The speed panel (the main tables and the diagnosis cards are outside this task).
+    md = md[md.index("## Is it fast?"):md.index("## Where the time goes")]
+    assert evil not in md and "\\[x\\]\\(http://evil\\)" in md
+    assert "\\*a\\*\\_b\\_ \\`c\\` \\<i\\>" in md
+    assert "\\# \\[h\\]\\(x\\)" in md
+    assert "a\\|b \\[c\\]\\(d\\)" in md
+    html = render(r, "html")  # HTML keeps the plain text, escaped by the template
+    assert "[x](http://evil)" in html and "&lt;i&gt;" in html
+
+
+def test_markdown_escapes_names_in_the_notes_on_the_diagram():
+    r = three([sr("http2", i) for i in range(3)], tls="TLSv1.2")
+    r.locations[0].location.city = "[x](http://evil)"
+    md = render(r, "md")
+    tls = next(line for line in md.splitlines() if line.startswith("3. TLS"))
+    assert "TLS 1.2 costs one more round trip (\\[x\\]\\(http://evil\\), XX" in tls
