@@ -242,3 +242,42 @@ def test_a_very_long_name_costs_no_more_than_the_map():
     m = Mark(key=0, x=500, y=250, r=4, full="x" * 100_000, short="x" * 100_000, rank=(1, "x", 0))
     placed = place_labels([m], [(496, 246, 504, 254)], W, H, 11.0)
     assert placed.labels == () and placed.dropped == (0,)
+
+
+# --- review fixes -------------------------------------------------------------------------------
+
+def test_marks_and_obstacles_off_the_map_or_not_finite_get_no_label_and_do_not_raise():
+    nan, inf = float("nan"), float("inf")
+    bad = [Mark(key=i, x=x, y=y, r=4, full=f"P{i} 1ms", short=f"P{i} 1ms", rank=(1, f"p{i}", i))
+           for i, (x, y) in enumerate([(nan, 10), (inf, 10), (1e308, 10), (-1e308, 10), (10, -inf), (500, 1e300)])]
+    good = Mark(key=99, x=500, y=250, r=4, full="Good 1ms", short="Good 1ms", rank=(1, "good", 99))
+    obstacles = [(nan, 0, 1, 1), (-inf, -inf, inf, inf), (496, 246, 504, 254)]
+    placed = place_labels(bad + [good], obstacles, W, H, 11.0)
+    assert [lab.keys for lab in placed.labels] == [(99,)]
+    assert placed.dropped == tuple(range(len(bad)))
+    for width in (float("nan"), float("inf"), 1e308, 10**300):
+        place_labels(bad + [good], obstacles, width, H, 11.0)  # never raises
+    assert place_labels([good], [], float("nan"), H, 11.0).labels == ()
+
+
+def test_grouping_work_is_bounded_for_two_dense_blobs_within_reach():
+    from speedward.reports._labels import MAX_LABELLED_PLACES, _clusters
+    n = MAX_LABELLED_PLACES
+    # Two blobs of tightly packed places, just close enough that every cross pair is a candidate.
+    ms = [Mark(key=i, x=(100 if i % 2 else 100 + CLUSTER_PX * 0.9) + (i // 2) * 1e-3, y=100.0, r=1,
+               full="p", short="p", rank=(1, "p", i)) for i in range(n)]
+    stats: dict[str, int] = {}
+    groups = _clusters(ms, CLUSTER_PX, W, H, stats)
+    assert sorted(len(g) for g in groups) == [n]  # within reach: one group
+    pairs = n * (n - 1) // 2
+    assert stats["ops"] <= pairs + 16 * n  # one constant-time check per pair, plus moves
+
+
+def test_two_blobs_out_of_reach_stay_apart_with_bounded_work():
+    from speedward.reports._labels import _clusters
+    ms = [Mark(key=i, x=(100 if i % 2 else 100 + CLUSTER_PX * 0.8) + (i // 2) * 0.1, y=100.0, r=1,
+               full="p", short="p", rank=(1, "p", i)) for i in range(200)]
+    stats: dict[str, int] = {}
+    groups = _clusters(ms, CLUSTER_PX, W, H, stats)
+    assert all(max(m.x for m in g) - min(m.x for m in g) < CLUSTER_PX for g in groups)
+    assert stats["ops"] <= 200 * 199 // 2 + 16 * 200

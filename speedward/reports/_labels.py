@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from math import floor, hypot
+from math import floor, hypot, isfinite
 
 # Places closer than this (map viewBox pixels at width 1000 and the base label size of 11) share one
 # label. It grows with the label size, so on a phone, where labels are larger, more places merge.
@@ -82,18 +82,26 @@ class Placement:
 class _Grid:
     """Boxes bucketed by square cells, so a query only looks at what is near it."""
 
+    LIMIT = 256  # cells per side at most, whatever the sizes passed in (beyond it they share edge cells)
+
     def __init__(self, cell: float, width: float, height: float):
-        self.cell = max(cell, 1.0)
+        self.cell = cell if isfinite(cell) and cell >= 1 else 1.0
         # Cells outside the map are folded onto its edge, so a huge box costs no more than the map.
-        self.last = (floor(width / self.cell) + 1, floor(height / self.cell) + 1)
+        self.last = (self._cell(width) + 1, self._cell(height) + 1)
         self.cells: dict[tuple[int, int], list[int]] = defaultdict(list)
         self.items: list[tuple[Box, object]] = []
 
+    def _cell(self, v: float) -> int:
+        q = v / self.cell
+        if not isfinite(q):
+            return -1 if q < 0 else self.LIMIT  # NaN compares False: it goes to the far edge
+        return floor(min(max(q, -1.0), float(self.LIMIT)))
+
     def _keys(self, box: Box):
-        c, (mi, mj) = self.cell, self.last
+        mi, mj = self.last
         clamp = lambda v, top: min(max(v, -1), top)  # noqa: E731
-        for i in range(clamp(floor(box[0] / c), mi), clamp(floor(box[2] / c), mi) + 1):
-            for j in range(clamp(floor(box[1] / c), mj), clamp(floor(box[3] / c), mj) + 1):
+        for i in range(clamp(self._cell(box[0]), mi), clamp(self._cell(box[2]), mi) + 1):
+            for j in range(clamp(self._cell(box[1]), mj), clamp(self._cell(box[3]), mj) + 1):
                 yield i, j
 
     def add(self, box: Box, item: object = None) -> None:
@@ -165,25 +173,42 @@ def segment_hits(s: Segment, b: Box) -> bool:
     return True
 
 
-def _clusters(marks: list[Mark], close: float) -> list[list[Mark]]:
-    """Closest pairs first, two groups join only while every place in the joined group is within
-    `close` of every other one (no chains, so a continent never becomes one cluster by small steps).
-    The groups come back in rank order of their best place, each listed west to east."""
+def _clusters(marks: list[Mark], close: float, width: float, height: float,
+              stats: dict[str, int] | None = None) -> list[list[Mark]]:
+    """Closest pairs first, two groups join only while the joined group fits in a box whose diagonal
+    is under `close`, so every place in it is within `close` of every other one (no chains: a
+    continent never becomes one cluster by small steps). Each check is constant time on the groups'
+    boxes, and a join moves the smaller group (union by size), so the work is bounded.
+    The groups come back in rank order of their best place, each listed west to east.
+    stats["ops"] counts pair checks and moved places (for tests)."""
     d = lambda a, b: hypot(a.x - b.x, a.y - b.y)  # noqa: E731
     group = {m.key: [m] for m in marks}
-    grid = _Grid(close, max((m.x for m in marks), default=0), max((m.y for m in marks), default=0))
+    box = {m.key: (m.x, m.y, m.x, m.y) for m in marks}  # by the key of the group's first place
+    grid = _Grid(close, width, height)
     for m in marks:
         grid.add((m.x, m.y, m.x, m.y), m)
     pairs = sorted({(d(a, b), min(a.key, b.key), max(a.key, b.key))
                     for a in marks for _, b in grid.near((a.x - close, a.y - close, a.x + close, a.y + close))
                     if b is not a and d(a, b) < close})
+    ops = 0
     for _, ka, kb in pairs:
+        ops += 1
         ga, gb = group[ka], group[kb]
-        if ga is gb or any(d(a, b) >= close for a in ga for b in gb):
+        if ga is gb:
             continue
+        ba, bb = box[ga[0].key], box[gb[0].key]
+        joined = (min(ba[0], bb[0]), min(ba[1], bb[1]), max(ba[2], bb[2]), max(ba[3], bb[3]))
+        if hypot(joined[2] - joined[0], joined[3] - joined[1]) >= close:
+            continue
+        if len(ga) < len(gb):
+            ga, gb = gb, ga
         ga.extend(gb)
         for m in gb:
             group[m.key] = ga
+            ops += 1
+        box[ga[0].key] = joined
+    if stats is not None:
+        stats["ops"] = ops
     unique = {id(g): g for g in group.values()}.values()
     out = [sorted(g, key=lambda o: (o.x, o.y, o.key)) for g in unique]
     return sorted(out, key=lambda g: min((m.rank, m.key) for m in g))
@@ -244,13 +269,24 @@ def place_labels(marks: list[Mark], obstacles: list[Box], width: float, height: 
 
     obstacles: every dot and square on the map, and any text drawn outside this function.
     """
+    if not all(isfinite(v) and v > 0 for v in (width, height, fs)):
+        return Placement((), tuple(sorted(m.key for m in marks if m.key >= 0)))
     k = width / 1000
     close = CLUSTER_PX * fs / BASE_FS  # fs is in map units, so this scales with the map width too
+
+    def on_map(m: Mark) -> bool:
+        return all(isfinite(v) for v in (m.x, m.y, m.r)) and 0 <= m.x <= width and 0 <= m.y <= height
+
+    # A place off the map or with a broken position gets no label; its dot, title and row stay.
+    off = [m.key for m in marks if m.key >= 0 and not on_map(m)]
+    marks = [m for m in marks if on_map(m)]
+    fixed = [m for m in fixed if on_map(m)]
+    obstacles = [o for o in obstacles if all(isfinite(v) for v in o)]
     by_key = {m.key: m for m in marks}
     unlabelled = sorted(by_key) if len(by_key) > MAX_LABELLED_PLACES else []
     groups = [[f] for f in sorted(fixed, key=lambda m: (m.rank, m.key))]
     if not unlabelled:
-        groups += _clusters(sorted(by_key.values(), key=lambda m: m.key), close)
+        groups += _clusters(sorted(by_key.values(), key=lambda m: m.key), close, width, height)
     h = (ASC + DESC) * fs + 2 * HALO
     cell = max(2 * h, 20 * k)
 
@@ -260,7 +296,7 @@ def place_labels(marks: list[Mark], obstacles: list[Box], width: float, height: 
     labels = _Grid(cell, width, height)  # label boxes placed so far
     lines = _Grid(cell, width, height)  # their leader lines, by bounding box
     placed: list[Label] = []
-    dropped: list[int] = list(unlabelled)
+    dropped: list[int] = list(unlabelled) + off
     checks = 0
 
     def seg_box(s: Segment) -> Box:
