@@ -249,3 +249,64 @@ def test_an_odd_silent_hop_never_breaks_the_scan(fake):
     fake.by_type["mtr"] = on_probes(res, type="mtr")
     hop = by(scan(fake, checks=("mtr",)), "mtr")[0].hops[3]
     assert (hop.host, hop.loss_pct) == ("*", None)
+
+
+# --- an odd answer from one probe never ends the scan ---------------------------------------------------
+
+def test_a_hop_named_star_is_never_taken_for_a_silent_hop(fake):
+    res = speed_recorded("mtr_icmp_far")
+    res["hops"][-1]["resolvedHostname"] = "*"  # the site's own hop, answering, but named "*"
+    fake.by_type["mtr"] = on_probes(res, type="mtr")
+    path = by(scan(fake, checks=("mtr",)), "mtr")[0]
+    assert (path.status, path.reached, path.hops[-1].host) == ("measured", True, "209.51.188.116")
+
+
+def test_an_address_of_star_is_a_silent_hop_and_not_reached(fake):
+    res = speed_recorded("mtr_icmp_far")
+    res["hops"][-1]["resolvedAddress"] = "*"
+    res["hops"][-1]["resolvedHostname"] = "*"
+    res["resolvedAddress"] = "*"
+    fake.by_type["mtr"] = on_probes(res, type="mtr")
+    path = by(scan(fake, checks=("mtr",)), "mtr")[0]
+    assert (path.status, path.reached, path.hops[-1].host, path.hops[-1].avg_ms) == ("measured", False, "*", None)
+
+
+def test_a_path_with_no_hops_is_test_failed(fake):
+    res = speed_recorded("mtr_icmp_far")
+    res["hops"] = []
+    fake.by_type["mtr"] = on_probes(res, type="mtr")
+    path = by(scan(fake, checks=("mtr",)), "mtr")[0]
+    assert (path.status, path.reason, path.reached) == ("test_failed", "the path test returned no hops", None)
+
+
+def test_a_model_error_on_one_probe_is_that_probe_s_test_failed(fake, monkeypatch):
+    import speedward.core.runner as runner
+
+    real, calls = runner._mtr_fields, []
+
+    def flaky(res):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ValueError("strict model refused this answer")
+        return real(res)
+
+    monkeypatch.setattr(runner, "_mtr_fields", flaky)
+    report = scan(fake, checks=("mtr", "http2"))
+    paths = by(report, "mtr")
+    assert [(p.status, p.reason) for p in paths] == [("test_failed", "the answer could not be read"),
+                                                     ("measured", "")]
+    assert {x.status for x in by(report, "http2")} == {"measured"}  # the other checks still ran
+    assert ScanReport.from_dict(report.to_dict()).to_dict() == report.to_dict()
+
+
+def test_a_model_error_in_a_reach_check_is_contained_too(fake, monkeypatch):
+    import speedward.core.runner as runner
+
+    def broken(port):
+        def build(res):
+            raise ValueError("strict model refused this answer")
+        return build
+
+    monkeypatch.setattr(runner, "_port_fields", broken)
+    report = scan(fake, checks=("port",))
+    assert {(x.status, x.reason) for x in report.reach} == {("test_failed", "the answer could not be read")}

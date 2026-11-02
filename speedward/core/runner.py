@@ -62,6 +62,7 @@ from speedward.core.models import (
     SpeedResult,
     Stages,
     TraceStep,
+    clean,
 )
 from speedward.core.target import is_ip_host, normalise_target
 
@@ -477,6 +478,9 @@ def _dns(cold, doc, why: str, reused: bool = False) -> list[DnsResult]:
 _DNS_CODE = re.compile(r"[A-Z]{2,12}")
 NOT_A_NAME = "the address is an IP address, so there is no name to try this with"
 NO_CHECK_RESULT = "no result for this probe"
+UNREADABLE = "the answer could not be read"
+# What reading one probe's odd answer can raise (the strict models raise ValueError).
+UNREADABLE_ERRORS = (ValueError, TypeError, ArithmeticError, AttributeError, KeyError, IndexError)
 
 
 def _check_results(cold, doc, why: str, reused: bool, build, **fixed) -> list[ReachResult]:
@@ -494,24 +498,29 @@ def _check_results(cold, doc, why: str, reused: bool, build, **fixed) -> list[Re
         if item is None:
             out.append(ReachResult(row=row, location=loc, status="not_run", reason=NO_CHECK_RESULT, **fixed))
             continue
-        status, reason = classify(item)
-        res = _result(item)
-        if fixed.get("check") == RESOLVERS_CHECK and status != "measured":
-            # The test's "target" is the public resolver here: a lookup that did not finish is never the
-            # site's doing. Only a finished answer (no address, NXDOMAIN) can be blocked (_dns_fields).
-            status, reason = "test_failed", f"the resolver lookup failed: {reason}"
-        if status != "measured":
-            code = res.get("statusCode") if status == "blocked" and isinstance(res.get("statusCode"), int) else None
-            extra = {"http_status": code} if code is not None and fixed.get("check") in (IPV6, PLAIN_HTTP) else {}
-            out.append(ReachResult(row=row, location=loc, status=status, reason=reason, **fixed, **extra))
-            continue
-        fields = build(res)
-        if fields.get("status", "measured") != "measured":
-            out.append(ReachResult(row=row, location=loc, **fields, **fixed))
-            continue
-        out.append(ReachResult(row=row, location=loc, status="measured", reason="", **fields,
-                               probe=_probe_match(reused, same), **fixed))
+        try:
+            out.append(_check_result(row, loc, item, same, reused, build, fixed))
+        except UNREADABLE_ERRORS:  # one odd answer is that probe's "test failed", never the scan's end
+            out.append(ReachResult(row=row, location=loc, status="test_failed", reason=UNREADABLE, **fixed))
     return out
+
+
+def _check_result(row: int, loc, item: dict, same: bool, reused: bool, build, fixed: dict) -> ReachResult:
+    status, reason = classify(item)
+    res = _result(item)
+    if fixed.get("check") == RESOLVERS_CHECK and status != "measured":
+        # The test's "target" is the public resolver here: a lookup that did not finish is never the
+        # site's doing. Only a finished answer (no address, NXDOMAIN) can be blocked (_dns_fields).
+        status, reason = "test_failed", f"the resolver lookup failed: {reason}"
+    if status != "measured":
+        code = res.get("statusCode") if status == "blocked" and isinstance(res.get("statusCode"), int) else None
+        extra = {"http_status": code} if code is not None and fixed.get("check") in (IPV6, PLAIN_HTTP) else {}
+        return ReachResult(row=row, location=loc, status=status, reason=reason, **fixed, **extra)
+    fields = build(res)
+    if fields.get("status", "measured") != "measured":
+        return ReachResult(row=row, location=loc, **fields, **fixed)
+    return ReachResult(row=row, location=loc, status="measured", reason="", **fields,
+                       probe=_probe_match(reused, same), **fixed)
 
 
 def _not_a_name(cold, **fixed) -> list[ReachResult]:
@@ -618,24 +627,30 @@ def _speed_results(cold, doc, why: str, reused: bool, build, failed=None, **fixe
         if item is None:
             out.append(SpeedResult(row=row, location=loc, status="not_run", reason=NO_CHECK_RESULT, **fixed))
             continue
-        status, reason = classify(item)
-        fields = None
-        if status == "measured":
-            fields = build(_result(item))
-        elif failed is not None:
-            again = failed(_result(item), status, reason)
-            if isinstance(again, dict):
-                fields = again
-            else:
-                status, reason = again
-        if fields is None:
-            out.append(SpeedResult(row=row, location=loc, status=status, reason=reason, **fixed))
-        elif fields.get("status", "measured") != "measured":
-            out.append(SpeedResult(row=row, location=loc, **fields, **fixed))
-        else:
-            out.append(SpeedResult(row=row, location=loc, status="measured", reason="", **fields,
-                                   probe=_probe_match(reused, same), **fixed))
+        try:
+            out.append(_speed_result(row, loc, item, same, reused, build, failed, fixed))
+        except UNREADABLE_ERRORS:  # one odd answer is that probe's "test failed", never the scan's end
+            out.append(SpeedResult(row=row, location=loc, status="test_failed", reason=UNREADABLE, **fixed))
     return out
+
+
+def _speed_result(row: int, loc, item: dict, same: bool, reused: bool, build, failed, fixed: dict) -> SpeedResult:
+    status, reason = classify(item)
+    fields = None
+    if status == "measured":
+        fields = build(_result(item))
+    elif failed is not None:
+        again = failed(_result(item), status, reason)
+        if isinstance(again, dict):
+            fields = again
+        else:
+            status, reason = again
+    if fields is None:
+        return SpeedResult(row=row, location=loc, status=status, reason=reason, **fixed)
+    if fields.get("status", "measured") != "measured":
+        return SpeedResult(row=row, location=loc, **fields, **fixed)
+    return SpeedResult(row=row, location=loc, status="measured", reason="", **fields,
+                       probe=_probe_match(reused, same), **fixed)
 
 
 def _not_run(cold, reason: str, **fixed) -> list[SpeedResult]:
@@ -765,19 +780,26 @@ def _mtr_fields(res: dict) -> dict:
     for n, hop in enumerate([h for h in res.get("hops") or [] if isinstance(h, dict)][:64], start=1):
         stats = hop.get("stats") if isinstance(hop.get("stats"), dict) else {}
         address = _str(hop.get("resolvedAddress"))
+        if address is not None and clean(address) == "*":
+            address = None  # "*" is reserved for a hop that did not answer
         asns = hop.get("asn")
         asn = asns[0] if isinstance(asns, list) and asns and isinstance(asns[0], int) \
             and not isinstance(asns[0], bool) else None
         if address is None:  # observed: a silent hop has no address, 100% loss and no times
             hops.append(PathHop(n, "*", None, None, 100 if _pct(stats.get("loss")) == 100 else None, None))
             continue
-        hops.append(PathHop(n, _str(hop.get("resolvedHostname")) or address, asn, _ms_or_none(stats.get("avg")),
-                            _pct(stats.get("loss")), _jitter(hop.get("timings"))))
+        name = _str(hop.get("resolvedHostname"))
+        if name is None or clean(name).strip() in ("", "*"):
+            name = address
+        hops.append(PathHop(n, name, asn, _ms_or_none(stats.get("avg")), _pct(stats.get("loss")),
+                            _jitter(hop.get("timings"))))
     if not hops:
         return {"status": "test_failed", "reason": "the path test returned no hops"}
     last = [h for h in res.get("hops") or [] if isinstance(h, dict)][:64][-1]
     site = _str(res.get("resolvedAddress"))
-    return {"hops": hops, "reached": site is not None and _str(last.get("resolvedAddress")) == site}
+    reached = (site is not None and hops[-1].host != "*" and clean(site) != "*"
+               and _str(last.get("resolvedAddress")) == site)
+    return {"hops": hops, "reached": reached}
 
 
 def _mtr_failed(res: dict, status: str, reason: str):
