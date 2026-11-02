@@ -15,7 +15,7 @@ dependencies = [
   "typer>=0.12",
   "click>=8.2",   # floor only: CliRunner separates stdout/stderr from 8.2 (tests rely on it)
   "whitenoise>=6.6",
-  "gunicorn>=22",
+  "gunicorn>=26",
 ]
 
 [project.optional-dependencies]

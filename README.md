@@ -10,7 +10,7 @@ See [demo.md](demo.md) for a short walkthrough built from a real run.
 
 ## What you need
 
-- Python 3.11 or newer, or Docker with Compose.
+- Python 3.11 or newer, or Docker with Compose (2.24 or newer if you use `docker-compose.secrets.yml`).
 - Internet access to `api.globalping.io`.
 - Optional: a Globalping key (below). The tool works without one, with lower limits.
 
