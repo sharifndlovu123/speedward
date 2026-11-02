@@ -422,3 +422,33 @@ def test_pin_applies_even_when_no_measured_ip(fake):
     rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, None, pin=(5.0, 6.0)))
     assert rep.server is not None and rep.server.source == "manual (pin)"
     assert (rep.server.lat, rep.server.lon) == (5.0, 6.0)
+
+
+# --- which probe each later measurement came from (final review item 1) -------------------------
+
+def test_reused_probes_are_labelled_same_probe(fake):
+    rep = run_scan("example.com", plan(traceroute=True, dns=True), client(fake))
+    assert [r.repeat_probe for r in rep.locations] == ["same probe", "same probe"]
+    assert [r.ping_probe for r in rep.locations] == ["same probe", "same probe"]
+    assert [p.probe for p in rep.paths if p.status == "measured"] == ["same probe"] * 2
+    assert [d.probe for d in rep.dns if d.status == "measured"] == ["same probe"] * 2
+
+
+def test_fresh_probes_are_labelled_different_probe(fake):
+    fake.reuse_expired = True
+    rep = run_scan("example.com", plan(traceroute=True, dns=True), client(fake))
+    assert [r.repeat_probe for r in rep.locations] == ["different probe"] * 2
+    assert [r.ping_probe for r in rep.locations] == ["different probe"] * 2
+    assert all(p.probe == "different probe" for p in rep.paths if p.status == "measured")
+    assert all(d.probe == "different probe" for d in rep.dns if d.status == "measured")
+    assert summarise(rep).cache_gain_pct is None
+
+
+def test_same_city_fallback_is_labelled(fake):
+    fake.queue("http", fixture("http_ok"))  # cold
+    other = copy.deepcopy(fixture("http_ok"))
+    other["results"][1]["probe"]["asn"] = 9999  # Tokyo answered by another machine in Tokyo
+    fake.queue("http", other)
+    rep = run_scan("example.com", plan(), client(fake))
+    assert [r.repeat_probe for r in rep.locations] == ["same probe", "different probe, same city"]
+    assert [r.repeat_same_probe for r in rep.locations] == [True, False]

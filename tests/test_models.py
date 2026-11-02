@@ -255,3 +255,93 @@ def test_model_wording_sets_match_the_edge_module():
     assert models.EDGE_NOTES == edge.EDGE_NOTES
     assert models.EDGE_REASONS == edge.EDGE_REASONS
     assert models.POSITION_SOURCES == edge.POSITION_SOURCES == ("database", "cdn header")
+
+
+# --- which probe a later measurement came from (final review item 1) ---------------------------
+
+def test_repeat_probe_is_derived_from_the_old_flag():
+    same = LocationResult(LOC, "measured", stages=STAGES, repeat_stages=STAGES, repeat_same_probe=True)
+    other = LocationResult(LOC, "measured", stages=STAGES, repeat_stages=STAGES)
+    assert same.repeat_probe == "same probe"
+    assert other.repeat_probe == "different probe"  # never claimed as the same machine
+    assert LocationResult(LOC, "measured", stages=STAGES).repeat_probe is None
+
+
+@pytest.mark.parametrize("kw", [
+    {"repeat_probe": "same probe"},  # no repeat timing to describe
+    {"repeat_stages": STAGES, "repeat_probe": "probably the same"},
+    {"repeat_stages": STAGES, "repeat_probe": "different probe", "repeat_same_probe": True},
+    {"ping_probe": "same probe"},  # no delay to describe
+    {"ping_ms": 3.0, "ping_probe": "nearby"},
+])
+def test_probe_match_values_are_checked(kw):
+    with pytest.raises(ValueError):
+        LocationResult(LOC, "measured", stages=STAGES, **kw)
+
+
+def test_path_and_dns_probe_only_on_measured_known_values():
+    assert PathResult(LOC, [HOP], "measured", "", "different probe, same city").probe == "different probe, same city"
+    with pytest.raises(ValueError):
+        PathResult(LOC, [], "test_failed", "x", "different probe")
+    with pytest.raises(ValueError):
+        PathResult(LOC, [HOP], "measured", "", "elsewhere")
+    with pytest.raises(ValueError):
+        DnsResult(LOC, "measured", "", ["1.1.1.1"], 3.0, "elsewhere")
+
+
+def _matched_report() -> ScanReport:
+    r = _full_report()
+    r.locations[0] = LocationResult(LOC, "measured", stages=STAGES, repeat_stages=STAGES, ping_ms=3.0,
+                                    repeat_probe="different probe, same city", ping_probe="different probe")
+    r.paths[0].probe = "different probe"
+    r.dns[0].probe = "different probe, same city"
+    return r
+
+
+def test_probe_fields_round_trip():
+    r = _matched_report()
+    d = json.loads(json.dumps(r.to_dict()))
+    assert d["locations"][0]["repeat_probe"] == "different probe, same city"
+    assert d["locations"][0]["ping_probe"] == "different probe"
+    assert d["paths"][0]["probe"] == "different probe"
+    assert ScanReport.from_dict(d) == r
+
+
+def test_old_report_without_probe_fields_never_claims_the_same_probe():
+    d = json.loads(json.dumps(_full_report().to_dict()))
+    d["locations"][0].update(repeat_same_probe=False)
+    for key in ("repeat_probe", "ping_probe"):
+        d["locations"][0].pop(key, None)
+    r = ScanReport.from_dict(d)
+    assert r.locations[0].repeat_probe == "different probe"
+    assert r.locations[0].ping_probe is None
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda d: d["locations"][0].update(repeat_probe="same machine"),
+    lambda d: d["locations"][0].update(repeat_probe=1),
+    lambda d: d["locations"][0].update(repeat_probe="different probe", repeat_same_probe=True),
+    lambda d: d["locations"][0].update(ping_probe="<b>x</b>"),
+    lambda d: d["paths"][0].update(probe="nearby"),
+    lambda d: d["paths"][1].update(probe="different probe"),
+    lambda d: d["dns"][1].update(probe="different probe"),
+])
+def test_probe_fields_rejected_when_malformed(mutate):
+    d = json.loads(json.dumps(_matched_report().to_dict()))
+    mutate(d)
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)
+
+
+@pytest.mark.parametrize("value", ["ping: limit", ["ping: evil.example timed out"], [5], "x"])
+def test_not_run_must_be_known_fixed_texts(value):
+    d = json.loads(json.dumps(_full_report().to_dict()))
+    d["options"]["not_run"] = value
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)
+
+
+def test_known_not_run_texts_load():
+    d = json.loads(json.dumps(_full_report().to_dict()))
+    d["options"]["not_run"] = ["repeat test: Globalping limit reached", "DNS check: the test failed on the Globalping side"]
+    assert ScanReport.from_dict(d).options["not_run"] == d["options"]["not_run"]

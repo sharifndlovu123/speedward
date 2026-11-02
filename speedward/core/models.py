@@ -20,6 +20,19 @@ def clean(text: str) -> str:
 
 STATUSES = ("measured", "blocked", "test_failed", "not_run")
 
+# Measurements a scan could not run, kept in options["not_run"] as "<what>: <why>". Fixed wording only:
+# no target and no exception text ever goes in, and from_dict accepts nothing else.
+LIMIT_REACHED = "Globalping limit reached"
+GLOBALPING_FAILED = "the test failed on the Globalping side"
+NOT_RUN_WHAT = ("repeat test", "ping", "network path", "DNS check")
+NOT_RUN_WHY = (LIMIT_REACHED, GLOBALPING_FAILED)
+NOT_RUN_TEXTS = tuple(f"{what}: {why}" for what in NOT_RUN_WHAT for why in NOT_RUN_WHY)
+
+# Which probe a later measurement (repeat request, ping, path, DNS) came from, compared with the cold
+# run's probe. Only "same probe" is a like-for-like pairing; the cache gain uses nothing else.
+SAME_PROBE, OTHER_PROBE, SAME_CITY = PROBE_MATCHES = ("same probe", "different probe",
+                                                      "different probe, same city")
+
 # Where the server that answered one result is (see speedward/core/edge.py, which uses these).
 POSITION_SOURCES = ("database", "cdn header")
 UNCERTAIN, NOT_AVAILABLE = EDGE_NOTES = ("edge location uncertain", "position not available")
@@ -41,6 +54,11 @@ _EDGE_CODE = re.compile(r"[A-Z]{3}")
 def _check_status(status: str) -> None:
     if status not in STATUSES:
         raise ValueError(f"unknown status: {status!r}")
+
+
+def _check_probe(value: str | None, what: str) -> None:
+    if value is not None and value not in PROBE_MATCHES:
+        raise ValueError(f"{what} is not a known probe match")
 
 
 @dataclass
@@ -92,9 +110,26 @@ class LocationResult:
     edge_code: str | None = None  # airport code from the cf-ray header; raw headers are never kept
     edge_note: str | None = None
     edge_reason: str | None = None
+    # PROBE_MATCHES: which probe the repeat request and the ping came from. None: no such timing (or,
+    # for ping_probe, a report from before this was recorded).
+    repeat_probe: str | None = None
+    ping_probe: str | None = None
 
     def __post_init__(self):
         _check_status(self.status)
+        if self.repeat_stages is not None and self.repeat_probe is None:
+            # Older reports only had the flag: anything not flagged is never claimed as the same probe.
+            self.repeat_probe = SAME_PROBE if self.repeat_same_probe else OTHER_PROBE
+        _check_probe(self.repeat_probe, "repeat_probe")
+        _check_probe(self.ping_probe, "ping_probe")
+        if self.repeat_probe is not None and self.repeat_stages is None:
+            raise ValueError("a repeat probe match needs a repeat timing")
+        if self.ping_probe is not None and self.ping_ms is None:
+            raise ValueError("a ping probe match needs a ping timing")
+        if self.repeat_same_probe and self.repeat_probe not in (None, SAME_PROBE):
+            raise ValueError("repeat_same_probe contradicts repeat_probe")
+        if self.repeat_probe == SAME_PROBE and not self.repeat_same_probe:
+            raise ValueError("repeat_probe contradicts repeat_same_probe")
         if self.status != "measured" and (
             self.stages is not None or self.repeat_stages is not None or self.ping_ms is not None
         ):
@@ -138,11 +173,15 @@ class PathResult:
     hops: list[Hop]
     status: str
     reason: str
+    probe: str | None = None  # PROBE_MATCHES against the cold run's probe; only on a measured path
 
     def __post_init__(self):
         _check_status(self.status)
         if self.status != "measured" and self.hops:
             raise ValueError("only a measured path may carry hops")
+        _check_probe(self.probe, "probe")
+        if self.status != "measured" and self.probe is not None:
+            raise ValueError("only a measured path names its probe")
         self.reason = clean(self.reason)
 
 
@@ -153,11 +192,15 @@ class DnsResult:
     reason: str
     answers: list[str]
     lookup_ms: float | None
+    probe: str | None = None  # PROBE_MATCHES against the cold run's probe; only on a measured result
 
     def __post_init__(self):
         _check_status(self.status)
         if self.status != "measured" and (self.answers or self.lookup_ms is not None):
             raise ValueError("only a measured DNS result may carry answers or timing")
+        _check_probe(self.probe, "probe")
+        if self.status != "measured" and self.probe is not None:
+            raise ValueError("only a measured DNS result names its probe")
         self.reason = clean(self.reason)
         self.answers = [clean(a) for a in self.answers]
 
@@ -228,7 +271,7 @@ class ScanReport:
             started=_when(d, "started"),
             finished=_when(d, "finished"),
             version=_s(d, "version"),
-            options=copy.deepcopy(_obj(d.get("options"), "options")),
+            options=_options(d.get("options")),
             server=None if server is None else _server(_obj(server, "server")),
             locations=[_location_result(_obj(x, "location result")) for x in _list(d, "locations")],
             paths=[_path(_obj(x, "path")) for x in _list(d, "paths")],
@@ -238,6 +281,15 @@ class ScanReport:
 
 
 # --- from_dict helpers: strict type checks, ValueError on anything unexpected ----------------------
+
+def _options(value) -> dict:
+    options = copy.deepcopy(_obj(value, "options"))
+    if "not_run" in options:
+        skipped = options["not_run"]
+        if not isinstance(skipped, list) or not all(isinstance(x, str) and x in NOT_RUN_TEXTS for x in skipped):
+            raise ValueError("not_run must list known measurements that did not run")
+    return options
+
 
 def _obj(value, what: str) -> dict:
     if not isinstance(value, dict):
@@ -336,6 +388,8 @@ def _location_result(d: dict) -> LocationResult:
         server_position=_result_position(d.get("server_position")),
         edge_code=_s_or_none(d, "edge_code"), edge_note=_s_or_none(d, "edge_note"),
         edge_reason=_s_or_none(d, "edge_reason"),
+        # Absent before the final review: derived in LocationResult, never as "same probe" unless flagged.
+        repeat_probe=_s_or_none(d, "repeat_probe"), ping_probe=_s_or_none(d, "ping_probe"),
     )
 
 
@@ -363,12 +417,12 @@ def _hop(d) -> Hop:
 
 def _path(d: dict) -> PathResult:
     return PathResult(_location(d.get("location")), [_hop(h) for h in _list(d, "hops")],
-                      _s(d, "status"), _s(d, "reason"))
+                      _s(d, "status"), _s(d, "reason"), _s_or_none(d, "probe"))
 
 
 def _dns(d: dict) -> DnsResult:
     return DnsResult(_location(d.get("location")), _s(d, "status"), _s(d, "reason"),
-                     _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0))
+                     _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0), _s_or_none(d, "probe"))
 
 
 # What Geolocator emits: a configured position, a geo-IP database, or the web form's pin.

@@ -285,3 +285,23 @@ def test_cli_estimate_unknown_reset_is_not_guessed(fake):
     fake.omit_reset = True
     r = scan("--estimate")
     assert "(reset time unknown)" in r.stderr
+
+
+# --- final review: skipped measurements and other-probe repeats on stderr ------------------------
+
+def test_cli_lists_skipped_measurements_on_stderr(fake):
+    fake.rate_limit_after = 1  # cold accepted; the repeat test and ping are refused
+    r = scan()
+    assert r.exit_code == 0
+    assert "Not run: Repeat test: Globalping limit reached, so the Cache column and cache gain have no figures." in r.stderr
+    assert "Not run: Ping: Globalping limit reached, so the Delay column has no figures." in r.stderr
+    assert "example.com" not in r.stderr.replace("Only test sites", "")
+
+
+def test_cli_says_when_repeats_ran_on_other_probes(fake):
+    fake.reuse_expired = True
+    r = scan("--format", "md")
+    assert r.exit_code == 0
+    assert "repeat request (different probe)" in r.stdout
+    assert ("Note: 2 locations were repeated on a different test machine; "
+            "they are left out of the cache gain.") in r.stderr

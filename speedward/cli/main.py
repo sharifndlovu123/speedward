@@ -18,6 +18,7 @@ from speedward.core.models import clean
 from speedward.core.runner import ScanError, run_scan
 from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
+from speedward.reports._view import skipped
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
                   help="Test a website's speed from locations around the world.")
@@ -44,6 +45,17 @@ def load_dotenv(path: Path) -> dict[str, str]:
 def _environment() -> dict[str, str]:
     """The real environment, with allowlisted `.env` keys filling gaps (never overriding)."""
     return config.build_environment(Path(".env"), on_warning=_err)
+
+
+def _scan_notes(report) -> None:
+    """Fixed-wording notes about what the report could not measure like-for-like. No target, no results."""
+    for _, _, note in skipped(report):
+        _err(f"Not run: {note}")
+    other = sum(1 for r in report.locations if r.status == "measured" and r.repeat_stages is not None
+                and not r.repeat_same_probe)
+    if other:
+        _err(f"Note: {other} location{'' if other == 1 else 's'} {'was' if other == 1 else 'were'} repeated on a "
+             "different test machine; they are left out of the cache gain.")
 
 
 @app.command()
@@ -161,6 +173,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     else:
         typer.echo(text)
 
+    _scan_notes(report)
     limits = Limits(max_ttfb=max_ttfb, max_load=max_load, max_blocked=max_blocked,
                     max_page_weight=max_page_weight)
     outcome = evaluate_limits(report, limits)

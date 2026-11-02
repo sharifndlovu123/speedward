@@ -32,6 +32,7 @@ tr.excluded{color:var(--mute);font-style:italic}.scroll{overflow-x:auto}
 .bar{background:var(--bar);height:6px}.stage{display:grid;grid-template-columns:90px 1fr 80px;gap:10px;align-items:center;margin:6px 0}
 dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:4px 16px}dd{margin:0;overflow-wrap:anywhere}
 .flag{color:var(--warn);font-weight:600}
+td .note{font-size:.8rem;color:var(--mute)}.skipped{margin:6px 0 0;padding-left:1.2em}
 footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:var(--mute);font-size:.85rem}
 </style>
 </head>
@@ -52,6 +53,7 @@ footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:v
 {% if browser %}<div class="figure"><small class="cap">Page weight</small><b class="num">{{ browser.weight }}</b><small class="note">{{ browser.requests }}</small></div>{% endif %}
 </section>
 <p class="excluded-note">{{ excluded_line }}</p>
+{% if skipped %}<ul class="skipped" aria-label="Measurements that did not run">{% for n in skipped %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 <p class="mute">{{ cache_note }}</p>
 
 <section>
@@ -59,7 +61,7 @@ footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:v
 <div class="scroll" tabindex="0" role="region" aria-label="Locations table"><table>
 <thead><tr><th>Location</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Answered by</th><th>Position source</th><th>Status</th></tr></thead>
 <tbody>
-{% for row in rows %}<tr{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
+{% for row in rows %}<tr{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}{% if row.warm_note %}<br><small class="note">{{ row.warm_note }}</small>{% endif %}</td><td>{{ row.delay }}{% if row.delay_note %}<br><small class="note">{{ row.delay_note }}</small>{% endif %}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 </section>

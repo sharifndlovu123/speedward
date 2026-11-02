@@ -83,12 +83,14 @@ def report_dict(**overrides):
             {"location": loc, "status": "measured", "reason": "", "stages": stages, "repeat_stages": None,
              "ping_ms": 9.0, "http_status": 200, "cdn": None, "server_ip": "203.0.113.9", "tls_version": None,
              "http_version": None, "redirects": [], "repeat_same_probe": False,
-             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None},
+             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None,
+             "repeat_probe": None, "ping_probe": None},
             {"location": dict(loc, city="Lagos", country="NG", lat=6.5, lon=3.4), "status": "blocked",
              "reason": "timed out the connection", "stages": None, "repeat_stages": None, "ping_ms": None,
              "http_status": None, "cdn": None, "server_ip": None, "tls_version": None, "http_version": None,
              "redirects": [], "repeat_same_probe": False,
-             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None},
+             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None,
+             "repeat_probe": None, "ping_probe": None},
         ],
         "paths": [], "dns": [], "browser": None,
     }
@@ -790,3 +792,13 @@ def test_unreadable_database_gets_the_setup_note(client):
     html = rendered(client, with_tokyo(edge_note="position not available",
                                        edge_reason="geo-IP database could not be read"))
     assert NOTE_TEXT in html and "could not be placed with confidence" not in html
+
+
+def test_render_labels_other_probe_repeats_and_lists_skipped_measurements(client):
+    result = report_dict(options={"locations": [], "not_run": ["ping: Globalping limit reached"]})
+    result["locations"][0].update(repeat_stages={"first_byte": 30}, repeat_probe="different probe")
+    html = post_json(client, reverse("render"), {"result": result, "limits": {}}).content.decode()
+    assert "repeat request (different probe)" in html
+    assert "the repeat ran on a different test machine" in html
+    assert "Repeat request from the same test machine" not in html
+    assert "Ping: Globalping limit reached, so the Delay column has no figures." in html

@@ -25,7 +25,12 @@ from speedward.core.globalping import (
     classify,
 )
 from speedward.core.models import (
+    GLOBALPING_FAILED,
+    LIMIT_REACHED,
     NO_DB,
+    OTHER_PROBE,
+    SAME_CITY,
+    SAME_PROBE,
     DnsResult,
     Hop,
     Location,
@@ -37,7 +42,6 @@ from speedward.core.models import (
 )
 from speedward.core.target import normalise_target
 
-LIMIT_REACHED = "Globalping limit reached"
 _HTTP_VERSION = re.compile(r"^HTTP/(\d(?:\.\d)?)\s")
 
 
@@ -148,6 +152,14 @@ class _Matcher:
         return None, False
 
 
+def _probe_match(reused: bool, same: bool) -> str:
+    """How a later result relates to the cold run's probe. Only a reused probe that matches in every
+    known detail is the same probe; fresh probes are never assumed to be the same machine."""
+    if reused and same:
+        return SAME_PROBE
+    return OTHER_PROBE if same else SAME_CITY
+
+
 # --- the scan ---------------------------------------------------------------
 
 class _Scan:
@@ -180,8 +192,8 @@ class _Scan:
             self.skipped.append(f"{what}: {LIMIT_REACHED}")
             return None, False, LIMIT_REACHED
         except GlobalpingError:
-            self.skipped.append(f"{what}: the test failed on the Globalping side")
-            return None, False, "the test failed on the Globalping side"
+            self.skipped.append(f"{what}: {GLOBALPING_FAILED}")
+            return None, False, GLOBALPING_FAILED
 
 
 def _http_options(parts) -> dict:
@@ -271,31 +283,33 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         if item is not None and classify(item)[0] == "measured":
             fields[i]["repeat_stages"] = _stages(_result(item))
             fields[i]["repeat_same_probe"] = bool(reused and same)
+            fields[i]["repeat_probe"] = _probe_match(reused, same)
 
     # 3. Ping from the same probes.
     progress("Measuring network delay")
-    ping_doc, _, _ = scan.measure("ping", "ping", cold_id, None, fallback_locations=plan.locations)
+    ping_doc, ping_reused, _ = scan.measure("ping", "ping", cold_id, None, fallback_locations=plan.locations)
     ping = _Matcher(_items(ping_doc))
     for i, (probe, _) in enumerate(cold):
-        item, _same = ping.take(probe)
+        item, same = ping.take(probe)
         if i in measured_idx and item is not None and classify(item)[0] == "measured":
             stats = _result(item).get("stats")
             avg = _num(stats.get("avg")) if isinstance(stats, dict) else None
-            fields[i]["ping_ms"] = avg
+            if avg is not None:
+                fields[i].update(ping_ms=avg, ping_probe=_probe_match(ping_reused, same))
 
     # 4. Optional path (mtr: gives per-hop ASN and loss, traceroute does not).
     paths: list[PathResult] = []
     if plan.traceroute:
         progress("Tracing the network path")
-        doc, _, why = scan.measure("network path", "mtr", cold_id, None, fallback_locations=plan.locations)
-        paths = _paths(cold, doc, why)
+        doc, reused, why = scan.measure("network path", "mtr", cold_id, None, fallback_locations=plan.locations)
+        paths = _paths(cold, doc, why, reused)
 
     # 5. Optional DNS answers.
     dns: list[DnsResult] = []
     if plan.dns:
         progress("Checking DNS answers")
-        doc, _, why = scan.measure("DNS check", "dns", cold_id, None, fallback_locations=plan.locations)
-        dns = _dns(cold, doc, why)
+        doc, reused, why = scan.measure("DNS check", "dns", cold_id, None, fallback_locations=plan.locations)
+        dns = _dns(cold, doc, why, reused)
 
     # 6. Where the server that answered each measured result is (offline: airport table, geo-IP).
     _place_servers(cold, fields, geo)
@@ -344,7 +358,7 @@ def _server(geo: Geolocator | None, results: list[LocationResult]) -> ServerPosi
     return None
 
 
-def _paths(cold, doc, why: str) -> list[PathResult]:
+def _paths(cold, doc, why: str, reused: bool = False) -> list[PathResult]:
     out = []
     matcher = _Matcher(_items(doc))
     for probe, _ in cold:
@@ -352,7 +366,7 @@ def _paths(cold, doc, why: str) -> list[PathResult]:
         if doc is None:
             out.append(PathResult(loc, [], "not_run" if why == LIMIT_REACHED else "test_failed", why))
             continue
-        item, _same = matcher.take(probe)
+        item, same = matcher.take(probe)
         if item is None:
             out.append(PathResult(loc, [], "not_run", "no path result for this probe"))
             continue
@@ -369,11 +383,11 @@ def _paths(cold, doc, why: str) -> list[PathResult]:
             stats = hop.get("stats") if isinstance(hop.get("stats"), dict) else {}
             host = _str(hop.get("resolvedHostname")) or _str(hop.get("resolvedAddress")) or "*"
             hops.append(Hop(n, host, asn, _num(stats.get("avg")), _num(stats.get("loss"))))
-        out.append(PathResult(loc, hops, "measured", ""))
+        out.append(PathResult(loc, hops, "measured", "", _probe_match(reused, same)))
     return out
 
 
-def _dns(cold, doc, why: str) -> list[DnsResult]:
+def _dns(cold, doc, why: str, reused: bool = False) -> list[DnsResult]:
     out = []
     matcher = _Matcher(_items(doc))
     for probe, _ in cold:
@@ -381,7 +395,7 @@ def _dns(cold, doc, why: str) -> list[DnsResult]:
         if doc is None:
             out.append(DnsResult(loc, "not_run" if why == LIMIT_REACHED else "test_failed", why, [], None))
             continue
-        item, _same = matcher.take(probe)
+        item, same = matcher.take(probe)
         if item is None:
             out.append(DnsResult(loc, "not_run", "no DNS result for this probe", [], None))
             continue
@@ -393,7 +407,7 @@ def _dns(cold, doc, why: str) -> list[DnsResult]:
         answers = [a["value"] for a in res.get("answers") or []
                    if isinstance(a, dict) and isinstance(a.get("value"), str)]
         timings = res.get("timings") if isinstance(res.get("timings"), dict) else {}
-        out.append(DnsResult(loc, "measured", "", answers, _num(timings.get("total"))))
+        out.append(DnsResult(loc, "measured", "", answers, _num(timings.get("total")), _probe_match(reused, same)))
     return out
 
 

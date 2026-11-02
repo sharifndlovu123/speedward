@@ -1,4 +1,4 @@
-from ._view import CACHE_NOTE, context
+from ._view import context
 
 
 def _c(text) -> str:
@@ -15,12 +15,16 @@ def to_markdown(report) -> str:
          f"- Blocked: {c['s'].blocked}"]
     if c["browser"]:
         L.append(f"- Page weight: {c['browser']['weight']}")
-    L += [f"- {c['excluded_line']}", f"- {CACHE_NOTE}", "",
+    L += [f"- {c['excluded_line']}", f"- {c['cache_note']}"]
+    L += [f"- {note}" for note in c["skipped"]]
+    L += ["",
           "## Locations", "",
           "| Location | No cache | Cache | Delay | CDN | Answered by | Position source | Status |",
           "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for r in c["rows"]:
-        L.append(f"| {_c(r['location'])} | {r['cold']} | {r['warm']} | {r['delay']} | {_c(r['cdn'])} "
+        warm = r["warm"] + (f", {r['warm_note']}" if r["warm_note"] else "")
+        delay = r["delay"] + (f", {r['delay_note']}" if r["delay_note"] else "")
+        L.append(f"| {_c(r['location'])} | {r['cold']} | {warm} | {delay} | {_c(r['cdn'])} "
                  f"| {_c(r['answered'])} | {_c(r['source'])} | {_c(r['status'])} |")
     L += ["", "## Stage breakdown (average over measured locations)", ""]
     L += [f"- {s['name']}: {s['text']}" for s in c["stages"]] or ["- no data"]
