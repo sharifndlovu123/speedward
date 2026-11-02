@@ -11,9 +11,12 @@
 .sp-findings .sp-check{margin-top:2px}
 .sp-head button{margin:2px 0 8px}
 .sp-body .sp-title{margin-top:8px;scroll-margin-top:64px}
-.sp-grid{border-collapse:collapse;width:100%;border:1px solid var(--hair)}
+/* Six columns of words do not fit a phone: the table keeps readable columns and scrolls sideways inside
+   its own focusable region (a data table, the WCAG reflow exception), never the page. */
+.sp-grid{border-collapse:collapse;width:100%;min-width:44rem;border:1px solid var(--hair)}
 .sp-grid th,.sp-grid td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--hair);
-  overflow-wrap:anywhere;color:var(--ink)}
+  overflow-wrap:break-word;color:var(--ink)}
+.sp-grid tbody th{min-width:6rem}
 .sp-grid thead th{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
 .sp-grid tbody th{font-weight:600}
 .sp-grid tbody tr:last-child>*{border-bottom:0}
