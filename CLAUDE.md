@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Install: `python -m venv .venv && .venv/bin/pip install -e ".[dev]"`
 - All tests: `.venv/bin/pytest -q`
+- Lint: `.venv/bin/ruff check .` (do not run `ruff format`)
 - One test: `.venv/bin/pytest tests/test_runner.py::test_name -v`
 - End-to-end (browser): `pip install -e ".[e2e]" && playwright install chromium`, then `.venv/bin/pytest e2e`
 - CLI: `.venv/bin/speedward scan URL --estimate` (then without `--estimate`; `--help` lists options)

@@ -1,5 +1,7 @@
 # speedward
 
+[![CI](https://github.com/sharifndlovu123/speedward/actions/workflows/ci.yml/badge.svg)](https://github.com/sharifndlovu123/speedward/actions/workflows/ci.yml)
+
 Speedward tests how fast a website loads from places around the world and shows the result on a world map. It runs the tests through the [Globalping](https://globalping.io) network. You run it yourself, as a command-line tool or as a small web app. It is the sibling of [siteward](https://github.com/sharifndlovu123/siteward), the passive security scanner, and uses the same stack and conventions.
 
 **Only test sites you own or are authorised to test.** Every scan sends real requests to the target from many machines.
@@ -215,7 +217,12 @@ For Docker, `git pull` then `docker build -t speedward .` and restart the contai
 ```bash
 pip install -e ".[dev]"
 .venv/bin/pytest -q
+.venv/bin/ruff check .
 ```
+
+Lint is `ruff check` (rules and the reasons for any ignores are in `pyproject.toml`); the code is not auto-formatted, so do not run `ruff format`. CI (`.github/workflows/ci.yml`) runs lint, unit tests on Python 3.11 and 3.12, and the browser tests on every push to main and every pull request. It uses no secrets and an empty `GLOBALPING_TOKEN`, so it never calls the real API.
+
+Check dependencies for known vulnerabilities (not part of CI): `pip install pip-audit && pip-audit`.
 
 End-to-end browser tests: `pip install -e ".[e2e]" && playwright install chromium && .venv/bin/pytest e2e`.
 
