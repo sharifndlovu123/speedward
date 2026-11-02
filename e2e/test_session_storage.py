@@ -4,7 +4,7 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import expect
 
-from e2e.helpers import pick
+from e2e.helpers import pick, start
 
 TARGET = "https://e2e-target.example/"
 KEY = "speedward:result"
@@ -14,7 +14,7 @@ def run_scan(page, base):
     page.goto(base + "/")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
 
 
@@ -98,7 +98,7 @@ def test_storage_failure_shows_notice(browser, live_site):
     # A scan still works and shows its results; they just are not kept.
     page.fill("#url", TARGET)
     pick(page, "Berlin")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     assert errors == []
     context.close()

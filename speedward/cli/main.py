@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import time
 from pathlib import Path
@@ -15,16 +16,20 @@ from speedward.core.geo import geolocator_from_env
 from speedward.core.globalping import DEFAULT_BASE_URL, GlobalpingClient, GlobalpingError
 from speedward.core.locations import parse_locations
 from speedward.core.models import clean
-from speedward.core.runner import ScanError, run_scan
+from speedward.core.runner import ScanError, run_scan, start_message
 from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
+from speedward.reports._view import skipped
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
                   help="Test a website's speed from locations around the world.")
+# The same upper bound as the web form: every limit stays a finite, printable number.
+LIMIT_MAX = 10**9
+NO_BROWSER_LIMIT = ("Error: --max-page-weight needs the browser test, which is not available in this build yet, "
+                    "so that limit could never pass.")
 NOTICE = "Only test sites you own or are authorised to test."
 NO_KEY = ("No Globalping key set (limits: 250 tests/hour, 50 locations). "
           "A key is free up to a limit: https://globalping.io")
-START_FAILED = "The scan could not start. Check the address and your Globalping key."
 
 
 @app.callback()
@@ -41,9 +46,20 @@ def load_dotenv(path: Path) -> dict[str, str]:
     return config.load_dotenv(path, on_warning=_err)
 
 
-def _environment() -> dict[str, str]:
+def environment() -> dict[str, str]:
     """The real environment, with allowlisted `.env` keys filling gaps (never overriding)."""
     return config.build_environment(Path(".env"), on_warning=_err)
+
+
+def _scan_notes(report) -> None:
+    """Fixed-wording notes about what the report could not measure like-for-like. No target, no results."""
+    for _, _, note in skipped(report):
+        _err(f"Not run: {note}")
+    other = sum(1 for r in report.locations if r.status == "measured" and r.repeat_stages is not None
+                and not r.repeat_same_probe)
+    if other:
+        _err(f"Note: {other} location{'' if other == 1 else 's'} {'was' if other == 1 else 'were'} repeated on a "
+             "different test machine; they are left out of the cache gain.")
 
 
 @app.command()
@@ -55,10 +71,11 @@ def scan(
     browser: bool = typer.Option(False, "--browser", help="Also run the browser test."),
     fmt: str = typer.Option("md", "--format", help="Report format: json, md or html."),
     out: Path | None = typer.Option(None, "--out", help="Write the report to this file instead of stdout."),
-    max_ttfb: float | None = typer.Option(None, "--max-ttfb", min=1, help="Fail if first byte takes longer than this (ms)."),
-    max_load: float | None = typer.Option(None, "--max-load", min=1, help="Fail if load takes longer than this (ms)."),
-    max_blocked: int | None = typer.Option(None, "--max-blocked", min=0, help="Fail if more locations than this were blocked."),
-    max_page_weight: int | None = typer.Option(None, "--max-page-weight", min=1, help="Fail if the page is heavier than this (bytes)."),
+    max_ttfb: float | None = typer.Option(None, "--max-ttfb", min=1, max=LIMIT_MAX, help="Fail if first byte takes longer than this (ms)."),
+    max_load: float | None = typer.Option(None, "--max-load", min=1, max=LIMIT_MAX, help="Fail if load takes longer than this (ms)."),
+    max_blocked: int | None = typer.Option(None, "--max-blocked", min=0, max=LIMIT_MAX, help="Fail if more locations than this were blocked."),
+    max_page_weight: int | None = typer.Option(None, "--max-page-weight", min=1, max=LIMIT_MAX,
+                                               help="Not available yet: needs the browser test (refused if set)."),
     yes: bool = typer.Option(False, "--yes", help="Go ahead even if the scan costs more than the tests left."),
     estimate: bool = typer.Option(False, "--estimate", help="Print the cost and allowance, then stop."),
     verbose: bool = typer.Option(False, "--verbose", help="Show more detail when something goes wrong."),
@@ -86,11 +103,22 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         _err(f"Error: {clean(str(exc))}")
         raise typer.Exit(2) from None
 
+    if any(v is not None and not math.isfinite(v) for v in (max_ttfb, max_load)):
+        _err("Error: --max-ttfb and --max-load must be numbers from 1 to 1000000000.")
+        raise typer.Exit(2)
+    if max_page_weight is not None:
+        _err(NO_BROWSER_LIMIT)
+        raise typer.Exit(2)
     if browser:
         _err("Note: the browser test is not available in this build yet; continuing without it.")
     plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False)
 
-    env = _environment()
+    env = environment()
+    try:  # checked before any test is spent
+        fast_ms, slow_ms = config.speed_thresholds(env)
+    except ValueError as exc:
+        _err(f"Error: {exc}")
+        raise typer.Exit(2) from None
     # GLOBALPING_BASE_URL is for tests only (points at a local fake); deliberately not in --help.
     # Read from the real process environment only, never from `.env`.
     base_url = os.environ.get("GLOBALPING_BASE_URL") or None
@@ -139,7 +167,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         report = run_scan(url, plan, client, on_progress=lambda line: _err(f"  {line}"),
                           geo=geolocator_from_env(env))
     except ScanError as exc:
-        _err(START_FAILED)
+        _err(start_message(exc.kind))
         if verbose:
             _err(f"Detail: {clean(str(exc))}")
         raise typer.Exit(2) from None
@@ -149,7 +177,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
             _err(f"Detail: {clean(str(exc))}")
         raise typer.Exit(2) from None
 
-    text = render(report, fmt)
+    text = render(report, fmt, fast_ms=fast_ms, slow_ms=slow_ms)
     if out:
         try:
             out.write_text(text, encoding="utf-8")
@@ -161,6 +189,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     else:
         typer.echo(text)
 
+    _scan_notes(report)
     limits = Limits(max_ttfb=max_ttfb, max_load=max_load, max_blocked=max_blocked,
                     max_page_weight=max_page_weight)
     outcome = evaluate_limits(report, limits)

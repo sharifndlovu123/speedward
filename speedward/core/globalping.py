@@ -5,6 +5,8 @@ only ever sent as a bearer header: it is kept out of repr, exception messages an
 """
 from __future__ import annotations
 
+import math
+import re
 import time
 from dataclasses import dataclass
 
@@ -16,7 +18,12 @@ KEY_TESTS_PER_HOUR, KEY_MAX_PROBES = 500, 500
 
 
 class GlobalpingError(Exception):
-    """Anything that stopped a Globalping call. Messages never contain the token."""
+    """Anything that stopped a Globalping call. Messages never contain the token. `status` is the
+    HTTP status Globalping answered with, when there was one."""
+
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 class RateLimited(GlobalpingError):
@@ -24,7 +31,7 @@ class RateLimited(GlobalpingError):
 
     def __init__(self, message: str = "Globalping limit reached", remaining: int | None = None,
                  retry_after: int | None = None):
-        super().__init__(message)
+        super().__init__(message, 429)
         self.remaining = remaining
         self.retry_after = retry_after  # seconds, from retry-after or x-ratelimit-reset
 
@@ -44,9 +51,11 @@ class Allowance:
 
 
 def _int(value) -> int | None:
+    """A header number, or None for anything missing or malformed (including inf, nan and 1e400)."""
     try:
-        return int(float(value))
-    except (TypeError, ValueError):
+        number = float(value)
+        return int(number) if math.isfinite(number) else None
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -76,6 +85,7 @@ class GlobalpingClient:
         self.timeout = timeout
         self.poll_interval = poll_interval
         self.wait_timeout = wait_timeout
+        self._owns_http = http is None
         self._http = http or httpx.Client(timeout=timeout)
         self.last_rate: dict = {}  # latest x-ratelimit-* / x-request-cost seen on a POST 202
 
@@ -83,6 +93,17 @@ class GlobalpingClient:
         return f"GlobalpingClient(base_url={self.base_url!r}, token={'<set>' if self._token else '<unset>'})"
 
     __str__ = __repr__
+
+    def close(self) -> None:
+        """Close the HTTP connection pool, unless it was passed in (then its owner closes it)."""
+        if self._owns_http:
+            self._http.close()
+
+    def __enter__(self) -> GlobalpingClient:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     # --- plumbing ------------------------------------------------------
     def _request(self, method: str, path: str, **kw) -> httpx.Response:
@@ -99,7 +120,7 @@ class GlobalpingClient:
             raise RateLimited(remaining=rate.get("remaining"),
                               retry_after=retry if retry is not None else rate.get("reset"))
         if resp.status_code == 401:
-            raise GlobalpingError("Globalping rejected the API key (401)")
+            raise GlobalpingError("Globalping rejected the API key (401)", 401)
         return resp
 
     @staticmethod
@@ -120,9 +141,10 @@ class GlobalpingClient:
         body = {"type": type, "target": target, "locations": locations, "measurementOptions": options or {}}  # the API rejects null
         resp = self._request("POST", "/measurements", json=body)
         if resp.status_code == 422 and isinstance(locations, str):
-            raise ProbeReuseUnavailable("the earlier measurement's probes are no longer available")
+            raise ProbeReuseUnavailable("the earlier measurement's probes are no longer available", 422)
         if resp.status_code != 202:
-            raise GlobalpingError(f"Globalping refused the test ({resp.status_code}) {self._api_message(resp)}".strip())
+            raise GlobalpingError(f"Globalping refused the test ({resp.status_code}) {self._api_message(resp)}".strip(),
+                                  resp.status_code)
         self.last_rate = parse_rate_headers(resp.headers)
         try:
             return resp.json()["id"]
@@ -176,20 +198,25 @@ class GlobalpingClient:
 
 # --- classification ---------------------------------------------------
 
-# Causes on the site's side, matched against the probe's rawOutput text.
+# Failure causes, matched as whole words against the probe's rawOutput text (which may also hold the
+# target's host name, so loose substrings such as "dns" or "tls" would match a name like dns.example).
+# Probe-side resolver trouble comes first: it is not the site's doing, so it is "test failed".
+_PROBE_CAUSES = (
+    ("the test machine's DNS lookup timed out", (r"query(?:a|aaaa)\s+etimeout",)),
+    ("the test machine's DNS resolver failed", (r"eai_again",)),
+)
 _TARGET_CAUSES = (
-    ("timed out the connection", ("timed out", "etimedout", "timeout")),
-    ("DNS lookup failed", ("enodata", "enotfound", "queryA", "queryAAAA", "eai_again", "nxdomain", "dns")),
-    ("connection refused", ("econnrefused", "refused")),
-    ("connection reset", ("econnreset", "reset by peer")),
-    ("TLS handshake failed", ("tls", "ssl", "certificate", "cert_", "handshake")),
+    ("DNS lookup failed", (r"enodata", r"enotfound", r"nxdomain", r"query(?:a|aaaa)")),
+    ("connection timed out", (r"timed out", r"etimedout", r"timeout")),
+    ("connection refused", (r"econnrefused", r"refused")),
+    ("connection reset", (r"econnreset", r"reset by peer")),
+    ("TLS handshake failed", (r"tls", r"ssl", r"certificate", r"cert_\w*", r"handshake")),
 )
 
 
-def _target_cause(raw: str) -> str | None:
-    low = raw.lower()
-    for label, needles in _TARGET_CAUSES:
-        if any(n.lower() in low for n in needles):
+def _match(raw: str, causes) -> str | None:
+    for label, patterns in causes:
+        if any(re.search(rf"\b{p}\b", raw, re.IGNORECASE) for p in patterns):
             return label
     return None
 
@@ -217,7 +244,10 @@ def classify(raw_probe_result: dict) -> tuple[str, str]:
     if status == "failed":
         if result.get("failureSource") != "target":
             return "test_failed", "the test failed on the Globalping side"
-        cause = _target_cause(raw)
+        probe_cause = _match(raw, _PROBE_CAUSES)
+        if probe_cause is not None:
+            return "test_failed", probe_cause
+        cause = _match(raw, _TARGET_CAUSES)
         if cause is None:
             return "test_failed", "the test failed for an unrecognised reason"
         return "blocked", cause

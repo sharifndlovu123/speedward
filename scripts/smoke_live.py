@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 
-from speedward.cli.main import _environment
+from speedward.cli.main import environment
 from speedward.core.budget import Plan, check_budget, estimate_cost
 from speedward.core.geo import geolocator_from_env
 from speedward.core.globalping import GlobalpingClient, GlobalpingError
@@ -34,7 +34,7 @@ def main(argv: list[str]) -> int:
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
-    env = _environment()
+    env = environment()
     client = GlobalpingClient(token=env.get("GLOBALPING_TOKEN") or None)
     plan = Plan(locations=parse_locations(None))
     try:

@@ -145,7 +145,7 @@ def test_scan_error_text_not_echoed(fake, monkeypatch):
     monkeypatch.setattr("speedward.cli.main.run_scan", boom)
     r = scan()
     assert r.exit_code == 2
-    assert "The scan could not start. Check the address and your Globalping key." in r.stderr
+    assert "The scan could not start because Globalping could not be used. Try again later." in r.stderr
     assert "secret-site.example" not in r.stderr
     r = scan("--verbose")
     assert "secret-site.example" in r.stderr and "\x1b" not in r.stderr
@@ -195,14 +195,14 @@ def test_remote_override_with_token_refused(fake, monkeypatch):
 
 
 def test_dotenv_allowlist(tmp_path, monkeypatch):
-    from speedward.cli.main import _environment
+    from speedward.cli.main import environment
     (tmp_path / ".env").write_text("GLOBALPING_TOKEN=t\nGEOIP_DB=/x\nSERVER_LAT=1\nSERVER_LON=2\n"
                                    "FAST_MS=1\nSLOW_MS=2\nGLOBALPING_BASE_URL=http://e/\nPATH=/evil\nOTHER=1\n")
     monkeypatch.chdir(tmp_path)
     for k in ("GLOBALPING_TOKEN", "GEOIP_DB", "SERVER_LAT", "SERVER_LON", "FAST_MS", "SLOW_MS", "OTHER"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.delenv("GLOBALPING_BASE_URL", raising=False)
-    env = _environment()
+    env = environment()
     assert env["GLOBALPING_TOKEN"] == "t" and env["SLOW_MS"] == "2" and env["GEOIP_DB"] == "/x"
     assert "OTHER" not in env and "GLOBALPING_BASE_URL" not in env
     assert env["PATH"] != "/evil"
@@ -265,7 +265,7 @@ def test_dotenv_inline_comments_and_empty(tmp_path):
 @pytest.mark.parametrize("args, text", [
     (["--max-ttfb", "1234567"], "max-ttfb 1234567"),
     (["--max-load", "5000000"], "max-load 5000000"),
-    (["--max-blocked", "1234567890"], "max-blocked 1234567890"),
+    (["--max-blocked", "123456789"], "max-blocked 123456789"),
     (["--max-ttfb", "250.5"], "max-ttfb 250.5"),
 ])
 def test_pass_fail_line_prints_limits_exactly(fake, args, text):
@@ -285,3 +285,81 @@ def test_cli_estimate_unknown_reset_is_not_guessed(fake):
     fake.omit_reset = True
     r = scan("--estimate")
     assert "(reset time unknown)" in r.stderr
+
+
+# --- final review: skipped measurements and other-probe repeats on stderr ------------------------
+
+def test_cli_lists_skipped_measurements_on_stderr(fake):
+    fake.rate_limit_after = 1  # cold accepted; the repeat test and ping are refused
+    r = scan()
+    assert r.exit_code == 0
+    assert "Not run: Repeat test: Globalping limit reached, so the Cache column and cache gain have no figures." in r.stderr
+    assert "Not run: Ping: Globalping limit reached, so the Delay column has no figures." in r.stderr
+    assert "example.com" not in r.stderr.replace("Only test sites", "")
+
+
+def test_cli_says_when_repeats_ran_on_other_probes(fake):
+    fake.reuse_expired = True
+    r = scan("--format", "md")
+    assert r.exit_code == 0
+    assert "repeat request (different probe)" in r.stdout
+    assert ("Note: 2 locations were repeated on a different test machine; "
+            "they are left out of the cache gain.") in r.stderr
+
+
+def test_cli_start_failure_names_the_limit(fake):
+    fake.rate_limit_after = 0
+    r = scan()
+    assert r.exit_code == 2
+    assert "The scan could not start: Globalping limit reached." in r.stderr
+    assert "Check the address and your Globalping key" not in r.stderr
+
+
+def test_cli_start_failure_names_a_place_without_probes(fake):
+    fake.create_error = (422, {"error": {"type": "no_probes_found"}})
+    r = scan()
+    assert r.exit_code == 2
+    assert "no test machine found for one of the places you chose" in r.stderr
+
+
+def test_cli_html_uses_fast_and_slow_from_the_environment(fake, monkeypatch):
+    monkeypatch.setenv("FAST_MS", "50")
+    monkeypatch.setenv("SLOW_MS", "100")
+    r = scan("--format", "html")
+    assert r.exit_code == 0
+    assert "green up to 50 ms first byte, red from 100 ms" in r.stdout
+
+
+def test_cli_refuses_bad_speed_thresholds_before_any_test(fake, monkeypatch):
+    monkeypatch.setenv("FAST_MS", "900")
+    monkeypatch.setenv("SLOW_MS", "100")
+    r = scan()
+    assert r.exit_code == 2
+    assert "FAST_MS and SLOW_MS" in r.stderr
+    assert fake.posts() == []
+
+
+@pytest.mark.parametrize("args", [["--max-ttfb", "1e400"], ["--max-ttfb", "inf"], ["--max-load", "10000000000"],
+                                  ["--max-blocked", "1" + "0" * 400], ["--max-ttfb", "nan"]])
+def test_huge_limits_refused_before_any_test(fake, args):
+    r = scan(*args)
+    assert r.exit_code == 2
+    assert fake.posts() == []
+    assert "Traceback" not in r.stdout + r.stderr
+
+
+def test_max_page_weight_refused_while_browser_test_is_missing(fake):
+    r = scan("--max-page-weight", "1000000")
+    assert r.exit_code == 2
+    assert "--max-page-weight needs the browser test, which is not available in this build yet" in r.stderr
+    assert fake.posts() == []
+
+
+def test_smoke_script_uses_only_public_names():
+    import ast
+    from pathlib import Path
+    tree = ast.parse((Path(__file__).resolve().parent.parent / "scripts" / "smoke_live.py").read_text())
+    imported = [a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names]
+    assert imported and not [name for name in imported if name.startswith("_")]
+    from speedward.cli.main import environment
+    assert callable(environment)

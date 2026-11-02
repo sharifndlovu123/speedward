@@ -6,6 +6,7 @@ Globalping endpoint: GLOBALPING_BASE_URL is read from the real process environme
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 from collections.abc import Callable, Mapping
@@ -22,6 +23,10 @@ DOTENV_ALLOWED = (
     "MAX_CONCURRENT_SCANS",
 )
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+# Line colours on the map: green up to FAST_MS first byte, red from SLOW_MS.
+DEFAULT_FAST_MS, DEFAULT_SLOW_MS = 300, 800
+BAD_THRESHOLDS = ("FAST_MS and SLOW_MS must be numbers above 0, with SLOW_MS greater than FAST_MS "
+                  "(defaults 300 and 800).")
 BAD_DOTENV = "Note: the .env file could not be read as text and was ignored."
 
 
@@ -67,6 +72,26 @@ def build_environment(dotenv_path: Path = Path(".env"), environ: Mapping[str, st
     real = os.environ if environ is None else environ
     file_env = {k: v for k, v in load_dotenv(dotenv_path, on_warning).items() if k in DOTENV_ALLOWED}
     return {**file_env, **real}
+
+
+def speed_thresholds(env: Mapping[str, str]) -> tuple[float, float]:
+    """(FAST_MS, SLOW_MS) from the environment, with the defaults. ValueError(BAD_THRESHOLDS) otherwise."""
+    out = []
+    for name, default in (("FAST_MS", DEFAULT_FAST_MS), ("SLOW_MS", DEFAULT_SLOW_MS)):
+        raw = (env.get(name) or "").strip()
+        if not raw:
+            out.append(default)
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            raise ValueError(BAD_THRESHOLDS) from None
+        if not math.isfinite(value) or value <= 0 or value > 10**9:
+            raise ValueError(BAD_THRESHOLDS)
+        out.append(int(value) if value.is_integer() else value)
+    if out[1] <= out[0]:
+        raise ValueError(BAD_THRESHOLDS)
+    return out[0], out[1]
 
 
 def check_endpoint(base_url: str | None, token: str | None) -> str | None:

@@ -1,0 +1,15 @@
+# MaxMind geoipupdate configuration for speedward (placeholders only).
+#
+# Copy it outside the repository, fill in your own values and keep it private:
+#   mkdir -p ~/geo && cp docs/GeoIP.conf.example ~/geo/GeoIP.conf && chmod 600 ~/geo/GeoIP.conf
+# The licence key is a secret like GLOBALPING_TOKEN: never commit this file (GeoIP.conf is
+# git-ignored), never paste it into .env for a non-Docker run, and keep it out of logs.
+# scripts/update_geoip.sh refuses to run while the file is readable by other users.
+
+AccountID YOUR_ACCOUNT_ID
+LicenseKey YOUR_LICENSE_KEY
+EditionIDs GeoLite2-City
+
+# Where the database is written. scripts/update_geoip.sh passes -d "${GEOIP_DIR:-$HOME/geo}",
+# which overrides this line; set it only if you run geoipupdate yourself.
+# DatabaseDirectory /home/YOU/geo

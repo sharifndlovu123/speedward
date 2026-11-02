@@ -3,6 +3,8 @@ import json
 
 from playwright.sync_api import expect
 
+from e2e.helpers import start
+
 KEY = "speedward:result"
 TARGET = "https://e2e-target.example/"
 
@@ -115,7 +117,7 @@ def test_picks_restored_after_refresh_and_picker_reopens(page, live_site, watch)
     page.fill("#add-name", "Berlin")
     page.click("#add-btn")
     page.fill("#url", TARGET)
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     expect(page.locator("#picker-map")).to_be_hidden()
     expect(page.locator("#locations-toggle")).to_have_text("Locations (2)")
@@ -136,7 +138,7 @@ def test_picker_is_locked_while_scanning(page, live_site, watch):
     page.route("**/scan/*/status", lambda route: route.fulfill(
         json={"status": "running", "progress": ["Testing"]}))
     page.fill("#url", TARGET)
-    page.click("#start")
+    start(page)
     expect(page.locator("#progress")).to_be_visible()
     expect(page.locator("#picker-map svg")).to_be_visible()
     dot(page, "Paris").click(force=True)
@@ -182,7 +184,7 @@ def _first_scan(page, live_site):
     page.fill("#url", TARGET)
     page.click("[data-preset=clear]")
     chip(page, "Paris").click()
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
 
 

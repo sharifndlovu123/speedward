@@ -13,3 +13,8 @@ tests/
 e2e/
 docs/
 staticfiles/
+secrets/
+GeoIP.conf
+*.mmdb
+*.mmdb.gz
+docker-compose*.yml

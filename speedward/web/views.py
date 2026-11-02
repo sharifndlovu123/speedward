@@ -32,7 +32,7 @@ from speedward.core.geo import geolocator_from_env, parse_pin
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
 from speedward.core.locations import CATALOG, CONTINENTS, DEFAULT_LOCATIONS, parse_locations, per_continent
 from speedward.core.models import ScanReport
-from speedward.core.runner import ScanError, run_scan
+from speedward.core.runner import ScanError, run_scan, start_message
 from speedward.core.target import normalise_target
 from speedward.reports import render as render_report
 from speedward.reports._view import context
@@ -43,7 +43,6 @@ from . import state
 logger = logging.getLogger(__name__)
 
 NOTICE = "Only test sites you own or are authorised to test."
-START_FAILED = "The scan could not start. Check the address and your Globalping key."
 GLOBALPING_FAILED = "The scan failed because Globalping could not be used."
 UNEXPECTED = "The scan failed unexpectedly."
 BUSY = "The scanner is busy with other scans. Please try again in a minute."
@@ -111,7 +110,8 @@ def _budget(plan: Plan, allowance: Allowance) -> dict:
 def index(request):
     strip = ""
     try:
-        strip = describe_allowance(_client().allowance(), None, time.time()).text
+        with _client() as gp:
+            strip = describe_allowance(gp.allowance(), None, time.time()).text
     except EndpointRefused as exc:
         strip = str(exc)
     except GlobalpingError:
@@ -146,7 +146,8 @@ def estimate(request):
     except ValueError:
         return _error(BAD_LIMITS, 400)
     try:
-        allowance = _client().allowance()
+        with _client() as gp:
+            allowance = gp.allowance()
     except EndpointRefused as exc:
         return _error(str(exc), 503)
     except GlobalpingError:
@@ -155,12 +156,16 @@ def estimate(request):
 
 
 def _run(st: state.ScanState, entry: state.Entry, url: str, plan: Plan, client: GlobalpingClient, geo) -> None:
-    """Background thread body. Records the outcome in memory; logs only an exception type name."""
+    """Background thread body. Records the outcome in memory; logs only an exception type name.
+    Owns `client` and closes it before the outcome is recorded."""
     try:
-        report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo)
+        try:
+            report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo)
+        finally:
+            client.close()
         st.finish(entry.id, report.to_dict())
-    except ScanError:
-        st.fail(entry.id, START_FAILED)
+    except ScanError as exc:  # only the fixed message for its kind; the text may hold the target
+        st.fail(entry.id, start_message(exc.kind))
     except GlobalpingError:
         st.fail(entry.id, GLOBALPING_FAILED)
     except Exception as exc:  # noqa: BLE001 - the text may contain the target; never log it
@@ -193,22 +198,29 @@ def scan(request):
     geo.pin = pin  # lowest precedence: a configured position or geo-IP result still wins
     try:
         client = _client()
-        allowance = client.allowance()
     except EndpointRefused as exc:
         return _error(str(exc), 503)
-    except GlobalpingError:
-        return _error(UNREACHABLE, 502)
+    started = False
+    try:
+        try:
+            allowance = client.allowance()
+        except GlobalpingError:
+            return _error(UNREACHABLE, 502)
 
-    budget = _budget(plan, allowance)
-    if budget["refused"]:
-        return JsonResponse({**budget, "error": budget["refused"]}, status=400)
-    if not budget["fits"] and request.POST.get("confirm") != "1":
-        return JsonResponse({**budget, "needs_confirm": True}, status=409)
+        budget = _budget(plan, allowance)
+        if budget["refused"]:
+            return JsonResponse({**budget, "error": budget["refused"]}, status=400)
+        if not budget["fits"] and request.POST.get("confirm") != "1":
+            return JsonResponse({**budget, "needs_confirm": True}, status=409)
 
-    st = state.get()
-    entry = st.create()
-    if entry is None:
-        return _error(BUSY, 503)
+        st = state.get()
+        entry = st.create()
+        if entry is None:
+            return _error(BUSY, 503)
+        started = True
+    finally:
+        if not started:  # once started, the scan thread owns the client and closes it
+            client.close()
     threading.Thread(target=_run, args=(st, entry, url, plan, client, geo), daemon=True).start()
     return JsonResponse({"id": entry.id}, status=202)
 
@@ -328,7 +340,8 @@ def render_result(request):
         row["index"] = i
     verdict, failed = _pass_fail(report, limits)
     # render_map escapes every dynamic string itself (see speedward/reports/map.py).
-    ctx.update(map_svg=mark_safe(render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)),  # noqa: S308
+    svg = render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS, pin_hint=True)
+    ctx.update(map_svg=mark_safe(svg),  # noqa: S308
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
     return render(request, "_results.html", ctx)
@@ -341,6 +354,7 @@ def export(request, fmt):
         report = _report(_posted(request))
     except ValueError:
         return _error(BAD_RESULT, 400)
-    response = HttpResponse(render_report(report, fmt), content_type=EXPORT_TYPES[fmt])
+    text = render_report(report, fmt, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)
+    response = HttpResponse(text, content_type=EXPORT_TYPES[fmt])
     response["Content-Disposition"] = f'attachment; filename="speedward-report.{fmt}"'
     return response

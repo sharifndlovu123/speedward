@@ -3,7 +3,7 @@ import json
 
 from playwright.sync_api import expect
 
-from e2e.helpers import pick
+from e2e.helpers import pick, start
 
 TARGET = "https://e2e-target.example/"
 PIN_KEY = "speedward:pin"
@@ -89,7 +89,7 @@ def test_pin_survives_refresh_and_is_cleared_with_results(page, live_site, watch
     expect(page.locator("#server-city")).to_have_value("Frankfurt")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     arcs = page.locator("#results-map svg.sw-map path[stroke]")
     expect(arcs).to_have_count(2)
@@ -109,7 +109,7 @@ def test_scan_without_pin_says_position_unknown_and_has_no_lines(page, live_site
     page.goto(live_site + "/")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     expect(page.locator("#results-map svg.sw-map")).to_contain_text(
         "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON")
@@ -131,7 +131,7 @@ def test_plain_click_on_unset_pin_does_not_place_it_or_send_a_position(page, liv
     expect(previews(page)).to_have_count(0)
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     assert len(bodies) == 1 and "server_lat" not in bodies[0] and "server_lon" not in bodies[0]
 

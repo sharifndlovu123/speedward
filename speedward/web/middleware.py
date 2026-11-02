@@ -3,7 +3,7 @@
 # 'unsafe-inline' styles: the map SVG carries its own <style> and the stage bars use inline widths.
 # Scripts are external files only (no inline script), so script-src stays 'self'.
 CSP = ("default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-       "script-src 'self'; frame-ancestors 'none'")
+       "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
 
 class SecurityHeadersMiddleware:

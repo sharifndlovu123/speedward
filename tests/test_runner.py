@@ -422,3 +422,69 @@ def test_pin_applies_even_when_no_measured_ip(fake):
     rep = run_scan("example.com", plan(), client(fake), geo=Geolocator(None, None, pin=(5.0, 6.0)))
     assert rep.server is not None and rep.server.source == "manual (pin)"
     assert (rep.server.lat, rep.server.lon) == (5.0, 6.0)
+
+
+# --- which probe each later measurement came from (final review item 1) -------------------------
+
+def test_reused_probes_are_labelled_same_probe(fake):
+    rep = run_scan("example.com", plan(traceroute=True, dns=True), client(fake))
+    assert [r.repeat_probe for r in rep.locations] == ["same probe", "same probe"]
+    assert [r.ping_probe for r in rep.locations] == ["same probe", "same probe"]
+    assert [p.probe for p in rep.paths if p.status == "measured"] == ["same probe"] * 2
+    assert [d.probe for d in rep.dns if d.status == "measured"] == ["same probe"] * 2
+
+
+def test_fresh_probes_are_labelled_different_probe(fake):
+    fake.reuse_expired = True
+    rep = run_scan("example.com", plan(traceroute=True, dns=True), client(fake))
+    assert [r.repeat_probe for r in rep.locations] == ["different probe"] * 2
+    assert [r.ping_probe for r in rep.locations] == ["different probe"] * 2
+    assert all(p.probe == "different probe" for p in rep.paths if p.status == "measured")
+    assert all(d.probe == "different probe" for d in rep.dns if d.status == "measured")
+    assert summarise(rep).cache_gain_pct is None
+
+
+def test_same_city_fallback_is_labelled(fake):
+    fake.queue("http", fixture("http_ok"))  # cold
+    other = copy.deepcopy(fixture("http_ok"))
+    other["results"][1]["probe"]["asn"] = 9999  # Tokyo answered by another machine in Tokyo
+    fake.queue("http", other)
+    rep = run_scan("example.com", plan(), client(fake))
+    assert [r.repeat_probe for r in rep.locations] == ["same probe", "different probe, same city"]
+    assert [r.repeat_same_probe for r in rep.locations] == [True, False]
+
+
+# --- start failures say why (final review item 3) ------------------------------------------------
+
+NO_PROBES = (422, {"error": {"type": "no_probes_found", "message": "No matching IPv4 probes available."}})
+INVALID = (400, {"error": {"type": "validation_error", "message": "Parameter validation failed."}})
+
+
+@pytest.mark.parametrize("setup, kind", [
+    (lambda f: setattr(f, "rate_limit_after", 0), "limit"),
+    (lambda f: setattr(f, "create_error", NO_PROBES), "no_probe"),
+    (lambda f: setattr(f, "create_error", INVALID), "address"),
+    (lambda f: setattr(f, "create_error", (500, {})), "other"),
+    (lambda f: setattr(f, "valid_token", "another-token"), "key"),
+])
+def test_scan_error_kind_says_why_the_start_failed(fake, setup, kind):
+    setup(fake)
+    with pytest.raises(ScanError) as e:
+        run_scan("example.com", plan(), client(fake))
+    assert e.value.kind == kind
+    assert TOKEN not in str(e.value)
+
+
+def test_bad_address_is_an_address_scan_error():
+    with pytest.raises(ScanError) as e:
+        run_scan("not a url at all", plan(), GlobalpingClient(base_url="http://127.0.0.1:9/v1"))
+    assert e.value.kind == "address"
+
+
+def test_start_messages_are_fixed_and_distinct():
+    from speedward.core.runner import START_MESSAGES, start_message
+    assert len(set(START_MESSAGES.values())) == len(START_MESSAGES)
+    assert "limit reached" in start_message("limit")
+    assert "no test machine found for one of the places you chose" in start_message("no_probe")
+    assert "key" in start_message("key") and "address" in start_message("address")
+    assert start_message("unknown kind") == START_MESSAGES["other"]

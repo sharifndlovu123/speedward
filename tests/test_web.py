@@ -19,7 +19,7 @@ from tests.fake_globalping import FakeGlobalping, fixture
 TOKEN = "tok-web-secret-123"
 TARGET = "https://secret-target.example/page"
 HOSTILE = "<script>alert(1)</script>"
-START_FAILED = "The scan could not start. Check the address and your Globalping key."
+START_FAILED = "The scan could not start because Globalping could not be used. Try again later."
 STATIC_JS = Path(__file__).resolve().parent.parent / "speedward" / "web" / "static" / "js" / "results.js"
 
 
@@ -83,12 +83,14 @@ def report_dict(**overrides):
             {"location": loc, "status": "measured", "reason": "", "stages": stages, "repeat_stages": None,
              "ping_ms": 9.0, "http_status": 200, "cdn": None, "server_ip": "203.0.113.9", "tls_version": None,
              "http_version": None, "redirects": [], "repeat_same_probe": False,
-             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None},
+             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None,
+             "repeat_probe": None, "ping_probe": None},
             {"location": dict(loc, city="Lagos", country="NG", lat=6.5, lon=3.4), "status": "blocked",
-             "reason": "timed out the connection", "stages": None, "repeat_stages": None, "ping_ms": None,
+             "reason": "connection timed out", "stages": None, "repeat_stages": None, "ping_ms": None,
              "http_status": None, "cdn": None, "server_ip": None, "tls_version": None, "http_version": None,
              "redirects": [], "repeat_same_probe": False,
-             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None},
+             "server_position": None, "edge_code": None, "edge_note": None, "edge_reason": None,
+             "repeat_probe": None, "ping_probe": None},
         ],
         "paths": [], "dns": [], "browser": None,
     }
@@ -186,7 +188,8 @@ def test_page_has_no_inline_script_and_carries_ttl(client, settings):
 def test_security_headers_and_csp(client):
     r = client.get(reverse("index"))
     assert r["Content-Security-Policy"] == ("default-src 'self'; style-src 'self' 'unsafe-inline'; "
-                                            "img-src 'self' data:; script-src 'self'; frame-ancestors 'none'")
+                                            "img-src 'self' data:; script-src 'self'; frame-ancestors 'none'; "
+                                            "base-uri 'none'; form-action 'self'")
     assert r["X-Content-Type-Options"] == "nosniff"
     assert r["Referrer-Policy"] == "no-referrer"
     assert r["X-Frame-Options"] == "DENY"
@@ -356,6 +359,19 @@ def test_scan_error_text_not_echoed(client, monkeypatch, caplog):
     done = wait_done(client, start(client).json()["id"])
     assert done.json() == {"status": "error", "error": START_FAILED, "progress": []}
     assert "secret-site" not in done.content.decode() and "secret-site" not in caplog.text
+
+
+@pytest.mark.parametrize("setup, message", [
+    (lambda f: setattr(f, "rate_limit_after", 0), "Globalping limit reached"),
+    (lambda f: setattr(f, "create_error", (422, {"error": {"type": "no_probes_found"}})),
+     "no test machine found for one of the places you chose"),
+])
+def test_start_failure_says_why(client, fake, setup, message):
+    setup(fake)
+    done = wait_done(client, start(client).json()["id"])
+    assert done.json()["status"] == "error"
+    assert message in done.json()["error"]
+    assert "Check the address and your Globalping key" not in done.json()["error"]
 
 
 def test_unexpected_error_fixed_message(client, monkeypatch, caplog):
@@ -790,3 +806,44 @@ def test_unreadable_database_gets_the_setup_note(client):
     html = rendered(client, with_tokyo(edge_note="position not available",
                                        edge_reason="geo-IP database could not be read"))
     assert NOTE_TEXT in html and "could not be placed with confidence" not in html
+
+
+def test_render_labels_other_probe_repeats_and_lists_skipped_measurements(client):
+    result = report_dict(options={"locations": [], "not_run": ["ping: Globalping limit reached"]})
+    result["locations"][0].update(repeat_stages={"first_byte": 30}, repeat_probe="different probe")
+    html = post_json(client, reverse("render"), {"result": result, "limits": {}}).content.decode()
+    assert "repeat request (different probe)" in html
+    assert "the repeat ran on a different test machine" in html
+    assert "Repeat request from the same test machine" not in html
+    assert "Ping: Globalping limit reached, so the Delay column has no figures." in html
+
+
+def test_html_export_uses_configured_speed_thresholds(client, settings):
+    settings.FAST_MS, settings.SLOW_MS = 50, 100
+    html = post_json(client, reverse("export", args=["html"]), {"result": report_dict()}).content.decode()
+    assert "green up to 50 ms first byte, red from 100 ms" in html
+
+
+@pytest.mark.parametrize("name", ["render", "export"])
+def test_huge_timings_are_a_400_not_a_500(client, name):
+    result = report_dict()
+    result["locations"][0]["stages"]["first_byte"] = 1e308
+    url = reverse(name) if name == "render" else reverse("export", args=["html"])
+    r = post_json(client, url, {"result": result, "limits": {}})
+    assert r.status_code == 400
+
+
+def test_views_close_their_globalping_clients(client, monkeypatch):
+    from speedward.core.globalping import GlobalpingClient
+    made = []
+    real_init = GlobalpingClient.__init__
+
+    def tracking_init(self, *a, **k):
+        real_init(self, *a, **k)
+        made.append(self)
+    monkeypatch.setattr(GlobalpingClient, "__init__", tracking_init)
+    client.get(reverse("index"))
+    client.post(reverse("estimate"), {"locations": "Berlin,Tokyo"})
+    run_full_scan(client)
+    assert len(made) >= 3
+    assert all(c._http.is_closed for c in made)

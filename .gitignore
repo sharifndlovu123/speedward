@@ -6,3 +6,10 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 build/
+
+# Local secrets and downloaded location files: never committed.
+secrets/*
+!secrets/README.md
+GeoIP.conf
+*.mmdb
+*.mmdb.gz

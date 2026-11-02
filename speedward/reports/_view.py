@@ -5,10 +5,31 @@ import re
 
 from speedward.core.analysis import STAGE_NAMES, summarise
 from speedward.core.edge import edge_city
-from speedward.core.models import DB_UNREADABLE, NO_DB, LocationResult, ScanReport
+from speedward.core.models import (
+    DB_UNREADABLE,
+    NO_DB,
+    NOT_RUN_TEXTS,
+    SAME_PROBE,
+    LocationResult,
+    ScanReport,
+)
 
+# The note under the summary depends on which probes the repeat requests really ran on (spec: the
+# cache gain counts only same-probe pairs; other repeats are shown labelled, never as a cache figure).
 CACHE_NOTE = "Repeat request from the same test machine; not a browser cache test."
-CACHE_NA_NOTE = "needs the same test machine for both runs"
+CACHE_MIXED_NOTE = ('Cache gain uses only locations repeated on the same test machine; rows marked '
+                    '"different probe" are left out of it. Not a browser cache test.')
+CACHE_OTHER_NOTE = ("The repeat request ran on a different test machine, so no cache gain is shown; the "
+                    "Cache column gives that repeat timing for reference only. Not a browser cache test.")
+NO_REPEAT_NOTE = "No repeat request was measured, so no cache gain is shown."
+# Why the cache-gain tile is empty.
+REPEAT_OTHER = "the repeat ran on a different test machine"
+REPEAT_NONE = "no repeat request was measured"
+# What each skipped measurement (options["not_run"]) leaves without figures.
+SKIP_EFFECT = {"repeat test": "the Cache column and cache gain have no figures",
+               "ping": "the Delay column has no figures",
+               "network path": "the routes have no data",
+               "DNS check": "the DNS answers have no data"}
 STAGE_LABELS = {"dns": "DNS", "connect": "Connect", "tls": "TLS", "first_byte": "First byte",
                 "download": "Download"}
 STATUS_TEXT = {"measured": "measured", "blocked": "blocked", "test_failed": "test failed",
@@ -68,18 +89,66 @@ def position_source(r: LocationResult) -> str:
     return NA
 
 
+def repeat_note(r: LocationResult) -> str:
+    """Label for a repeat timing that did not come from the cold run's own probe ("" when it did)."""
+    if r.repeat_stages is None or r.repeat_probe in (None, SAME_PROBE):
+        return ""
+    return f"repeat request ({r.repeat_probe})"
+
+
+def delay_note(r: LocationResult) -> str:
+    if r.ping_ms is None or r.ping_probe in (None, SAME_PROBE):
+        return ""
+    return f"delay from a {r.ping_probe}"
+
+
+def probe_suffix(probe: str | None) -> str:
+    return f" ({probe})" if probe not in (None, SAME_PROBE) else ""
+
+
+def skipped(report: ScanReport) -> list[tuple[str, str, str]]:
+    """(measurement, fixed text, note) for each measurement that did not run. Only known texts are shown."""
+    raw = report.options.get("not_run") if isinstance(report.options, dict) else None
+    out = []
+    for text in raw if isinstance(raw, list) else []:
+        if text in NOT_RUN_TEXTS:
+            what, why = text.split(": ", 1)
+            out.append((what, text, f"{what[0].upper()}{what[1:]}: {why}, so {SKIP_EFFECT[what]}."))
+    return out
+
+
+def cache_notes(report: ScanReport, s) -> tuple[str, str]:
+    """(note under the summary, reason on the empty cache tile; "" when there is a figure)."""
+    repeats = [r for r in report.locations if r.status == "measured" and r.repeat_stages is not None]
+    same = [r for r in repeats if r.repeat_probe == SAME_PROBE]
+    if same:
+        note = CACHE_NOTE if len(same) == len(repeats) else CACHE_MIXED_NOTE
+    else:
+        note = CACHE_OTHER_NOTE if repeats else NO_REPEAT_NOTE
+    if s.cache_gain_pct is not None:
+        return note, ""
+    skip = {what: text for what, text, _ in skipped(report)}
+    if "repeat test" in skip:
+        return note, skip["repeat test"]
+    if not repeats:
+        return note, REPEAT_NONE
+    return note, REPEAT_OTHER if not same else NA
+
+
 def table_rows(report: ScanReport) -> list[dict]:
     rows = []
     for r in report.locations:
         base = {"location": label(r), "network": r.location.network or ""}
         if r.status != "measured":
             rows.append({**base, "excluded": True, "cold": NO_DATA, "warm": NO_DATA, "delay": NO_DATA,
+                         "warm_note": "", "delay_note": "",
                          "cdn": NO_DATA, "answered": NO_DATA, "source": NO_DATA,
                          "status": f"{STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"})
             continue
         cold = r.stages.first_byte if r.stages is not None else None
         warm = r.repeat_stages.first_byte if r.repeat_stages is not None else None
         rows.append({**base, "excluded": False, "cold": ms(cold), "warm": ms(warm), "delay": ms(r.ping_ms),
+                     "warm_note": repeat_note(r), "delay_note": delay_note(r),
                      "cdn": r.cdn or NA, "answered": answered_by(r), "source": position_source(r),
                      "status": f"HTTP {r.http_status}" if r.http_status is not None else "measured"})
     return rows
@@ -149,7 +218,8 @@ def dns_rows(report: ScanReport) -> tuple[list[dict], bool]:
     for d in report.dns:
         if d.status == "measured":
             answer_sets.add(tuple(sorted(d.answers)))
-            rows.append({"location": ", ".join(p for p in (d.location.city, d.location.country) if p),
+            rows.append({"location": ", ".join(p for p in (d.location.city, d.location.country) if p)
+                         + probe_suffix(d.probe),
                          "answers": ", ".join(d.answers) or NA, "lookup": ms(d.lookup_ms)})
         else:
             rows.append({"location": ", ".join(p for p in (d.location.city, d.location.country) if p),
@@ -165,6 +235,7 @@ def path_rows(report: ScanReport) -> list[dict]:
         if p.status != "measured":
             out.append({"location": name, "note": f"{NO_DATA} ({STATUS_TEXT[p.status]}: {p.reason})", "hops": []})
             continue
+        name += probe_suffix(p.probe)
         hops = [{"n": h.n, "host": h.host or "*", "rtt": ms(h.rtt_ms),
                  "loss": NA if h.loss_pct is None else f"{h.loss_pct:g}%"} for h in p.hops]
         out.append({"location": name, "note": "", "hops": hops})
@@ -176,13 +247,14 @@ def context(report: ScanReport) -> dict:
     dns, differ = dns_rows(report)
     b = report.browser
     cache = f"{s.cache_gain_pct:.0f}%" if s.cache_gain_pct is not None else "n/a"
+    cache_note, cache_na_note = cache_notes(report, s)
     return {
         "r": report, "s": s, "target": report.target.split("://", 1)[-1],
         "avg": ms(s.avg_first_byte) if s.avg_first_byte is not None else NO_DATA,
         "avg_fig": numeral(ms(s.avg_first_byte)) if s.avg_first_byte is not None else (NO_DATA, ""),
         "cache_fig": numeral(cache),
-        "cache": cache, "cache_na": s.cache_gain_pct is None, "cache_na_note": CACHE_NA_NOTE,
-        "cache_note": CACHE_NOTE,
+        "cache": cache, "cache_na": s.cache_gain_pct is None, "cache_na_note": cache_na_note,
+        "cache_note": cache_note, "skipped": [note for _, _, note in skipped(report)],
         "excluded_line": excluded_line(s),
         "rows": table_rows(report), "stages": stage_averages(report),
         "identity": server_identity(report), "position_note": position_note(report), "dns": dns, "dns_differs": differ, "paths": path_rows(report),

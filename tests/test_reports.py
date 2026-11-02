@@ -78,13 +78,77 @@ def test_stage_none_is_omitted_not_zero():
     assert "DNS" in html
 
 
+SAME_NOTE = "Repeat request from the same test machine; not a browser cache test."
+
+
 def test_cache_gain_na_text():
     html = render(rep(), "html")
-    assert "n/a" in html and "needs the same test machine for both runs" in html
-    assert "Repeat request from the same test machine; not a browser cache test." in html
+    assert "n/a" in html and "no repeat request was measured" in html
     md = render(rep(), "md")
-    assert "Repeat request from the same test machine; not a browser cache test." in md
-    assert "n/a" in md
+    assert "n/a" in md and "no repeat request was measured" in md
+    for text in (html, md):  # no repeat at all: the same-machine note would be untrue
+        assert SAME_NOTE not in text
+        assert "needs the same test machine" not in text
+
+
+def test_same_probe_note_only_when_true():
+    r = rep(locations=[ok(fb=1000, repeat_stages=Stages(first_byte=500), repeat_same_probe=True)])
+    for fmt in ("html", "md"):
+        out = render(r, fmt)
+        assert SAME_NOTE in out and "different probe" not in out
+
+
+def test_different_probe_repeat_is_labelled_and_left_out_of_cache_gain():
+    r = rep(locations=[ok(fb=1000, repeat_stages=Stages(first_byte=500), repeat_probe="different probe")])
+    for fmt in ("html", "md"):
+        out = render(r, fmt)
+        assert "500 ms" in out and "repeat request (different probe)" in out
+        assert "50%" not in out and "n/a" in out
+        assert "the repeat ran on a different test machine" in out
+        assert SAME_NOTE not in out
+    data = json.loads(render(r, "json"))
+    assert data["locations"][0]["repeat_probe"] == "different probe"
+
+
+def test_same_city_repeat_and_ping_labels():
+    r = rep(locations=[ok(fb=1000, repeat_stages=Stages(first_byte=500), repeat_probe="different probe, same city",
+                          ping_ms=40, ping_probe="different probe"),
+                       ok("Osaka", fb=1000, repeat_stages=Stages(first_byte=400), repeat_same_probe=True)])
+    for fmt in ("html", "md"):
+        out = render(r, fmt)
+        assert "repeat request (different probe, same city)" in out
+        assert "40 ms" in out and "delay from a different probe" in out
+        assert "60%" in out  # only the same-probe pair counts
+        assert "rows marked &#34;different probe&#34;" in out or 'rows marked "different probe"' in out
+
+
+def test_path_and_dns_from_another_probe_are_labelled():
+    p = PathResult(loc("A"), [Hop(1, "router.local", 1, 1.5, 0.0)], "measured", "", "different probe")
+    d = DnsResult(loc("B"), "measured", "", ["1.1.1.1"], 5, "different probe, same city")
+    for fmt in ("html", "md"):
+        out = render(rep(paths=[p], dns=[d]), fmt)
+        assert "A, JP (different probe)" in out
+        assert "B, JP (different probe, same city)" in out
+
+
+NOT_RUN = {"locations": [], "not_run": ["repeat test: Globalping limit reached",
+                                        "ping: the test failed on the Globalping side"]}
+
+
+def test_skipped_measurements_are_shown_with_their_effect():
+    r = rep(options=NOT_RUN)
+    for fmt in ("html", "md"):
+        out = render(r, fmt)
+        assert "Repeat test: Globalping limit reached, so the Cache column and cache gain have no figures." in out
+        assert "Ping: the test failed on the Globalping side, so the Delay column has no figures." in out
+        assert "repeat test: Globalping limit reached" in out.split("Cache gain")[1].split("Blocked")[0]
+        assert "no repeat request was measured" not in out
+
+
+def test_unknown_skipped_text_is_never_shown():
+    r = rep(options={"not_run": ["ping: <b>evil.example</b>"]})
+    for fmt in ("html", "md"):
+        assert "evil.example" not in render(r, fmt)
 
 
 def test_cache_gain_shown_when_available():
@@ -206,3 +270,16 @@ def test_summary_figures_keep_wording_and_never_invent_a_number():
     ok_html = render(rep(), "html")
     figs = text(re.search(r'<section class="figures".*?</section>', ok_html, re.S).group(0))
     assert "920 ms" in figs
+
+
+def test_html_export_uses_the_configured_speed_thresholds():
+    out = render(rep(), "html", fast_ms=50, slow_ms=100)
+    assert "green up to 50 ms first byte, red from 100 ms" in out
+    assert "green up to 300 ms first byte, red from 800 ms" in render(rep(), "html")
+    assert render(rep(), "md", fast_ms=50, slow_ms=100) == render(rep(), "md")
+
+
+def test_markdown_path_note_is_escaped():
+    p = PathResult(loc("A"), [], "test_failed", "bad | pipe\nnew line")
+    md = render(rep(paths=[p]), "md")
+    assert "bad \\| pipe new line" in md

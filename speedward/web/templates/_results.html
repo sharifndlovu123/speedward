@@ -6,6 +6,7 @@
 {% if browser %}<div class="figure"><small class="cap">Page weight</small><b class="num">{{ browser.weight }}</b><small class="note">{{ browser.requests }}</small></div>{% endif %}
 </section>
 <p class="excluded-note">{{ excluded_line }}</p>
+{% if skipped %}<ul class="skipped" aria-label="Measurements that did not run">{% for n in skipped %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 <p class="verdict{% if verdict_failed %} failed{% endif %}">{{ verdict }}</p>
 {% if failed %}<ul class="failed-list">{% for f in failed %}<li>Failed: {{ f }}</li>{% endfor %}</ul>{% endif %}
 
@@ -18,7 +19,7 @@
 <ol>
 <li>Download a City database in <code>.mmdb</code> form: MaxMind GeoLite2 City (free account and licence from maxmind.com) or DB-IP Lite City (free from db-ip.com, CC BY 4.0). Check the licence before use.</li>
 <li>Install the extra: <code>pip install -e ".[geoip]"</code> (the Docker image has it).</li>
-<li>Set <code>GEOIP_DB=/path/to/file.mmdb</code> in <code>.env</code>, or for Docker mount the file and pass <code>-e GEOIP_DB=/geo/GeoLite2-City.mmdb</code>. Restart, then run the test again.</li>
+<li>Set <code>GEOIP_DB=/path/to/file.mmdb</code> in <code>.env</code> and restart; <code>scripts/update_geoip.sh</code> keeps the file current. With Docker Compose, set the <code>GEOIPUPDATE_</code> keys in <code>.env</code> instead: its geoipupdate service downloads the file. Then run the test again.</li>
 </ol>
 <p class="mute">The file stays on this server; no lookup leaves it. Addresses shared by a CDN (anycast) still get no square, because their place is uncertain.</p>
 </details>
@@ -33,7 +34,7 @@
 <div class="scroll" tabindex="0" role="region" aria-label="Locations table"><table>
 <thead><tr><th>Location</th><th>Network</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Answered by</th><th>Position source</th><th>Status</th></tr></thead>
 <tbody>
-{% for row in rows %}<tr data-row="{{ row.index }}"{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.network }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
+{% for row in rows %}<tr data-row="{{ row.index }}"{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.network }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}{% if row.warm_note %}<br><small class="note">{{ row.warm_note }}</small>{% endif %}</td><td>{{ row.delay }}{% if row.delay_note %}<br><small class="note">{{ row.delay_note }}</small>{% endif %}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 </section>

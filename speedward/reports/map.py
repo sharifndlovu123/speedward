@@ -11,15 +11,18 @@ from functools import lru_cache
 from html import escape
 from pathlib import Path
 
+from speedward.core.config import DEFAULT_FAST_MS, DEFAULT_SLOW_MS
 from speedward.core.locations import CATALOG
 from speedward.core.models import UNCERTAIN, LocationResult, ScanReport
 
 from ._view import CDN_EDGE_NOTE, NA, SOURCE_TEXT, _from_header, answered_by, position_source
 
-FAST_MS = 300
+FAST_MS = DEFAULT_FAST_MS
+UNKNOWN_HINT = "set GEOIP_DB or SERVER_LAT/SERVER_LON"
+UNKNOWN_HINT_WEB = "set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON"
 # A square closer than this (map pixels at width 1000) to its circle is drawn as a frame around it.
 HERE_PX = 9
-SLOW_MS = 800
+SLOW_MS = DEFAULT_SLOW_MS
 
 _STATUS_TEXT = {"blocked": "blocked", "test_failed": "test failed", "not_run": "did not run"}
 
@@ -104,7 +107,8 @@ def _anchor_text(report: ScanReport, measured: list[LocationResult],
 
 
 def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
-               slow_ms: float = SLOW_MS) -> str:
+               slow_ms: float = SLOW_MS, pin_hint: bool = False) -> str:
+    """pin_hint: the map is shown in the web UI, where a pin can be dropped (not in CLI reports or files)."""
     W = width
     H = W / 2
     k = W / 1000
@@ -230,7 +234,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
                    f'font-weight="600">{escape(label_text)}</text>')
     elif not located:
         out.append(f'<text x="{_num(sx)}" y="{_num(sy + 4 * k)}" font-size="{_num(fs)}" font-weight="600">'
-                   "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON</text>")
+                   f"Server position unknown: {UNKNOWN_HINT_WEB if pin_hint else UNKNOWN_HINT}</text>")
     out += labels
     if unplaced:
         names = ", ".join(escape(_city(r)) for r in unplaced)

@@ -77,3 +77,35 @@ def test_check_endpoint_refuses_token_to_remote_host():
         check_endpoint("https://evil.example/v1", "tok-secret")
     assert "tok-secret" not in str(info.value)
     assert info.value.host == "evil.example"
+
+
+# --- FAST_MS / SLOW_MS (final review item 4) ----------------------------------------------------
+
+def test_speed_thresholds_defaults_and_values():
+    from speedward.core.config import speed_thresholds
+    assert speed_thresholds({}) == (300, 800)
+    assert speed_thresholds({"FAST_MS": "50", "SLOW_MS": "100.5"}) == (50, 100.5)
+
+
+@pytest.mark.parametrize("env", [{"FAST_MS": "x"}, {"FAST_MS": "0"}, {"SLOW_MS": "-1"}, {"FAST_MS": "nan"},
+                                 {"FAST_MS": "inf"}, {"FAST_MS": "900"}, {"FAST_MS": "500", "SLOW_MS": "500"}])
+def test_speed_thresholds_rejects_bad_values(env):
+    from speedward.core.config import speed_thresholds
+    with pytest.raises(ValueError):
+        speed_thresholds(env)
+
+
+def test_maxmind_keys_in_dotenv_are_never_read_by_speedward(tmp_path):
+    p = tmp_path / ".env"
+    p.write_text("GEOIPUPDATE_ACCOUNT_ID=1\nGEOIPUPDATE_LICENSE_KEY=not-for-speedward\nGLOBALPING_TOKEN=t\n")
+    env = build_environment(p, environ={})
+    assert not [k for k in env if k.startswith("GEOIPUPDATE_")]
+    assert "not-for-speedward" not in env.values()
+
+
+def test_env_example_lists_every_allowed_key():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parent.parent / ".env.example").read_text()
+    keys = {line.split("=", 1)[0] for line in text.splitlines() if "=" in line and not line.startswith("#")}
+    assert set(DOTENV_ALLOWED) <= keys
+    assert keys - set(DOTENV_ALLOWED) == {"GEOIPUPDATE_ACCOUNT_ID", "GEOIPUPDATE_LICENSE_KEY", "GEOIPUPDATE_EDITION_IDS"}
