@@ -26,7 +26,8 @@ from django.views.decorators.http import require_GET, require_POST
 
 from speedward.core.allowance_view import KEY_PROMPT, describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
-from speedward.core.budget import Plan, check_budget, estimate_cost
+from speedward.core.budget import Plan, check_budget, cost_breakdown, describe_breakdown, estimate_cost
+from speedward.core.checks import LABEL, PER_PLACE, QUESTION, REACH_CHECKS, parse_checks
 from speedward.core.config import EndpointRefused, check_endpoint
 from speedward.core.geo import geolocator_from_env, parse_pin
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
@@ -38,6 +39,7 @@ from speedward.reports import render as render_report
 from speedward.reports._view import context
 from speedward.reports.bottleneck import render_bottleneck
 from speedward.reports.map import render_map, render_picker_map
+from speedward.reports.reach import MAP_LEGEND, render_reach
 
 from . import state
 
@@ -84,7 +86,8 @@ def _error(message: str, status: int, **extra) -> JsonResponse:
 def _plan(request) -> Plan:
     """ValueError (with a fixed, target-free message) on a bad locations list."""
     return Plan(locations=parse_locations(request.POST.get("locations")),
-                traceroute=bool(request.POST.get("traceroute")), dns=bool(request.POST.get("dns")))
+                traceroute=bool(request.POST.get("traceroute")), dns=bool(request.POST.get("dns")),
+                checks=parse_checks(request.POST.get("checks")))
 
 
 def _budget(plan: Plan, allowance: Allowance) -> dict:
@@ -98,8 +101,14 @@ def _budget(plan: Plan, allowance: Allowance) -> dict:
             refused = verdict.reason
         elif allowance.credits is not None and allowance.credits <= 0:
             refused = CREDITS_ZERO
+    lines = cost_breakdown(plan)
+    on = len(plan.checks)
     return {"cost": cost, "fits": verdict.fits, "reason": verdict.reason, "refused": refused,
             "message": f"This scan uses about {cost} tests. You have {left} left this hour.",
+            "parts": [{"key": x.key, "per_place": x.per_place, "cost": x.cost} for x in lines],
+            "breakdown": describe_breakdown(plan),
+            "checks_line": (f"{on} check{'' if on == 1 else 's'} on · " if on else "no extra checks · ")
+                           + f"{len(plan.locations)} place{'' if len(plan.locations) == 1 else 's'}",
             "allowance": _allowance_dict(allowance),
             "view": describe_allowance(allowance, cost, time.time()).as_dict()}
 
@@ -132,6 +141,8 @@ def index(request):
         "notice": NOTICE,
         "ttl_seconds": settings.RESULT_TTL_SECONDS, "ttl_minutes": max(1, settings.RESULT_TTL_SECONDS // 60),
         "default_locations": ",".join(defaults),
+        "reach_checks": [{"key": c, "label": LABEL[c], "per": PER_PLACE[c], "question": QUESTION[c]}
+                         for c in REACH_CHECKS],
     })
 
 
@@ -344,7 +355,10 @@ def render_result(request):
     svg = render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS, pin_hint=True)
     # The panel comes from our own autoescaping template; "" for a report from before diagnoses.
     panel = render_bottleneck(report, interactive=True, heading="h3")
-    ctx.update(map_svg=mark_safe(svg), bottleneck=mark_safe(panel),  # noqa: S308
+    # "Who can reach it", also our own autoescaping template; "" for a report without checks.
+    reach = render_reach(report, interactive=True, heading="h3")
+    ctx.update(map_svg=mark_safe(svg), bottleneck=mark_safe(panel), reach=mark_safe(reach),  # noqa: S308
+               reach_legend=MAP_LEGEND if report.reach is not None else "",
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
     return render(request, "_results.html", ctx)

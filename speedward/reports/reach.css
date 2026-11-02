@@ -1,0 +1,30 @@
+/* "Who can reach it": one stylesheet for the web UI and the HTML export (inlined by the panel).
+   Page tokens only (--paper, --ink, --hair, --mute); no red. Flat hairlines, no shadow, no radius.
+   States are symbol plus word: reached (filled dot, plain), blocked / closed (open ring, bold word),
+   no data (dotted ring, muted italic). Contrast: tests/test_contrast.py. */
+.reach{margin:8px 0 0}
+.rc-kicker{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:0 0 6px}
+.rc-finding{border-left:3px solid var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent);
+  padding:10px 14px;margin:0 0 8px;color:var(--ink)}
+.rc-finding p{margin:0}
+.rc-finding .rc-check{margin-top:4px}
+.rc-head button{margin:2px 0 8px}
+.rc-body .rc-title{margin-top:8px;scroll-margin-top:64px}
+.rc-grid{border-collapse:collapse;width:100%;border:1px solid var(--hair)}
+.rc-grid th,.rc-grid td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--hair);
+  overflow-wrap:anywhere;color:var(--ink)}
+.rc-grid thead th{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.rc-grid tbody th{font-weight:600}
+.rc-grid tbody tr:last-child>*{border-bottom:0}
+.rc-sym{display:inline-block;width:1em}
+.rc-grid b{font-weight:600}
+.rc-reached b{font-weight:500}
+.rc-blocked b{font-weight:800}
+.rc-no_data{font-style:italic}
+.rc-no_data b{font-weight:500}
+.rc-detail{display:block;color:var(--mute);font-size:.85rem}
+.rc-key{color:var(--mute);font-size:.85rem;margin:8px 0 0}
+.rc-finding{animation:rc-wipe .5s cubic-bezier(.19,1,.22,1) backwards}
+@keyframes rc-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@media (prefers-reduced-motion:reduce){.rc-finding{animation:none}}
+@media (forced-colors:active){.rc-finding{border-left-color:CanvasText}}

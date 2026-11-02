@@ -178,7 +178,7 @@ def test_single_origin_draws_one_server_square_with_lines_from_every_probe():
     assert len(re.findall(SQUARE, svg)) == 1
     assert 'class="sw-sq sw-server"' in svg and "Server (all probes reached the same IP)" in svg
     assert len(re.findall(ARC, svg)) == 4  # three measured, plus the blocked one dashed
-    assert svg.count("stroke-dasharray") == 1
+    assert svg.count("stroke-dasharray=") == 1  # the dashed line (the CSS dashes no-data dots)
     assert "CDN edge, not necessarily your origin" not in svg
     assert "93.184.216.34" in svg and "geo-IP database" in svg
 

@@ -29,7 +29,11 @@ REPEAT_NONE = "no repeat request was measured"
 SKIP_EFFECT = {"repeat test": "the Cache column and cache gain have no figures",
                "ping": "the Delay column has no figures",
                "network path": "the routes have no data",
-               "DNS check": "the DNS answers have no data"}
+               "DNS check": "the DNS answers have no data",
+               "IPv6 check": "the IPv6 column has no data",
+               "plain HTTP check": "the HTTP column has no data",
+               "DNS resolver check": "the DNS column has no data for that resolver",
+               "port check": "the Port column has no data"}
 STAGE_LABELS = {"dns": "DNS", "connect": "Connect", "tls": "TLS", "first_byte": "First byte",
                 "download": "Download"}
 STATUS_TEXT = {"measured": "measured", "blocked": "blocked", "test_failed": "test failed",
@@ -111,7 +115,7 @@ def skipped(report: ScanReport) -> list[tuple[str, str, str]]:
     raw = report.options.get("not_run") if isinstance(report.options, dict) else None
     out = []
     for text in raw if isinstance(raw, list) else []:
-        if text in NOT_RUN_TEXTS:
+        if text in NOT_RUN_TEXTS and not any(t == text for _, t, _ in out):
             what, why = text.split(": ", 1)
             out.append((what, text, f"{what[0].upper()}{what[1:]}: {why}, so {SKIP_EFFECT[what]}."))
     return out

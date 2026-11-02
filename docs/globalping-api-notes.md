@@ -249,3 +249,22 @@ Limits found:
 - **Page size is not available.** The response had `transfer-encoding: chunked` and no `content-length`; `rawBody` is capped at the first 10 KB (`truncated`). Compression is knowable (`content-encoding`), size on the wire is not.
 - `timings.download` is noisy for a tiny page (0 to 67 ms across runs), so one run proves nothing about it.
 - Each test is one probe per place, so every comparison below costs one extra test per place per variant.
+
+## Reachability checks (observed 2026-11-02)
+
+Nine authenticated single-probe calls (8 tests used, one refused before running), one Frankfurt probe
+(`oci-eu-frankfurt-1`). Tests 2, 4, 6 and 9 reused the first test's probe by passing its id as
+`locations`; the same probe answered every time (same city and tags). Raw answers were kept outside the repo.
+
+| Request | Observed result |
+| --- | --- |
+| http `ipVersion: 6`, probes reused from an IPv4 http test | `202`, cost 1, `status: finished`, `resolvedAddress: "2606:4700:10::6814:179a"`, all six timings. So reuse and `ipVersion: 6` combine. |
+| http `ipVersion: 6` to a name with no AAAA record (`github.com`) | `status: "failed"`, `failureSource: "target"`, `rawOutput: "queryAaaa ENODATA github.com"`, `statusCode: null`, `timings.total: 1`, other timings `null`. The site side: the name has no IPv6 address. |
+| ping `protocol: "TCP"`, `port: 443`, `packets: 3`, reused probes | `status: finished`, `timings: [{"rtt":1.14},...]` (no `ttl`), `stats: {"min":1.143,"max":1.359,"avg":1.242,"total":3,"loss":0,"rcv":3,"drop":0}`. |
+| ping TCP to a port that does not answer (`example.com` port 81) | **Not a failed test**: `status: "finished"`, `timings: []`, `stats: {"min":null,"max":null,"avg":null,"total":3,"loss":100,"rcv":0,"drop":3}`, `rawOutput` lines `No reply from ... on port 81`. The probe waited about 14 s. A closed or filtered port must be read from `stats.rcv == 0` / `loss == 100`, never from `status`. |
+| dns `resolver: "1.1.1.1"`, reused probes | `status: finished`, `statusCodeName: "NOERROR"`, `statusCode: 0`, `answers[]` (A records with `value`), `timings.total: 2`, `resolver: "1.1.1.1"` (echoed). |
+| dns `resolver: "1.1.1.1"` for a name that does not exist (under a zone with a wildcard SOA) | `status: finished`, `statusCodeName: "NOERROR"`, `answers: []`, `timings.total: 12`. So "no address" can come back as NOERROR with no answers, not only as `NXDOMAIN` (an `NXDOMAIN` code was not observed). |
+| dns `resolver: "192.0.2.1"` (documentation range) | `400 validation_error`: `"measurementOptions.resolver" must not be a private hostname`. Not charged. |
+| http `protocol: "HTTP"` (plain) to a site that redirects (`github.com`), reused probes | `statusCode: 301`, `headers.location: "https://github.com/"`, `tls: null`, timings present. The redirect is not followed. |
+
+Not observed: a dns result with `status: failed` (the spec lists `failureSource: "resolver"` for resolver trouble), `SERVFAIL` or `REFUSED` codes, a TCP ping that loses only some packets, and an IPv6 test on a probe without IPv6 (the spec says reuse returns `offline` for a probe that cannot run the test). The app treats each of these as described in README "More checks".

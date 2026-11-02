@@ -1,0 +1,160 @@
+{
+ "_note": "Real single-probe results recorded 2026-11-02 (docs/globalping-api-notes.md, Reachability checks). Long text trimmed; nothing else changed.",
+ "results": {
+  "http_v6_ok": {
+   "status": "finished",
+   "resolvedAddress": "2606:4700:10::6814:179a",
+   "headers": {
+    "date": "Mon, 02 Nov 2026 16:21:26 GMT",
+    "content-type": "text/html; charset=utf-8",
+    "transfer-encoding": "chunked",
+    "connection": "close",
+    "server": "cloudflare",
+    "last-modified": "Sun, 01 Nov 2026 22:43:12 GMT",
+    "allow": "GET, HEAD",
+    "age": "9",
+    "cf-cache-status": "HIT",
+    "content-encoding": "br",
+    "cf-ray": "a54478eab99cd38d-FRA",
+    "alt-svc": "h3=\":443\"; ma=86400"
+   },
+   "rawOutput": "HTTP/1.1 200\nDate: Mon, 02 Nov 2026 16:21:26 GMT\nContent-Type: text/html; charset=utf-8\nTransfer-Encoding: chunked\nConnection: close\nServer: cloudflare\nlast-modified: Sun, 01 Nov 2026 22:43:12 GMT\nall",
+   "truncated": false,
+   "statusCode": 200,
+   "statusCodeName": "OK",
+   "timings": {
+    "total": 31,
+    "dns": 3,
+    "tcp": 1,
+    "tls": 10,
+    "firstByte": 17,
+    "download": 0
+   },
+   "tls": {
+    "authorized": true,
+    "protocol": "TLSv1.3",
+    "cipherName": "TLS_AES_256_GCM_SHA384"
+   }
+  },
+  "http_v6_no_aaaa": {
+   "status": "failed",
+   "failureSource": "target",
+   "resolvedAddress": null,
+   "headers": {},
+   "rawOutput": "queryAaaa ENODATA github.com",
+   "truncated": false,
+   "statusCode": null,
+   "statusCodeName": null,
+   "timings": {
+    "total": 1,
+    "dns": null,
+    "tcp": null,
+    "tls": null,
+    "firstByte": null,
+    "download": null
+   },
+   "tls": null
+  },
+  "ping_tcp_ok": {
+   "status": "finished",
+   "rawOutput": "PING example.com (104.20.23.154) on port 443.\nReply from example.com (104.20.23.154) on port 443: tcp_conn=1 time=1.14 ms\nReply from example.com (104.20.23.154) on port 443: tcp_conn=2 time=1.36 ms\nRe",
+   "resolvedAddress": "104.20.23.154",
+   "resolvedHostname": "example.com",
+   "timings": [
+    {
+     "rtt": 1.14
+    },
+    {
+     "rtt": 1.36
+    },
+    {
+     "rtt": 1.23
+    }
+   ],
+   "stats": {
+    "min": 1.143,
+    "max": 1.359,
+    "avg": 1.242,
+    "total": 3,
+    "loss": 0,
+    "rcv": 3,
+    "drop": 0
+   }
+  },
+  "ping_tcp_closed": {
+   "status": "finished",
+   "rawOutput": "PING example.com (172.66.147.243) on port 81.\nNo reply from example.com (172.66.147.243) on port 81: tcp_conn=1\nNo reply from example.com (172.66.147.243) on port 81: tcp_conn=2\nNo reply from example.",
+   "resolvedAddress": "172.66.147.243",
+   "resolvedHostname": "example.com",
+   "timings": [],
+   "stats": {
+    "min": null,
+    "max": null,
+    "avg": null,
+    "total": 3,
+    "loss": 100,
+    "rcv": 0,
+    "drop": 3
+   }
+  },
+  "dns_resolver_ok": {
+   "status": "finished",
+   "rawOutput": "\n; <<>> DiG 9.18.44-1~deb12u1-Debian <<>> -t A example.com @1.1.1.1 -p 53 -4 +timeout=5 +tries=2 +nofail +nocookie +nosplit +nsid\n;; global options: +cmd\n;; Got answer:\n;; ->>HEADER<<- opcode: QUERY, ",
+   "statusCodeName": "NOERROR",
+   "statusCode": 0,
+   "answers": [
+    {
+     "name": "example.com.",
+     "type": "A",
+     "ttl": 112,
+     "class": "IN",
+     "value": "104.20.23.154"
+    },
+    {
+     "name": "example.com.",
+     "type": "A",
+     "ttl": 112,
+     "class": "IN",
+     "value": "172.66.147.243"
+    }
+   ],
+   "timings": {
+    "total": 2
+   },
+   "resolver": "1.1.1.1"
+  },
+  "dns_resolver_no_address": {
+   "status": "finished",
+   "rawOutput": "\n; <<>> DiG 9.16.37-Debian <<>> -t A does-not-exist-speedward-reach.example.com @1.1.1.1 -p 53 -4 +timeout=5 +tries=2 +nofail +nocookie +nosplit +nsid\n;; global options: +cmd\n;; Got answer:\n;; ->>HEAD",
+   "statusCodeName": "NOERROR",
+   "statusCode": 0,
+   "answers": [],
+   "timings": {
+    "total": 12
+   },
+   "resolver": "1.1.1.1"
+  },
+  "http_plain_redirect": {
+   "status": "finished",
+   "resolvedAddress": "140.82.121.3",
+   "headers": {
+    "content-length": "0",
+    "location": "https://github.com/",
+    "connection": "close"
+   },
+   "rawOutput": "HTTP/1.1 301\nContent-Length: 0\nLocation: https://github.com/\nconnection: close",
+   "truncated": false,
+   "statusCode": 301,
+   "statusCodeName": "Moved Permanently",
+   "timings": {
+    "total": 5,
+    "dns": 3,
+    "tcp": 1,
+    "tls": null,
+    "firstByte": 1,
+    "download": 0
+   },
+   "tls": null
+  }
+ }
+}

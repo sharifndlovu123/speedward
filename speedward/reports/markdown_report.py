@@ -1,5 +1,6 @@
 from ._view import context
 from .bottleneck import markdown_lines
+from .reach import markdown_lines as reach_lines
 
 
 def _c(text) -> str:
@@ -18,6 +19,9 @@ def to_markdown(report) -> str:
         L.append(f"- Page weight: {c['browser']['weight']}")
     L += [f"- {c['excluded_line']}", f"- {c['cache_note']}"]
     L += [f"- {note}" for note in c["skipped"]]
+    reach = reach_lines(report)
+    if reach:
+        L += [""] + reach  # cells are escaped there
     where = markdown_lines(report)
     if where:
         L += [""] + [_c(line) if line.startswith("- ") else line for line in where]
