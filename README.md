@@ -290,12 +290,12 @@ refused, timed out, has no address or no open port), ◌ no data (the Globalping
 did not run; never counted). The finding counts only reached and blocked cells, for example "The timings
 indicate: 2 of 4 places cannot reach the site over IPv6 (Tokyo, Seoul)", and ends with what to check.
 With fewer than 3 places that have a result it says there are not enough places. On the map, each dot
-shows the worst result for its place: an open ink ring means a check was blocked there.
+shows the worst result for its place: a double ink ring means a check was blocked there; a dashed ring is no data.
 
 What it cannot tell you: why a place is blocked (a firewall, a regional block and a broken route look the
 same from outside); whether real visitors in that place see the same (one test machine per place); whether
 a resolver answer of SERVFAIL or REFUSED is the site's fault (shown as "no data"); and whether HTTP/3 or
-a specific edge is used. A resolving name does not count as reaching the site.
+a specific edge is used. A resolving name does not count as reaching the site. The DNS check asks for an IPv4 address (A record): a name with none is shown as blocked, so an IPv6-only site shows blocked there. For an IP-address target the IPv6 and DNS checks are skipped (shown as not run, no tests used). "Cannot reach it at all" needs the main test itself blocked, or at least two site checks with a result and all of them blocked; each check needs results from at least 3 places before the finding counts it.
 
 ## Test cost and the allowance
 
