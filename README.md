@@ -1,3 +1,5 @@
+<p align="left"><img src="docs/logo.svg" alt="speedward logo" width="72" height="72"></p>
+
 # speedward
 
 [![CI](https://github.com/sharifndlovu123/speedward/actions/workflows/ci.yml/badge.svg)](https://github.com/sharifndlovu123/speedward/actions/workflows/ci.yml)
