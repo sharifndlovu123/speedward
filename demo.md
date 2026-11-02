@@ -147,6 +147,21 @@ Estimate: about 10 tests; exit code 0. Output trimmed (summary and stage breakdo
 
 A hop that did not answer shows as "not available" with 100% loss, and the Tokyo route shows two of those plus one hop with 66.7% loss.
 
+## Speed checks: is it fast?
+
+```bash
+speedward scan https://example.com --checks consistency,http2,compression,dnstrace,mtr --locations "London,Tokyo,Sao Paulo" --estimate
+```
+
+Each place then costs 11 tests: 3 for the default scan, +4 to repeat the request 5 times, and +1 each for
+HTTP/2, compression, the DNS trace and the path test (33 tests for these three places). The estimate lists
+each part before anything runs. Without `--estimate` the report gains an "Is it fast? Speed checks" table
+(symbol and word per place and check), one finding per check that starts "The timings indicate" when
+there are at least 3 places, and short notes under the "Where the time goes" blocks (for example "steady
+over 5 runs" on Server wait, "not compressed" on Download, "slowest step: TLD" on DNS, "no bad hop" on
+Connect). Page size on the wire is not available and is never shown. This section describes the format;
+it is not a recorded run.
+
 ## The web UI
 
 This section is written from the page templates and a real load of the home page (HTTP 200), not from a screenshot.
