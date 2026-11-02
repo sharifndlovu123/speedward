@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 geoip = ["maxminddb>=2.5"]
-browser = ["playwright>=1.44"]
+browser = ["playwright>=1.44"]  # reserved for the real-browser page test, not built yet (--browser is a stub)
 dev = ["pytest>=8", "pytest-django>=4.8", "ruff>=0.6"]
 e2e = ["pytest-playwright>=0.5", "gunicorn", "axe-playwright-python>=0.1.4", "httpx"]
 

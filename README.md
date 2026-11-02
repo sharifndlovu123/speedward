@@ -10,7 +10,7 @@ See [demo.md](demo.md) for a short walkthrough built from a real run.
 
 ## What you need
 
-- Python 3.11 or newer, or Docker.
+- Python 3.11 or newer, or Docker with Compose.
 - Internet access to `api.globalping.io`.
 - Optional: a Globalping key (below). The tool works without one, with lower limits.
 
@@ -24,13 +24,13 @@ pip install -e .
 speedward scan --help
 ```
 
-Optional extras: `pip install -e ".[geoip]"` (offline position of the server that answered each place, see below).
+Optional extras: `pip install -e ".[geoip]"` (offline position of the server that answered each place, see below). The `browser` extra is reserved for the real-browser page test, which is not built yet; installing it changes nothing today.
 
 ## Get a Globalping key
 
 The key is optional and free up to a limit. Create a free account at <https://globalping.io> and make a key in its dashboard.
 
-| | No key | Free key |
+| | No key | With a key (free up to a limit) |
 | --- | --- | --- |
 | Tests per hour | 250 | 500 |
 | Locations per run | 50 | up to 500 |
@@ -45,7 +45,7 @@ GLOBALPING_TOKEN=your-key-here
 
 Start from `.env.example` (`cp .env.example .env`). The key stays on the machine running speedward. The web page has no input for it, and it never reaches the browser, exports or logs. Do not commit `.env` (it is in `.gitignore`).
 
-Only an allowlist of keys is read from `.env` (everything in `.env.example`). `GLOBALPING_BASE_URL`, which points at a different Globalping endpoint (used by the tests), is read from the real environment only, and speedward refuses to send a key to any endpoint that is not Globalping or this machine.
+Only an allowlist of keys is read from `.env` (everything in `.env.example` except the `GEOIPUPDATE_*` keys, which only `docker compose` reads, for the geoipupdate container). `GLOBALPING_BASE_URL`, which points at a different Globalping endpoint (used by the tests), is read from the real environment only, and speedward refuses to send a key to any endpoint that is not Globalping or this machine.
 
 ## First scan from the command line
 
@@ -72,10 +72,14 @@ Options (all from `speedward scan --help`):
 | `--dns` | Also check DNS answers per place (more tests) |
 | `--format` | `json`, `md` (default) or `html` |
 | `--out FILE` | Write the report to a file |
-| `--max-ttfb MS`, `--max-load MS`, `--max-blocked N` | Pass/fail limits |
+| `--max-ttfb MS`, `--max-load MS`, `--max-blocked N` | Pass/fail limits (up to 1000000000) |
+| `--max-page-weight BYTES` | Not available yet: it needs the browser test, so it is refused with a message instead of always failing |
+| `--browser` | Not available yet: prints a note and runs the scan without it |
 | `--yes` | Go ahead even if the scan costs more than the tests left |
 | `--estimate` | Print cost and allowance, then stop |
 | `--verbose` | More detail when something goes wrong |
+
+Measurements that could not run (for example the repeat test after the Globalping limit was reached) are listed on standard error as "Not run: ..." and in the report, with the column they leave empty.
 
 Exit codes: `0` scan done and every limit passed (or none set), `1` a limit failed, `2` the scan could not run or no location could be tested. Messages go to standard error, the report to standard output (or `--out`).
 
@@ -87,17 +91,29 @@ DEBUG=1 django-admin runserver --settings=speedward.web.settings
 
 Open <http://127.0.0.1:8000/>. Enter an address, review the estimate, press Start test. `DEBUG=1` is for your own machine only.
 
-## Run it with Docker
+## Run it with Docker Compose
+
+`docker-compose.yml` runs two containers: **speedward** (built from the `Dockerfile`: gunicorn, one worker with threads, non-root, read-only root file system) and MaxMind's official **geoipupdate** image, which keeps the GeoLite2 City file current in a shared volume that speedward mounts read-only.
 
 ```bash
-docker build -t speedward .
-docker run --rm -p 127.0.0.1:8000:8000 \
-  -e SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(50))')" \
-  -e ALLOWED_HOSTS=localhost,127.0.0.1 \
-  --env-file .env speedward
+cp .env.example .env          # then fill in SECRET_KEY, GLOBALPING_TOKEN (optional) and the GEOIPUPDATE_ keys
+docker compose up -d --build  # start, or rebuild after a git pull
+docker compose ps             # speedward should turn "healthy"
+docker compose logs -f speedward      # the app log (it never holds targets or results)
+docker compose logs geoipupdate       # database downloads, or why one failed
+docker compose down           # stop; the downloaded database volume is kept
 ```
 
-The image runs gunicorn with one worker and eight threads as a non-root user. `.dockerignore` keeps `.env` out of the image, so pass settings with `-e` or `--env-file` at run time. `--env-file` takes the file as written, so keep values unquoted. Binding to `127.0.0.1` on the host (as above) keeps it private; see the next section before changing that.
+Open <http://127.0.0.1:8000/>.
+
+- **Settings come from `.env` by interpolation, one variable at a time.** Neither container gets `.env` wholesale: speedward receives only its own settings (the list in `docker-compose.yml`), and geoipupdate only `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` and `GEOIPUPDATE_EDITION_IDS`. The MaxMind licence key therefore never reaches the speedward container, and the Globalping key never reaches geoipupdate. `.dockerignore` keeps `.env`, `secrets/`, `GeoIP.conf` and `*.mmdb` out of the image, so nothing secret is baked in.
+- **`SECRET_KEY` is required** (the app refuses to start without it outside `DEBUG`): `python -c "import secrets; print(secrets.token_urlsafe(50))"`.
+- **`GEOIP_DB` is fixed to `/geo/GeoLite2-City.mmdb` inside the container**; the `GEOIP_DB` in `.env` is a host path for runs without Docker and is not used here. Until geoipupdate has downloaded the file, speedward runs normally and draws no position lines.
+- **Port**: published on `127.0.0.1:8000` only. To open it further, change the `ports` line (for example `"0.0.0.0:8000:8000"`) and read the next section first: the app has no login. Keep `127.0.0.1` in `ALLOWED_HOSTS`, because the health check uses it (it loads `/`, which asks Globalping for the allowance and costs no tests).
+- **Updating**: `git pull && docker compose up -d --build`. geoipupdate checks for a new database every 84 hours (twice a week, `GEOIPUPDATE_FREQUENCY`). To move to a newer geoipupdate release, change its pinned image tag.
+- **Optional: keep the MaxMind values in files instead of `.env`.** Put them in `secrets/maxmind_account_id` and `secrets/maxmind_license_key` (mode 600, value only, for example `printf '%s' 'VALUE' > secrets/maxmind_license_key`; MaxMind's container also trims a trailing newline), leave the two `GEOIPUPDATE_` keys in `.env` empty, and start with `docker compose -f docker-compose.yml -f docker-compose.secrets.yml up -d --build`. They are passed as Docker secrets through `GEOIPUPDATE_ACCOUNT_ID_FILE` / `GEOIPUPDATE_LICENSE_KEY_FILE`. Use one route, not both. `secrets/` is git-ignored except its README.
+
+Without Compose, `docker build -t speedward .` and `docker run --rm -p 127.0.0.1:8000:8000 -e SECRET_KEY=... -e GLOBALPING_TOKEN=... speedward` still work (pass settings with `-e`; avoid `--env-file .env` if your `.env` holds the MaxMind key).
 
 ## Run it for other people (read this first)
 
@@ -125,9 +141,9 @@ Set these in the environment or in `.env` (the real environment wins). Defaults 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `GLOBALPING_TOKEN` | none | Globalping key. Optional. |
-| `FAST_MS` | `300` | Timings at or under this are shown as fast |
-| `SLOW_MS` | `800` | Timings over this are shown as slow. Must be above `FAST_MS` |
-| `GEOIP_DB` | none | Path to an offline City `.mmdb` database, used to place the server that answered each place (see below) |
+| `FAST_MS` | `300` | Map lines are green up to this first-byte time (web UI, HTML export and CLI HTML report) |
+| `SLOW_MS` | `800` | Map lines are red from this first-byte time. Must be above `FAST_MS` |
+| `GEOIP_DB` | none | Path to an offline City `.mmdb` database, used to place the server that answered each place (see below). Ignored by `docker-compose.yml`, which uses `/geo/GeoLite2-City.mmdb` |
 | `SERVER_LAT`, `SERVER_LON` | none | Server position by hand. Wins over everything else for the one Server square |
 | `RESULT_TTL_SECONDS` | `900` | Web UI: how long the browser keeps results. Minimum 60 |
 | `MAX_CONCURRENT_SCANS` | `2` | Web UI: scans at once. Minimum 1 |
@@ -136,7 +152,7 @@ Set these in the environment or in `.env` (the real environment wins). Defaults 
 | `CSRF_TRUSTED_ORIGINS` | none | Web UI: full origins when served over HTTPS |
 | `DEBUG` | off | Web UI: `1`, `true`, `yes` or `on` enable it. Local use only |
 
-Not a `.env` setting: `STATIC_ROOT` (real environment only; defaults to `./staticfiles`).
+Not a `.env` setting: `STATIC_ROOT` (real environment only; defaults to `./staticfiles`). `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` and `GEOIPUPDATE_EDITION_IDS` sit in `.env` for `docker compose` only; speedward itself never reads them.
 
 ## Optional: lines to the server that answered each place
 
@@ -146,7 +162,44 @@ Each measured place records the IP address that answered it. Speedward puts that
 
 1. Download a City database in `.mmdb` form: **MaxMind GeoLite2 City** (free account and licence from maxmind.com; the licence asks you to keep it up to date and credit MaxMind) or **DB-IP Lite City** (free from db-ip.com, CC BY 4.0, credit DB-IP). Check the licence before use.
 2. Install the extra: `pip install -e ".[geoip]"` (the Docker image already has it).
-3. Point speedward at the file: `GEOIP_DB=/path/to/GeoLite2-City.mmdb` in `.env`. With Docker, mount it read-only and add to the `docker run` line above: `-v /srv/geo:/geo:ro -e GEOIP_DB=/geo/GeoLite2-City.mmdb`. The file stays on your server.
+3. Point speedward at the file: `GEOIP_DB=/path/to/GeoLite2-City.mmdb` in `.env`. With Docker Compose this is done for you (see above). The file stays on your server.
+
+**Keep it up to date automatically.** The GeoLite2 licence asks you to use a current copy (MaxMind publishes updates twice a week) and to credit MaxMind; DB-IP Lite is CC BY 4.0 and needs credit to DB-IP. Read the current terms on their sites before use; they are theirs, not this project's. The MaxMind licence key is a secret like `GLOBALPING_TOKEN`: keep it out of the repository and out of logs. In `.env` it is read only by `docker compose`, for the geoipupdate container; for runs without Docker it lives in `GeoIP.conf`.
+
+- **(a) Locally, with `scripts/update_geoip.sh`.**
+  1. Download `geoipupdate` from the [maxmind/geoipupdate releases](https://github.com/maxmind/geoipupdate/releases) (Linux `amd64` tarball), check it against the release's `checksums.txt` (`sha256sum -c --ignore-missing checksums.txt`), and unpack it into `~/geo/bin/` (the script looks on `PATH`, then in `~/geo/bin/geoipupdate_*/geoipupdate`).
+  2. Create the config with your account ID and licence key: `mkdir -p ~/geo && cp docs/GeoIP.conf.example ~/geo/GeoIP.conf && chmod 600 ~/geo/GeoIP.conf`, then edit it. The script refuses to run while it is readable by other users.
+  3. Run `scripts/update_geoip.sh` (MaxMind, the default) or `scripts/update_geoip.sh --source dbip` (DB-IP Lite City, no account: downloads this month's file, or last month's when this month's is not out yet, verifies it, then swaps it in as `~/geo/dbip-city-lite-current.mmdb`). Each run verifies the file opens and places a known address before it is used, prints only which file was updated with its size and date, and exits non-zero on any failure. `scripts/update_geoip.sh --check` reports the file's age and exits 1 when it is missing or older than 45 days. `GEOIP_DIR`, `GEOIP_CONF` and `GEOIP_PYTHON` change the defaults (see the top of the script).
+  4. Set `GEOIP_DB=$HOME/geo/GeoLite2-City.mmdb` (written out as a full path) in `.env`, or `.../dbip-city-lite-current.mmdb` for DB-IP. On the author's machine the GeoLite2 file is at `~/geo/GeoLite2-City.mmdb` while `GEOIP_DB` still points at a DB-IP file; switching `GEOIP_DB` to the GeoLite2 path is recommended, since that is the file this script keeps current by default.
+  5. Schedule it. A `systemd --user` timer, twice a week for MaxMind (for DB-IP use `--source dbip` and `OnCalendar=monthly`):
+
+     `~/.config/systemd/user/speedward-geoip.service`
+     ```ini
+     [Unit]
+     Description=Update the speedward location database
+
+     [Service]
+     Type=oneshot
+     ExecStart=%h/path/to/speedward/scripts/update_geoip.sh
+     ```
+
+     `~/.config/systemd/user/speedward-geoip.timer`
+     ```ini
+     [Unit]
+     Description=Update the speedward location database twice a week
+
+     [Timer]
+     OnCalendar=Tue,Fri 04:30
+     RandomizedDelaySec=1h
+     Persistent=true
+
+     [Install]
+     WantedBy=timers.target
+     ```
+
+     Then `systemctl --user daemon-reload && systemctl --user enable --now speedward-geoip.timer` (check with `systemctl --user list-timers` and `journalctl --user -u speedward-geoip`). Or a crontab line (`crontab -e`): `30 4 * * 2,5 $HOME/path/to/speedward/scripts/update_geoip.sh >> $HOME/geo/update.log 2>&1` (for DB-IP: `30 4 3 * * ... --source dbip`). No restart is needed: speedward opens the file for each scan.
+- **(b) With Docker Compose**: the `geoipupdate` service in `docker-compose.yml` does it (see "Run it with Docker Compose").
+- **(c) No account at all**: DB-IP Lite City through `scripts/update_geoip.sh --source dbip` once a month, as in (a).
 
 **CDN edge or origin.** A site behind a CDN is answered by the CDN's nearest edge, not by your own server, so each place can get a different square. When the addresses differ between places, a square's tooltip says "CDN edge, not necessarily your origin". Cloudflare names the edge in its `cf-ray` header (for example `-NRT` for Tokyo); speedward keeps only that airport code (never the headers) and places the edge from a bundled airport table (OurAirports, public domain; built by `scripts/build_iata.py`). That works even without the location file. Other CDNs' headers are not used, because their format is not certain. When every measured place reached the same address (at least two places) and the database places it, the map draws one **Server** square with a line from every place.
 
@@ -161,7 +214,7 @@ The thresholds are named constants in `speedward/core/edge.py`.
 
 **Fallback: a position you set yourself.** If no place could be placed, the web results say "No server positions yet" with a setup link and **Place a server manually (your own claim)**. That opens the Server pin: drag it on the map, focus it and use the arrow keys (Shift moves further, Delete removes it), or pick a city in "Server is in:". The pin is two numbers kept in this browser tab only (same expiry as results, cleared by "Clear now") and sent with the next scan; it is used only when no answering server can be placed, and is recorded as "manual (pin)" in exports, because it is your claim and not a measured location. `SERVER_LAT` and `SERVER_LON` always win: they draw one Server square, recorded as "manual (setting)".
 
-With no position at all, the map says "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON" and draws no lines. Everything else still works.
+With no position at all, the map says "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON" in the web UI, and "Server position unknown: set GEOIP_DB or SERVER_LAT/SERVER_LON" in CLI reports and exported files (where no pin can be dropped), and draws no lines. Everything else still works.
 
 ## How to read the map and the statuses
 
@@ -169,12 +222,14 @@ The map has one dot per test location, coloured by first-byte time against `FAST
 
 - **measured**: the test ran and the site answered. Only these rows have timings and count in averages and pass/fail limits.
 - **blocked**: the site itself refused the request or timed out.
-- **test failed**: a problem on the Globalping side (for example the probe errored). This says nothing about your site.
+- **test failed**: a problem on the Globalping side (for example the probe errored, or the test machine's own DNS resolver timed out or failed). This says nothing about your site.
 - **did not run**: the test never started.
 
 Places that could not reach the site are drawn dimmed, with dashed lines, and show "no data" with a reason. Speedward never shows a made-up number for a failed test, and leaves such places out of averages and limits. Items Globalping does not return (for example the HTTP version on some probes) are shown as "not available".
 
-The Cache column is a repeat request from the same test machine. It is **not a browser cache test**: it shows warm-connection and CDN effects, not what a returning visitor's browser would do.
+The Cache column is an immediate repeat request. It is **not a browser cache test**: it shows warm-connection and CDN effects, not what a returning visitor's browser would do. Speedward asks Globalping to repeat it on the same test machine; when that machine is no longer available (or a different one answered), the timing is still shown but labelled "repeat request (different probe)" or "repeat request (different probe, same city)", and that place is left out of the cache gain. The same labels mark a delay, route or DNS answer that came from a different machine than the first visit. When the repeat test could not run at all, the cache tile says why (for example "repeat test: Globalping limit reached").
+
+The probe's network type (ISP or data centre) is recorded in JSON exports as `network_type` but is not shown in the web UI or the other reports yet.
 
 ## Test cost and the allowance
 
@@ -192,7 +247,7 @@ git pull
 pip install -e .
 ```
 
-For Docker, `git pull` then `docker build -t speedward .` and restart the container. Settings in `.env` carry over.
+For Docker Compose, `git pull` then `docker compose up -d --build`. Settings in `.env` carry over.
 
 ## Troubleshooting
 
@@ -207,7 +262,7 @@ For Docker, `git pull` then `docker build -t speedward .` and restart the contai
 
 ## Not included yet
 
-- The real-browser page test (page weight, request count, biggest files). `--browser` is accepted but prints "not available in this build yet" and does nothing; `--max-page-weight` therefore always fails as "not measured". There is no `ENABLE_BROWSER_TEST` setting.
+- The real-browser page test (page weight, request count, biggest files). `--browser` is accepted but prints "not available in this build yet" and does nothing; `--max-page-weight` is refused with a message until the test exists. The `browser` extra in `pyproject.toml` is reserved for it. There is no `ENABLE_BROWSER_TEST` setting.
 - Repeat runs for a consistency check.
 - Comparison with an earlier run.
 - Following redirect chains beyond the first response (Globalping does not follow redirects; only the first response's `Location` is shown).
@@ -228,9 +283,12 @@ End-to-end browser tests: `pip install -e ".[e2e]" && playwright install chromiu
 
 `scripts/smoke_live.py URL` runs one real scan of a site you own (uses real tests).
 
+`tests/test_update_geoip.py` exercises `scripts/update_geoip.sh` without network (fake `geoipupdate` and `curl`, a tiny hand-built database), and `tests/test_compose.py` checks with `docker compose config` (against a dummy env file, skipped without Docker) that the MaxMind key never reaches the speedward container.
+
 ## Credits and licence
 
 - World map outlines come from [Natural Earth](https://www.naturalearthdata.com/) (public domain).
+- Server positions, when you set up a location file: GeoLite2 data created by MaxMind, available from <https://www.maxmind.com>, or IP geolocation by DB-IP (<https://db-ip.com>, CC BY 4.0).
 - Tests run on [Globalping](https://globalping.io) by jsDelivr, a service that is free up to a limit.
 - Sibling project: siteward.
 - MIT licence, see [LICENSE](LICENSE). Security reports: see [SECURITY.md](SECURITY.md).
