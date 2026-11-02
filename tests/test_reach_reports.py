@@ -123,3 +123,17 @@ def test_cli_lines():
     lines = cli_lines(mockup_report())
     assert lines[0].startswith("Who can reach it: The timings indicate:")
     assert lines[1].startswith("Check: ")
+
+
+def test_unjudged_blocks_are_not_called_all_reached():
+    r = rep([ok("A"), ok("B"), ok("C")], [rr("ipv6", 0), rr("ipv6", 1, "blocked", "x"), rr("ipv6", 2, "test_failed", "y")])
+    text, check = finding(reach_grid(r))
+    assert "every place" not in text and "fewer than 3 places" in text and check == ""
+
+
+def test_map_part_ring_differs_from_no_data_by_shape():
+    from speedward.reports.map import _STYLE
+    svg = render_map(mockup_report())
+    assert 'class="sw-part-ring"' in svg  # a second ring: blocked in a check is a double ring
+    assert "stroke-dasharray" in _STYLE.split(".sw-dot.sw-none{")[1].split("}")[0]  # no data is dashed
+    assert "stroke-dasharray" not in _STYLE.split(".sw-part-ring{")[1].split("}")[0]

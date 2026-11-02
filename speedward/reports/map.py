@@ -41,10 +41,12 @@ _STYLE = (
     # A paper halo keeps each dot clear of the lines under it.
     ".sw-dot{stroke:var(--bg);stroke-width:1.5}"
     # No data: a hollow ring, so the state is not told by colour alone (the label says why).
-    ".sw-dot.sw-none{fill:var(--bg);stroke:var(--off);stroke-width:2}"
-    # Worst result of the "More checks": measured, but blocked in a check. An open ink ring (shape, not
-    # colour); the label names the checks.
-    ".sw-dot.sw-part{fill:var(--bg);stroke:var(--ink);stroke-width:2.5}"
+    ".sw-dot.sw-none{fill:var(--bg);stroke:var(--off);stroke-width:2;stroke-dasharray:2.5 1.5}"
+    # Worst result of the "More checks": measured, but blocked in a check. A double ink ring (the dot's
+    # own solid ring plus .sw-part-ring around it), where no data is one dashed grey ring: told apart by
+    # shape, not colour. The label names the checks.
+    ".sw-dot.sw-part{fill:var(--bg);stroke:var(--ink);stroke-width:1.5}"
+    ".sw-part-ring{fill:none;stroke:var(--ink);stroke-width:1.5;pointer-events:none}"
     # Keyboard focus ring: a stroke, because SVG outlines do not draw in Firefox. Ink on the map
     # background is well above 3:1 in light and dark. The selected dot keeps an ink stroke.
     ".sw-dot:focus,.sw-pick:focus,.sw-sq:focus{outline:none}"
@@ -218,6 +220,9 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         dots.append(f'<circle class="sw-dot{none}" data-row="{row}" tabindex="0" cx="{_num(x)}" cy="{_num(y)}" '
                     f'r="{_num(4 * k)}" {dot}>'
                     f"<title>{escape(title)}</title></circle>")
+        if none == " sw-part":
+            dots.append(f'<circle class="sw-part-ring" aria-hidden="true" cx="{_num(x)}" cy="{_num(y)}" '
+                        f'r="{_num(7 * k)}"/>')
         dim = "" if fb is not None else ' opacity="0.7"'
         labels.append(f'<text x="{_num(x + 9 * k)}" y="{_num(y - 6 * k)}" font-size="{_num(fs)}"'
                       f"{dim}>{escape(text)}</text>")

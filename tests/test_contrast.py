@@ -227,3 +227,13 @@ def test_more_checks_total_bar_is_paper_on_ink(theme):
     assert "background:var(--ink)" in rule and "color:var(--paper)" in rule
     t = PAGE[theme]
     assert ratio(t["paper"], t["ink"]) >= TEXT
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_blocked_in_a_check_ring_is_ink_and_differs_from_no_data_by_shape(theme):
+    part = re.search(r"\.sw-part-ring\{([^}]*)\}", _STYLE).group(1)
+    none = re.search(r"\.sw-dot\.sw-none\{([^}]*)\}", _STYLE).group(1)
+    assert "stroke:var(--ink)" in part and "stroke-dasharray" not in part
+    assert "stroke-dasharray" in none  # dashed single ring vs solid double ring
+    t = MAP[theme]
+    assert ratio(t["ink"], t["land"]) >= UI and ratio(t["ink"], t["bg"]) >= UI
