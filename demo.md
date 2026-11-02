@@ -24,7 +24,7 @@ pip install -e ".[geoip]"
 echo "GEOIP_DB=/path/to/GeoLite2-City.mmdb" >> .env
 ```
 
-With Docker, mount the file and pass it at run time: `-v /srv/geo:/geo:ro -e GEOIP_DB=/geo/GeoLite2-City.mmdb`. The lookup is offline; nothing about your target leaves the machine. Without the file, Cloudflare edges are still placed from their `cf-ray` header.
+`scripts/update_geoip.sh` keeps that file current (MaxMind through `geoipupdate`, or `--source dbip` with no account), and with Docker Compose (`docker compose up -d --build`) MaxMind's geoipupdate container does it for you; see the README. The lookup is offline; nothing about your target leaves the machine. Without the file, Cloudflare edges are still placed from their `cf-ray` header.
 
 Check the cost first, then scan and save the HTML report:
 
@@ -48,7 +48,7 @@ Only test sites you own or are authorised to test.
 
 ## What a scan looks like
 
-This run was made on 2026-11-01 against `https://example.com` with a Globalping key. The estimate before it read "about 36 tests". Results vary from run to run and with the hour of day; these numbers are from one run and are not a benchmark.
+The report below comes from one real run made on 2026-11-02 against `https://example.com` with a Globalping key and a location file set, from the default 12 places (about 36 tests). Results vary from run to run and with the hour of day; these numbers are from one run and are not a benchmark. The estimate output in step 1 is from an earlier run on 2026-11-01, so its allowance figure is that day's.
 
 ### 1. Check the cost
 
@@ -62,7 +62,7 @@ This scan uses about 36 tests. You have 412 left this hour.
 Globalping credits: 0.
 ```
 
-It stops there, using no tests. Without a key the second line starts with a note about the 250 tests/hour limit.
+It stops there, using no tests. Without a key the second line starts with a note about the 250 tests/hour limit. Current builds also add when the allowance resets to the second line, for example "(resets in 42 min)".
 
 ### 2. Run the scan
 
@@ -70,54 +70,55 @@ It stops there, using no tests. Without a key the second line starts with a note
 speedward scan https://example.com --format html --out docs/demo-report.html
 ```
 
-(In this demo the run was made with `--format json` and rendered to HTML and Markdown afterwards, so one scan gave both; it cost the same.) Progress goes to standard error ("Testing the first visit from 12 locations", "Repeating the test on the same probes", "Measuring network delay", "Finished"). The exit code was 0 (no limits set); this run used about 36 tests (the allowance counter dropped by 36). The saved report is [docs/demo-report.html](docs/demo-report.html) (open it in a browser to see the map). The default Markdown format prints this to the terminal; the table and summary below are the Markdown render of the same run. That run was saved once as JSON and then rendered to both Markdown and HTML, so the table and `docs/demo-report.html` match exactly:
+(In this demo the run was saved once as JSON and rendered to HTML and Markdown afterwards with the current report code, so one scan gave both; it cost the same.) Progress goes to standard error ("Testing the first visit from 12 locations", "Repeating the test on the same probes", "Measuring network delay", "Finished"); a measurement that could not run would be listed there as "Not run: ...". With no limits set the exit code is 0. The saved report is [docs/demo-report.html](docs/demo-report.html) (open it in a browser to see the map with its squares and lines). The default Markdown format prints this to the terminal; the summary and table below are the Markdown render of the same JSON, so they match `docs/demo-report.html` exactly:
 
 ## Summary
 
-- Average first byte: 20 ms
-- Cache gain: 4%
+- Average first byte: 21 ms
+- Cache gain: -7%
 - Blocked: 0
 - 0 locations excluded from the figures (0 blocked); 12 measured.
 - Repeat request from the same test machine; not a browser cache test.
 
 ## Locations
 
-| Location | No cache | Cache | Delay | CDN | Status |
-| --- | --- | --- | --- | --- | --- |
-| London, GB | 22 ms | 17 ms | 1 ms | HIT | HTTP 200 |
-| Frankfurt, DE | 10 ms | 12 ms | 1 ms | HIT | HTTP 200 |
-| New York, US | 12 ms | 8 ms | 3 ms | HIT | HTTP 200 |
-| Los Angeles, US | 15 ms | 12 ms | 1 ms | HIT | HTTP 200 |
-| Sao Paulo, BR | 10 ms | 8 ms | 1 ms | HIT | HTTP 200 |
-| Johannesburg, ZA | 7 ms | 7 ms | 2 ms | HIT | HTTP 200 |
-| Lagos, NG | 114 ms | 115 ms | 105 ms | HIT | HTTP 200 |
-| Mumbai, IN | 8 ms | 6 ms | 1 ms | HIT | HTTP 200 |
-| Singapore, SG | 12 ms | 9 ms | 2 ms | HIT | HTTP 200 |
-| Tokyo, JP | 7 ms | 9 ms | 2 ms | HIT | HTTP 200 |
-| Sydney, AU | 6 ms | 7 ms | 1 ms | HIT | HTTP 200 |
-| Dubai, AE | 13 ms | 16 ms | 106 ms | HIT | HTTP 200 |
+| Location | No cache | Cache | Delay | CDN | Answered by | Position source | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| London, GB | 18 ms | 14 ms | 2 ms | HIT | edge LHR (London) | CDN header (cf-ray -LHR) | HTTP 200 |
+| Frankfurt, DE | 22 ms | 11 ms | 1 ms | HIT | edge FRA (Frankfurt) | CDN header (cf-ray -FRA) | HTTP 200 |
+| New York, US | 9 ms | 30 ms | 3 ms | HIT | edge EWR (Newark) | CDN header (cf-ray -EWR) | HTTP 200 |
+| Los Angeles, US | 15 ms | 8 ms | 1 ms | HIT | edge LAX (Los Angeles) | CDN header (cf-ray -LAX) | HTTP 200 |
+| Sao Paulo, BR | 7 ms | 10 ms | 1 ms | HIT | edge GRU (Sao Paulo) | CDN header (cf-ray -GRU) | HTTP 200 |
+| Johannesburg, ZA | 10 ms | 13 ms | 2 ms | HIT | edge JNB (Johannesburg) | CDN header (cf-ray -JNB) | HTTP 200 |
+| Lagos, NG | 111 ms | 119 ms | 104 ms | HIT | edge LHR (London) | CDN header (cf-ray -LHR) | HTTP 200 |
+| Mumbai, IN | 8 ms | 8 ms | 2 ms | HIT | edge BOM (Mumbai) | CDN header (cf-ray -BOM) | HTTP 200 |
+| Singapore, SG | 20 ms | 24 ms | 2 ms | HIT | edge SIN (Singapore) | CDN header (cf-ray -SIN) | HTTP 200 |
+| Tokyo, JP | 15 ms | 15 ms | 1 ms | HIT | edge NRT (Tokyo) | CDN header (cf-ray -NRT) | HTTP 200 |
+| Sydney, AU | 6 ms | 6 ms | 1 ms | HIT | edge SYD (Sydney) | CDN header (cf-ray -SYD) | HTTP 200 |
+| Dubai, AE | 14 ms | 14 ms | 106 ms | HIT | edge MCT (Muscat) | CDN header (cf-ray -MCT) | HTTP 200 |
 
 ## Stage breakdown (average over measured locations)
 
-- DNS: 11 ms
+- DNS: 26 ms
 - Connect: 11 ms
-- TLS: 20 ms
-- First byte: 20 ms
+- TLS: 27 ms
+- First byte: 21 ms
 - Download: 1 ms
 
-This recording predates the "Answered by" and "Position source" columns, so they are not shown here; current reports add them after CDN (see "How to read it").
+The default line colours were used (green up to `FAST_MS` 300 ms, red from `SLOW_MS` 800 ms). Every repeat request in this run came from the same test machine as the first visit, so no row carries a "different probe" label and the cache gain counts all 12 places.
 
-The report also lists the server identity (answering IPs 172.66.147.243 and 104.20.23.154, TLS 1.3, HTTP/1.1, no redirect on the first response).
+The report also lists the server identity (answering IPs 104.20.23.154 and 172.66.147.243, TLS 1.3, HTTP/1.1, no redirect on the first response).
 
 ## How to read it
 
 - **The map** (top of the HTML report) has one dot per location, coloured by first-byte time. Green is fast, amber is middling, red is slow, against `FAST_MS` (300) and `SLOW_MS` (800).
-- **No cache / Cache** are first-byte times for the first visit and a repeat request from the same test machine. The repeat is not a browser cache test. "Cache gain" in the summary can be negative, as here (-3%): the repeat was not faster.
+- **No cache / Cache** are first-byte times for the first visit and an immediate repeat request, which speedward asks to run on the same test machine. The repeat is not a browser cache test. "Cache gain" in the summary can be negative, as here (-7%): on average the repeat was not faster (New York went from 9 to 30 ms). When the repeat has to run on another machine, its timing is labelled "repeat request (different probe)" (or "..., same city") and that place is left out of the cache gain; if the repeat could not run at all, the cache tile says why, for example "repeat test: Globalping limit reached", and a "Not run" note names the empty column.
 - **Dashed grey lines and hollow grey dots** on the map are places that could not reach the site (blocked, test failed or did not run). Their rows say "no data" with a reason. They show no number and are left out of averages and limits. Every location in this run was measured, so none were dimmed here.
-- **Squares and the two new columns**: a square marks the server that answered each place, with a line from the place to it. Behind a CDN (as example.com is, on Cloudflare) each place is answered by a nearby edge: "Answered by" reads like "edge NRT (Tokyo)" and "Position source" like "CDN header (cf-ray -NRT)", and the tooltip says "CDN edge, not necessarily your origin". A site on one server shows one "Server" square, placed by the geo-IP database. An address shared across continents, or one the database and header disagree on by more than 2,500 km, draws no square and reads "edge location uncertain"; a private address or no location file reads "position not available". Never a guess.
+- **Squares and lines**: a square marks the server that answered each place, with a line from the place's circle to it, coloured by that place's first-byte time. Behind a CDN (as example.com is, on Cloudflare) each place is answered by a nearby edge: "Answered by" reads like "edge NRT (Tokyo)" and "Position source" like "CDN header (cf-ray -NRT)", and the tooltip says "CDN edge, not necessarily your origin". When the edge is in the same city as the place, the square is drawn as a frame around the circle. In this run most places were answered in their own city, but Lagos was answered by the London edge (LHR) and Dubai by Muscat (MCT), so their lines run to those squares; their delay of about 105 ms fits that. A site on one server shows one "Server" square, placed by the geo-IP database.
+- **Uncertain cases draw nothing**: an address shared across continents, one the database and the CDN header disagree on by more than 2,500 km, or one that answered faster than light could travel from its claimed position gets no square and no line, and reads "edge location uncertain (...)"; a private address or no location file reads "position not available (...)". Never a guess. With no position at all, the map says "Server position unknown" and how to set one.
 - **Delay** is the network round-trip time from that location to the site (a ping), separate from the page timings. In this run it was 1 to 3 ms in most places and about 105 ms for Lagos and Dubai. If a delay could not be measured it shows "not available", never a guess.
-- **Status**: measured, blocked (the site refused or timed out), test failed (a Globalping problem) or did not run.
-- **Cost**: 12 locations cost about 36 tests. Add `--traceroute` or `--dns` for more. The cost is shown before every scan, and a scan that does not fit your remaining allowance is refused unless you pass `--yes`.
+- **Status**: measured, blocked (the site refused or timed out), test failed (a Globalping problem, including the test machine's own DNS resolver failing) or did not run. If a scan cannot start at all, the message says why: Globalping limit reached, no test machine for one of the places you chose, the key was rejected, or the address was not accepted.
+- **Cost**: 12 locations cost about 36 tests. Add `--traceroute` or `--dns` for more. The cost is shown before every scan, and a scan that does not fit your remaining allowance is refused unless you pass `--yes`. In the web UI, Start waits until the cost for the current picks is on screen.
 - **Exit codes**: 0 done and every limit passed (or none set); 1 a limit failed (for example `--max-ttfb 200`); 2 the scan could not run or nothing could be measured.
 
 ## Extra checks: path and DNS
