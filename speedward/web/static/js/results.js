@@ -250,7 +250,22 @@
   var lastCost = null;
   var estimateTimer = null;
   var estimateSeq = 0;
-  var costStale = true;
+  var costStale = true;  // true until /estimate has answered for the current picks and options
+  // Mirrored on the Start button (data-cost="ready" or "stale") so tests can wait for a fresh cost.
+  function setStale(on) {
+    costStale = on;
+    $("start").setAttribute("data-cost", on ? "stale" : "ready");
+  }
+  setStale(true);
+  var estimateFailed = false;
+  // The cost is shown before every scan (a hard rule): Start is refused while it is stale or failed.
+  var COST_WAIT = "Wait for the test cost to be shown, then press Start again. A scan never starts before its cost is known.";
+  var COST_FAILED = "The test cost could not be estimated, so the scan was not started. Trying again: press Start once the cost is shown.";
+
+  function costMessageShown() {
+    var t = $("form-error").textContent;
+    return t === COST_WAIT || t === COST_FAILED;
+  }
 
   function runAgainLabels() {
     var text = lastCost === null ? "Run again" : "Run again (~" + lastCost + " tests)";
@@ -261,7 +276,9 @@
   function applyBudget(b) {
     applyView(b.view);
     lastCost = b.cost;
-    costStale = false;
+    setStale(false);
+    estimateFailed = false;
+    if (costMessageShown()) { formError(""); }
     renderSummary();
     runAgainLabels();
     setText($("estimate"), b.message || "");
@@ -299,6 +316,9 @@
         if (r.ok) {
           applyBudget(data);
         } else {
+          setStale(true);
+          estimateFailed = true;
+          renderSummary();
           setText($("estimate"), data.error || "The test cost could not be estimated.");
           refetching = false;
           markStale(true);
@@ -308,6 +328,10 @@
         }
       });
     }).catch(function () {
+      if (seq !== estimateSeq) { return; }
+      setStale(true);
+      estimateFailed = true;
+      renderSummary();
       refetching = false;
       markStale(true);
       setText($("estimate"), "The test cost could not be estimated.");
@@ -316,12 +340,13 @@
 
   function estimateSoon() {
     if (estimateTimer) { clearTimeout(estimateTimer); }
-    estimateTimer = setTimeout(estimate, 350);
+    estimateTimer = setTimeout(function () { estimateTimer = null; estimate(); }, 350);
   }
 
   ["traceroute", "dns"].forEach(function (name) {
     function changed() {
-      costStale = true;
+      setStale(true);
+      estimateFailed = false;
       renderSummary();
       estimateSoon();
     }
@@ -413,7 +438,8 @@
 
   function picksChanged() {
     renderPicks();
-    costStale = true;
+    setStale(true);
+    estimateFailed = false;
     renderSummary();
     if (selectedNames().length === 0) {
       estimateSeq++;  // drop any answer still on its way
@@ -938,6 +964,11 @@
     notice(storage ? "" : storageBlockedText);
     var v = formValues();
     if (!v.locations) { formError(ZERO_TEXT); return; }
+    if (costStale) {  // the cost on screen is not for these picks, or could not be worked out
+      formError(estimateFailed ? COST_FAILED : COST_WAIT);
+      if (estimateFailed || !estimateTimer) { estimateSoon(); }
+      return;
+    }
     if ($("confirm").checked) { v.confirm = "1"; }
     if (pin) { v.server_lat = String(pin.lat); v.server_lon = String(pin.lon); }
     var lim = limitValues();  // checked by the server before any test is spent

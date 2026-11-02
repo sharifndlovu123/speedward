@@ -6,7 +6,7 @@ nothing can be placed and the fallback note shows.
 """
 from playwright.sync_api import expect
 
-from e2e.helpers import pick
+from e2e.helpers import pick, start
 
 TARGET = "https://e2e-target.example/"
 NOTE = "No server positions yet. Results still show every number; lines need the free offline location file."
@@ -16,7 +16,7 @@ def scan(page, live_site):
     page.goto(live_site + "/")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
 
 

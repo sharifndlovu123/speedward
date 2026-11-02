@@ -8,7 +8,7 @@ import pytest
 from axe_playwright_python.sync_playwright import Axe
 from playwright.sync_api import expect
 
-from e2e.helpers import pick
+from e2e.helpers import pick, start
 from e2e.test_session_storage import TARGET
 
 AXE = Axe()
@@ -33,7 +33,7 @@ def start_scan(page, base):
     page.goto(base + "/")
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
 
 
 @pytest.mark.parametrize("size", list(SIZES))

@@ -4,7 +4,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick
+from e2e.helpers import pick, start
 
 TARGET = "https://e2e-target.example/"
 
@@ -37,7 +37,7 @@ def test_last_run_appears_after_a_scan_and_vanishes_with_the_tab(page, context, 
     expect(page.locator("#allowance-last-run")).to_be_hidden()
     page.fill("#url", TARGET)
     pick(page, "Berlin", "Tokyo")
-    page.click("#start")
+    start(page)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     strip = page.locator("#allowance-strip")
     expect(page.locator("#allowance-last-run")).to_be_visible()
