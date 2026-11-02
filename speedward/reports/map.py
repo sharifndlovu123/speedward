@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from html import escape
+from math import hypot
 from pathlib import Path
 
 from speedward.core.config import DEFAULT_FAST_MS, DEFAULT_SLOW_MS
@@ -16,11 +17,12 @@ from speedward.core.locations import CATALOG
 from speedward.core.models import UNCERTAIN, LocationResult, ScanReport
 from speedward.core.reach import reach_grid
 
-from ._labels import Mark, place_labels, text_box
+from ._labels import MAX_LABELLED_PLACES, Mark, place_labels, text_box
 from ._view import CDN_EDGE_NOTE, NA, SOURCE_TEXT, _from_header, answered_by, position_source
 
 FAST_MS = DEFAULT_FAST_MS
 UNKNOWN_HINT = "set GEOIP_DB or SERVER_LAT/SERVER_LON"
+LABELS_HIDDEN = "Labels hidden: too many places. Every place is in the table."
 UNKNOWN_HINT_WEB = "set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON"
 # A square closer than this (map pixels at width 1000) to its circle is drawn as a frame around it.
 HERE_PX = 9
@@ -144,7 +146,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
 
     def arc(sx, sy, x, y, style):
         mx, my = (sx + x) / 2, (sy + y) / 2
-        dist = ((x - sx) ** 2 + (y - sy) ** 2) ** 0.5
+        dist = hypot(x - sx, y - sy)  # no OverflowError for far-off positions
         cy = my - dist * 0.25
         return f'<path d="M{_num(sx)},{_num(sy)} Q{_num(mx)},{_num(cy)} {_num(x)},{_num(y)}" {style}/>'
 
@@ -154,7 +156,14 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
                 f'y="{_num(y - size / 2)}" width="{_num(size)}" height="{_num(size)}"><title>{t}</title></rect>')
 
     unplaced = [r for r in report.locations if r.location.lat is None or r.location.lon is None]
-    extra = 26 * k if unplaced else 0
+    placed_count = len(report.locations) - len(unplaced)
+    # One short line each under the map: places without a position, and labels left out for size.
+    notes = []
+    if placed_count > MAX_LABELLED_PLACES:
+        notes.append(escape(LABELS_HIDDEN))
+    if unplaced:
+        notes.append("Not shown on map: " + ", ".join(escape(_city(r)) for r in unplaced))
+    extra = 26 * k * len(notes)
     out = [
         f'<svg class="sw-map" viewBox="0 0 {_num(W)} {_num(H + extra)}" '
         f'role="img" aria-label="World map of response times from each test location">',
@@ -249,8 +258,8 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         # An edge in the probe's own city would hide under its circle: frame the circle instead, at
         # the true spot (nothing is moved), drawn above the dots.
         here = any(g.location.lat is not None and g.location.lon is not None
-                   and ((qx - proj(g.location.lat, g.location.lon)[0]) ** 2
-                        + (qy - proj(g.location.lat, g.location.lon)[1]) ** 2) ** 0.5 < HERE_PX * k
+                   and hypot(qx - proj(g.location.lat, g.location.lon)[0],
+                             qy - proj(g.location.lat, g.location.lon)[1]) < HERE_PX * k
                    for g in group)
         names = ", ".join(_city(g) for g in group)
         text = f"Server that answered {names}: {r.server_ip or NA}, {position_source(r)}"
@@ -279,10 +288,9 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         obstacles.append(text_box(unknown, fs, sx, sy + 4 * k, "start"))
     for tier, (_, size) in enumerate(LABEL_TIERS):
         out.append(_label_layer(tier, marks, obstacles, fixed, W, H, fs if tier == 0 else size * k))
-    if unplaced:
-        names = ", ".join(escape(_city(r)) for r in unplaced)
-        out.append(f'<text x="{_num(8 * k)}" y="{_num(H + 17 * k)}" font-size="{_num(fs)}">'
-                   f"Not shown on map: {names}</text>")
+    for n, note in enumerate(notes):
+        out.append(f'<text x="{_num(8 * k)}" y="{_num(H + (17 + 26 * n) * k)}" font-size="{_num(fs)}">'
+                   f"{note}</text>")
     out.append("</svg>")
     return "".join(out)
 
@@ -291,7 +299,9 @@ def _label_layer(tier: int, marks: list[Mark], obstacles: list, fixed: list[Mark
                  fs: float) -> str:
     """One set of place labels at one size, placed so none overlap or run off the map (see _labels)."""
     placement = place_labels(marks, obstacles, W, H, fs, fixed=fixed)
-    out = [f'<g class="sw-labels sw-lt{tier}" font-size="{_num(fs)}">']
+    # The other sizes are copies: hidden from assistive tech even when a stylesheet is stripped.
+    hidden = ' aria-hidden="true"' if tier else ""
+    out = [f'<g class="sw-labels sw-lt{tier}" font-size="{_num(fs)}"{hidden}>']
     lines = "".join(f"M{_num(a)},{_num(b)}L{_num(c)},{_num(d)}" for lab in placement.labels for a, b, c, d in lab.leaders)
     if lines:
         out.append(f'<path class="sw-lead" aria-hidden="true" d="{lines}"/>')

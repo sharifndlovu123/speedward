@@ -19,7 +19,7 @@ DOT = re.compile(r'<circle class="sw-dot[^"]*" data-row="(\d+)"[^>]*cx="([^"]+)"
 def layers(svg):
     """{tier: [(text, box)]} from the label groups."""
     out = {}
-    for tier, size, body in re.findall(r'<g class="sw-labels sw-lt(\d)" font-size="([^"]+)">(.*?)</g>', svg):
+    for tier, size, body in re.findall(r'<g class="sw-labels sw-lt(\d)" font-size="([^"]+)"[^>]*>(.*?)</g>', svg):
         items = []
         for attrs, text in TEXT.findall(body):
             a = dict(re.findall(r'([\w-]+)="([^"]*)"', attrs))
@@ -157,3 +157,49 @@ def test_a_500_place_report_renders_quickly_with_every_place_in_titles_and_table
     assert all(items == [] for items in layers(svg).values())  # above the limit: dots and titles only
     out = render(r, "html")
     assert all(f">Place{i}" in out or f"Place{i}," in out or f"Place{i}<" in out for i in range(500))
+
+
+# --- review fixes -------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), 1e308, -1e308])
+def test_render_map_survives_coordinates_that_are_not_finite_or_far_off(value):
+    def place(i, lat, lon):
+        return LocationResult(Location("XX", f"P{i}", lat, lon, 1, "Net", "isp"), "measured",
+                              stages=Stages(first_byte=100))
+    r = report(SETS["default-12"])
+    r.locations += [place(1, value, 10.0), place(2, 10.0, value), place(3, value, value)]
+    svg = render_map(r)
+    for i in (1, 2, 3):
+        assert f"<title>P{i} 100ms</title>" in svg  # the dot and its title stay; it just gets no label
+    render_map(r, width=10**300)
+
+
+def test_unused_label_sizes_are_hidden_from_assistive_tech():
+    svg = render_map(report(SETS["default-12"]))
+    groups = re.findall(r'<g class="sw-labels sw-lt(\d)"[^>]*>', svg)
+    assert len(groups) == 3
+    for tag in re.findall(r'<g class="sw-labels sw-lt[12]"[^>]*>', svg):
+        assert 'aria-hidden="true"' in tag
+    assert 'aria-hidden' not in re.search(r'<g class="sw-labels sw-lt0"[^>]*>', svg).group(0)
+
+
+def test_too_many_places_says_labels_are_hidden():
+    from speedward.reports._labels import MAX_LABELLED_PLACES
+    locs = [LocationResult(Location("XX", f"P{i}", -60 + i * 0.5, -170 + i * 1.5, 1, "Net", "isp"), "measured",
+                           stages=Stages(first_byte=100)) for i in range(MAX_LABELLED_PLACES + 1)]
+    svg = render_map(ScanReport("https://e.com/", NOW, NOW, "0", {}, None, locs, [], [], None))
+    assert "Labels hidden: too many places. Every place is in the table.</text>" in svg
+    assert "Labels hidden" not in render_map(report(SETS["all-32"]))
+    assert "Labels hidden" not in render_map(ScanReport("https://e.com/", NOW, NOW, "0", {}, None,
+                                                        locs[:MAX_LABELLED_PLACES], [], [], None))
+
+
+def test_hidden_labels_note_and_not_shown_note_both_fit_under_the_map():
+    from speedward.reports._labels import MAX_LABELLED_PLACES
+    locs = [LocationResult(Location("XX", f"P{i}", -60 + i * 0.5, -170 + i * 1.5, 1, "Net", "isp"), "measured",
+                           stages=Stages(first_byte=100)) for i in range(MAX_LABELLED_PLACES + 1)]
+    locs.append(LocationResult(Location("XX", "Nowhere", None, None, 1, "Net", "isp"), "measured",
+                               stages=Stages(first_byte=100)))
+    svg = render_map(ScanReport("https://e.com/", NOW, NOW, "0", {}, None, locs, [], [], None))
+    ys = [float(y) for y in re.findall(r'<text x="[^"]+" y="([^"]+)"[^>]*>(?:Labels hidden|Not shown)', svg)]
+    assert len(ys) == 2 and ys[0] != ys[1] and max(ys) < view_height(svg)
