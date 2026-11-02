@@ -400,6 +400,13 @@ Behaviour (author's decisions): web status strip "N of M tests left this hour ·
 
 **Tests and docs:** unit for every rule and boundary, fake-server tests per check, estimate arithmetic, strict loading, exports, e2e for panel and results; README (each check, cost, what it cannot tell you, page size not available).
 
+### Task 22: Follow-ups from the Task 19 to 21 reviews (no new design; author asked for them)
+
+1. **Full Markdown escaping:** the Markdown export's main Locations table, the diagnosis cards and every other place that prints untrusted text (place names, reasons, hostnames, header values) escape Markdown and table syntax the way `md_text` (Task 21) does. Update the earlier tests that pin the old output (for example `edge NRT (Tokyo)`) to the escaped form deliberately, and keep numbers and fixed words readable.
+2. **One mtr test per place:** when both the old "Network path" option and the new mtr check are ticked, run a single mtr measurement and use it for both; the estimate, the CLI cost line and the picker hint count it once. If the two use different packet counts, use the larger. Tests for cost arithmetic and for both outputs being filled from one measurement.
+3. **Thresholds as settings:** make the Task 19 and Task 21 named constants (biggest 40%, possible 25%, minimum places 3, close connect 40 ms, distance correlation 0.7 and spread 50 ms, DNS large share, varies 2x and 50 ms, bad hop 10% loss, long link 50 ms) overridable from the environment and `.env.example` with validated bounds (e.g. minimum places never below 3, shares between 0 and 1, finite numbers, bad value -> clear startup error). Each saved diagnosis and speed summary already stores the values it used: relax strict loading so a saved copy is accepted when its stored values are within the same bounds and the result is exactly what its own timings give under them (never accept below-bound values such as min_places < 3). Web, CLI, exports all use the configured values; README documents each setting.
+4. **Map label collisions (investigate only):** report with a screenshot how often place labels overlap on the map (for example London and Frankfurt) and propose options. Do NOT change the map design; the author wants a mockup first.
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).
