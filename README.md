@@ -255,7 +255,7 @@ In the web UI the headline sits under the summary figures; "See the request path
 - *DNS* is called out when the lookup is at least 25% of the time in at least one place.
 - *Caching:* HIT and MISS counts come from the CDN headers. The repeat gain uses only places repeated on the same test machine, as the Cache gain figure does; otherwise it says why there is none.
 
-The rule values live in `speedward/core/bottleneck.py`. They are not settings yet; each saved diagnosis records the values it was made with, and a saved copy is only accepted if it is exactly what those rules give for the report's own timings. A report from before this feature loads without a panel.
+The rule values live in `speedward/core/bottleneck.py`. They are not settings yet. Each saved diagnosis records the values it was made with, and a saved copy is only accepted if those are exactly these default values and the diagnosis is exactly what they give for the report's own timings. A report from before this feature loads without a panel.
 
 **What it cannot tell you.**
 

@@ -19,7 +19,8 @@ Marks (the block diagram):
 - "not_judged": fewer than MIN_PLACES measured places, so nothing is marked.
 - "not_available": the stage was not returned by any measured place.
 
-The diagnosis records the rule values it used, so a saved copy is checked against the same rules.
+The diagnosis records the rule values it used. Until they become settings, a saved copy is accepted
+only with exactly the default values above.
 """
 from __future__ import annotations
 
@@ -362,6 +363,10 @@ def _rules(value) -> Rules:
                   distance_spread_ms=_rule(value, "distance_spread_ms", 0, MAX_MS))
     if rules.possible_share > rules.biggest_share:
         raise ValueError("diagnosis rules: possible_share cannot be above biggest_share")
+    # The rules are not settings yet, so a saved copy cannot bring its own: other values (for example
+    # min_places=1 to draw a conclusion from one place) would let a forged diagnosis pass as consistent.
+    if rules != Rules():
+        raise ValueError("diagnosis rules differ from this version's rules")
     return rules
 
 

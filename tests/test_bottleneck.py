@@ -387,12 +387,15 @@ def test_diagnosis_from_dict_refuses_a_non_object():
         diagnosis_from_dict(["biggest"], server_heavy())
 
 
-def test_stored_rules_are_used_when_loading():
+@pytest.mark.parametrize("rules", [Rules(biggest_share=0.9), Rules(biggest_share=0.3), Rules(min_places=1),
+                                   Rules(near_connect_ms=1000), Rules(distance_spread_ms=0)])
+def test_saved_rules_other_than_the_defaults_are_refused(rules):
+    """Until the rules are settings, a saved copy cannot bring its own: a consistent diagnosis made with
+    other values (e.g. min_places=1 to get a conclusion from one place) is still refused."""
     rep = server_heavy()
-    rules = Rules(biggest_share=0.9)
     d = diagnose(rep, rules)
-    assert d.biggest is None
-    assert diagnosis_from_dict(json.loads(json.dumps(d.to_dict())), rep) == d
+    with pytest.raises(ValueError):
+        diagnosis_from_dict(json.loads(json.dumps(d.to_dict())), rep)
 
 
 def test_readme_documents_every_rule_value():
