@@ -23,6 +23,7 @@ from speedward.reports import FORMATS, render
 from speedward.reports._view import skipped
 from speedward.reports.bottleneck import cli_lines
 from speedward.reports.reach import cli_lines as reach_cli_lines
+from speedward.reports.speed import cli_lines as speed_cli_lines
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
                   help="Test a website's speed from locations around the world.")
@@ -73,7 +74,8 @@ def scan(
     dns: bool = typer.Option(False, "--dns", help="Also check DNS answers (more tests)."),
     checks: str | None = typer.Option(None, "--checks", help=(
         "More checks, comma-separated: ipv6 (+1 test per place), http (+1), dns (two public resolvers, +2), "
-        "port (TCP, +1). Run from Globalping's probes.")),
+        "port (TCP, +1); speed: consistency (repeat 5 times, +4), http2 (+1), compression (+1), "
+        "dnstrace (+1), mtr (path loss and jitter, +1). Run from Globalping's probes.")),
     browser: bool = typer.Option(False, "--browser", help="Also run the browser test."),
     fmt: str = typer.Option("md", "--format", help="Report format: json, md or html."),
     out: Path | None = typer.Option(None, "--out", help="Write the report to this file instead of stdout."),
@@ -199,7 +201,7 @@ def _run(url, locations, traceroute, dns, checks, browser, fmt, out, max_ttfb, m
         typer.echo(text)
 
     _scan_notes(report)
-    for line in reach_cli_lines(report) + cli_lines(report):  # short versions; the report has the panels
+    for line in reach_cli_lines(report) + speed_cli_lines(report) + cli_lines(report):  # the report has the panels
         _err(line)
     limits = Limits(max_ttfb=max_ttfb, max_load=max_load, max_blocked=max_blocked,
                     max_page_weight=max_page_weight)

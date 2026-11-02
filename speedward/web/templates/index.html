@@ -55,6 +55,10 @@
             <div role="group" aria-labelledby="mc-reach">
             {% for c in reach_checks %}<label class="check mc-check"><input type="checkbox" name="check" value="{{ c.key }}"> <span><b>{{ c.label }}</b> <span class="mute">+{{ c.per }} per place · {{ c.question }}</span></span></label>
             {% endfor %}</div>
+            <p class="mc-group" id="mc-fast">Is it fast? (where the time goes)</p>
+            <div role="group" aria-labelledby="mc-fast">
+            {% for c in speed_checks %}<label class="check mc-check"><input type="checkbox" name="check" value="{{ c.key }}"> <span><b>{{ c.label }}</b> <span class="mute">+{{ c.per }} per place{% if c.question %} · {{ c.question }}{% endif %}</span></span></label>
+            {% endfor %}</div>
             <p class="mc-group" id="mc-more">Path and DNS answers</p>
             <div role="group" aria-labelledby="mc-more">
             <label class="check mc-check"><input type="checkbox" name="traceroute" value="on"> <span><b>Network path and packet loss</b> <span class="mute">+1 per place</span></span></label>

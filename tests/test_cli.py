@@ -410,3 +410,26 @@ def test_checks_over_allowance_are_refused_without_yes(fake):
     r = scan("--checks", "port")
     assert r.exit_code == 2 and "needs about 8 tests" in r.stderr
     assert fake.posts() == []
+
+
+def test_estimate_includes_speed_checks(fake):
+    r = scan("--estimate", "--checks", "consistency,dnstrace")
+    assert r.exit_code == 0
+    assert "Repeat 5 times (consistency) +4 per place = 8" in r.stderr
+    assert "DNS delegation trace +1 per place = 2" in r.stderr
+    assert "about 16 tests" in r.stderr
+    assert fake.posts() == []
+
+
+def test_speed_checks_run_and_print_is_it_fast(fake):
+    r = scan("--checks", "http2", "--yes")
+    assert r.exit_code == 0
+    assert [p["type"] for p in fake.posts()] == ["http", "http", "ping", "http"]
+    assert fake.posts()[-1]["measurementOptions"]["protocol"] == "HTTP2"
+    assert "## Is it fast? Speed checks" in r.stdout
+    assert "Is it fast? HTTP/2: not enough places for a conclusion" in r.stderr
+
+
+def test_help_names_the_speed_checks():
+    r = runner.invoke(app, ["scan", "--help"], terminal_width=200)
+    assert "consistency" in r.stdout and "dnstrace" in r.stdout

@@ -872,6 +872,8 @@
       var head = take(".bn-head");
       // "Who can reach it": its finding follows, the grid stays in the drawer above the diagram.
       head = head.concat(take(".rc-head"));
+      // "Is it fast?": its findings follow too; the table stays in the drawer.
+      head = head.concat(take(".sp-head"));
       var at = panelNodes.findIndex(function (n) { return n.classList.contains("figures"); });
       Array.prototype.splice.apply(panelNodes, [at + 1, 0].concat(head));
       var rest = doc.querySelector(".fragment") || doc.body;
@@ -1165,6 +1167,14 @@
     if (!b) { return; }
     setDrawer(true, b);
     var title = $("results-body").querySelector(".rc-title");
+    if (title) { title.scrollIntoView({ block: "start" }); title.focus(); }
+  });
+
+  $("results-summary").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-sp-open]") : null;
+    if (!b) { return; }
+    setDrawer(true, b);
+    var title = $("results-body").querySelector(".sp-title");
     if (title) { title.scrollIntoView({ block: "start" }); title.focus(); }
   });
 

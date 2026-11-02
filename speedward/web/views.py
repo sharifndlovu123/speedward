@@ -27,7 +27,7 @@ from django.views.decorators.http import require_GET, require_POST
 from speedward.core.allowance_view import KEY_PROMPT, describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, cost_breakdown, describe_breakdown, estimate_cost
-from speedward.core.checks import LABEL, PER_PLACE, QUESTION, REACH_CHECKS, parse_checks
+from speedward.core.checks import LABEL, PER_PLACE, QUESTION, REACH_CHECKS, SPEED_CHECKS, parse_checks
 from speedward.core.config import EndpointRefused, check_endpoint
 from speedward.core.geo import geolocator_from_env, parse_pin
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
@@ -40,6 +40,7 @@ from speedward.reports._view import context
 from speedward.reports.bottleneck import render_bottleneck
 from speedward.reports.map import render_map, render_picker_map
 from speedward.reports.reach import MAP_LEGEND, render_reach
+from speedward.reports.speed import render_speed
 
 from . import state
 
@@ -143,6 +144,8 @@ def index(request):
         "default_locations": ",".join(defaults),
         "reach_checks": [{"key": c, "label": LABEL[c], "per": PER_PLACE[c], "question": QUESTION[c]}
                          for c in REACH_CHECKS],
+        "speed_checks": [{"key": c, "label": LABEL[c], "per": PER_PLACE[c], "question": QUESTION.get(c, "")}
+                         for c in SPEED_CHECKS],
     })
 
 
@@ -357,7 +360,10 @@ def render_result(request):
     panel = render_bottleneck(report, interactive=True, heading="h3")
     # "Who can reach it", also our own autoescaping template; "" for a report without checks.
     reach = render_reach(report, interactive=True, heading="h3")
+    # "Is it fast?", likewise; "" for a report without speed checks.
+    speed = render_speed(report, interactive=True, heading="h3")
     ctx.update(map_svg=mark_safe(svg), bottleneck=mark_safe(panel), reach=mark_safe(reach),  # noqa: S308
+               speed=mark_safe(speed),  # noqa: S308
                reach_legend=MAP_LEGEND if report.reach is not None else "",
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
