@@ -14,8 +14,9 @@ fonts used when Inter is not installed), then each label tries a fixed list of s
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
-from math import hypot
+from math import floor, hypot
 
 # Places closer than this (map viewBox pixels at width 1000 and the base label size of 11) share one
 # label. It grows with the label size, so on a phone, where labels are larger, more places merge.
@@ -30,6 +31,11 @@ HALO = 1.5  # half the paper halo drawn round each label (stroke-width 3)
 GAP = 3.0  # space between a dot and its label, in map units at the base size
 RINGS = 3  # spot distances tried: next to the dot, then two steps further out with a leader line
 SAFETY = 1.08
+# Work limits, so a very large posted report cannot keep /render or /export busy. Above this many
+# places no place gets a label (the dots keep their titles and the table lists every place); and
+# each set of labels stops trying spots after MAX_SPOT_CHECKS, dropping the labels still waiting.
+MAX_LABELLED_PLACES = 200
+MAX_SPOT_CHECKS = 20_000
 
 Box = tuple[float, float, float, float]
 Segment = tuple[float, float, float, float]
@@ -70,6 +76,35 @@ class Label:
 class Placement:
     labels: tuple[Label, ...]
     dropped: tuple[int, ...]  # keys of places that have no label
+    checks: int = 0  # spots tried, at most MAX_SPOT_CHECKS
+
+
+class _Grid:
+    """Boxes bucketed by square cells, so a query only looks at what is near it."""
+
+    def __init__(self, cell: float, width: float, height: float):
+        self.cell = max(cell, 1.0)
+        # Cells outside the map are folded onto its edge, so a huge box costs no more than the map.
+        self.last = (floor(width / self.cell) + 1, floor(height / self.cell) + 1)
+        self.cells: dict[tuple[int, int], list[int]] = defaultdict(list)
+        self.items: list[tuple[Box, object]] = []
+
+    def _keys(self, box: Box):
+        c, (mi, mj) = self.cell, self.last
+        clamp = lambda v, top: min(max(v, -1), top)  # noqa: E731
+        for i in range(clamp(floor(box[0] / c), mi), clamp(floor(box[2] / c), mi) + 1):
+            for j in range(clamp(floor(box[1] / c), mj), clamp(floor(box[3] / c), mj) + 1):
+                yield i, j
+
+    def add(self, box: Box, item: object = None) -> None:
+        n = len(self.items)
+        self.items.append((box, item))
+        for key in self._keys(box):
+            self.cells[key].append(n)
+
+    def near(self, box: Box) -> list[tuple[Box, object]]:
+        found = sorted({n for key in self._keys(box) for n in self.cells.get(key, ())})
+        return [self.items[n] for n in found]
 
 
 def _char_em(c: str) -> float:
@@ -136,7 +171,12 @@ def _clusters(marks: list[Mark], close: float) -> list[list[Mark]]:
     The groups come back in rank order of their best place, each listed west to east."""
     d = lambda a, b: hypot(a.x - b.x, a.y - b.y)  # noqa: E731
     group = {m.key: [m] for m in marks}
-    pairs = sorted((d(a, b), a.key, b.key) for i, a in enumerate(marks) for b in marks[i + 1:] if d(a, b) < close)
+    grid = _Grid(close, max((m.x for m in marks), default=0), max((m.y for m in marks), default=0))
+    for m in marks:
+        grid.add((m.x, m.y, m.x, m.y), m)
+    pairs = sorted({(d(a, b), min(a.key, b.key), max(a.key, b.key))
+                    for a in marks for _, b in grid.near((a.x - close, a.y - close, a.x + close, a.y + close))
+                    if b is not a and d(a, b) < close})
     for _, ka, kb in pairs:
         ga, gb = group[ka], group[kb]
         if ga is gb or any(d(a, b) >= close for a in ga for b in gb):
@@ -207,27 +247,40 @@ def place_labels(marks: list[Mark], obstacles: list[Box], width: float, height: 
     k = width / 1000
     close = CLUSTER_PX * fs / BASE_FS  # fs is in map units, so this scales with the map width too
     by_key = {m.key: m for m in marks}
+    unlabelled = sorted(by_key) if len(by_key) > MAX_LABELLED_PLACES else []
     groups = [[f] for f in sorted(fixed, key=lambda m: (m.rank, m.key))]
-    groups += _clusters(sorted(by_key.values(), key=lambda m: m.key), close)
+    if not unlabelled:
+        groups += _clusters(sorted(by_key.values(), key=lambda m: m.key), close)
+    h = (ASC + DESC) * fs + 2 * HALO
+    cell = max(2 * h, 20 * k)
 
+    still = _Grid(cell, width, height)  # dots, squares and fixed text
+    for o in obstacles:
+        still.add(o, o)
+    labels = _Grid(cell, width, height)  # label boxes placed so far
+    lines = _Grid(cell, width, height)  # their leader lines, by bounding box
     placed: list[Label] = []
-    leaders: list[Segment] = []
-    dropped: list[int] = []
+    dropped: list[int] = list(unlabelled)
+    checks = 0
+
+    def seg_box(s: Segment) -> Box:
+        return (min(s[0], s[2]), min(s[1], s[3]), max(s[0], s[2]), max(s[1], s[3]))
 
     def free(box: Box, segs: list[Segment], group: list[Mark]) -> bool:
         if box[0] < 0 or box[1] < 0 or box[2] > width or box[3] > height:
             return False
-        if any(box_hits(box, o) for o in obstacles):
+        if any(box_hits(box, o) for o, _ in still.near(box)):
             return False
-        if any(box_hits(box, lab.box) for lab in placed):
+        if any(box_hits(box, b) for b, _ in labels.near(box)):
             return False
-        if any(segment_hits(s, box) for s in leaders):
+        if any(segment_hits(s, box) for _, s in lines.near(box)):
             return False
         for s in segs:
-            if any(segment_hits(s, lab.box) for lab in placed):
+            sb = seg_box(s)
+            if any(segment_hits(s, b) for b, _ in labels.near(sb)):
                 return False
             # A leader may cross its own cluster's dots, never another place's dot or a square.
-            for o in obstacles:
+            for o, _ in still.near(sb):
                 if segment_hits(s, o) and not any(o[0] <= m.x <= o[2] and o[1] <= m.y <= o[3] for m in group):
                     return False
         return True
@@ -238,19 +291,27 @@ def place_labels(marks: list[Mark], obstacles: list[Box], width: float, height: 
 
     # The space right next to each place still to be labelled. A label first tries spots that keep
     # clear of it, so an early label does not take the only room a later one has.
-    h = (ASC + DESC) * fs + 2 * HALO
-    near = [(a[0] - h, a[1] - h, a[2] + h, a[3] + h) for a in map(anchor_of, groups)]
+    near = _Grid(cell, width, height)
+    for n, a in enumerate(map(anchor_of, groups)):
+        near.add((a[0] - h, a[1] - h, a[2] + h, a[3] + h), n)
 
     for i, group in enumerate(groups):
         anchor = anchor_of(group)
         label = None
         for text, kind in _texts(group):
-            for keep_clear in (near[i + 1:], ()):
+            for keep_clear in (True, False):
                 for x, y, word, box, ring in _spots(anchor, text, fs, k):
+                    if checks >= MAX_SPOT_CHECKS:
+                        break
+                    checks += 1
+                    if box[0] < 0 or box[1] < 0 or box[2] > width or box[3] > height:
+                        continue
+                    if keep_clear and any(n > i and box_hits(box, z) for z, n in near.near(box)):
+                        continue
                     segs: list[Segment] = []
                     if len(group) > 1 or ring > 0:
                         segs = [s for s in (_leader(m, box) for m in group) if s is not None]
-                    if not any(box_hits(box, z) for z in keep_clear) and free(box, segs, group):
+                    if free(box, segs, group):
                         label = Label(text, x, y, word, box, tuple(m.key for m in group), kind,
                                       tuple(segs), all(m.dim for m in group))
                         break
@@ -262,5 +323,7 @@ def place_labels(marks: list[Mark], obstacles: list[Box], width: float, height: 
             dropped.extend(m.key for m in group if m.key >= 0)
             continue
         placed.append(label)
-        leaders.extend(label.leaders)
-    return Placement(tuple(placed), tuple(sorted(dropped)))
+        labels.add(label.box)
+        for s in label.leaders:
+            lines.add(seg_box(s), s)
+    return Placement(tuple(placed), tuple(sorted(dropped)), checks)

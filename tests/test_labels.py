@@ -203,3 +203,42 @@ def test_no_data_labels_are_dimmed_only_when_every_member_has_no_data():
     m = Mark(key=0, x=500, y=200, r=3, full="Oslo no data", short="Oslo no data", rank=(2, "oslo", 0), dim=True)
     placed = place_labels([m], [(497, 197, 503, 203)], W, H, 11.0)
     assert placed.labels[0].dim
+
+
+# --- bounded work: a large posted report cannot keep the server busy ----------------------------
+
+def many(n, stacked):
+    import random
+    rng = random.Random(1)
+    out = []
+    for i in range(n):
+        x, y = (500 + i * 1e-3, 120.0) if stacked else (rng.uniform(5, 995), rng.uniform(5, 495))
+        out.append(Mark(key=i, x=x, y=y, r=5.5, full=f"Place{i} {i}ms", short=f"Place{i} {i}ms", rank=(1, f"p{i}", i)))
+    return out
+
+
+def test_spot_checks_are_capped_however_the_places_are_spread():
+    from speedward.reports._labels import MAX_LABELLED_PLACES, MAX_SPOT_CHECKS
+    for stacked in (False, True):
+        ms = many(MAX_LABELLED_PLACES, stacked)
+        placed = place_labels(ms, dot_boxes(ms), W, H, 11.0)
+        assert 0 < placed.checks <= MAX_SPOT_CHECKS
+        shown = {k for lab in placed.labels for k in lab.keys}
+        assert shown | set(placed.dropped) == set(range(MAX_LABELLED_PLACES))  # each place is either
+
+
+def test_above_the_place_limit_no_place_label_is_tried_but_the_server_still_is():
+    from speedward.reports._labels import MAX_LABELLED_PLACES
+    ms = many(MAX_LABELLED_PLACES + 1, False)
+    server = Mark(key=-1, x=500, y=250, r=7, full="Server (manual setting)", short="Server (manual setting)",
+                  rank=(-1,))
+    placed = place_labels(ms, [], W, H, 11.0, fixed=[server])  # room for the Server label
+    assert [lab.keys for lab in placed.labels] == [(-1,)]
+    assert placed.dropped == tuple(range(MAX_LABELLED_PLACES + 1))
+    assert placed.checks <= 50
+
+
+def test_a_very_long_name_costs_no_more_than_the_map():
+    m = Mark(key=0, x=500, y=250, r=4, full="x" * 100_000, short="x" * 100_000, rank=(1, "x", 0))
+    placed = place_labels([m], [(496, 246, 504, 254)], W, H, 11.0)
+    assert placed.labels == () and placed.dropped == (0,)

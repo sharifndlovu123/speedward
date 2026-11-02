@@ -136,3 +136,24 @@ def test_web_results_map_carries_the_placed_labels(client):
     page = r.content.decode()
     assert page.count('class="sw-labels sw-lt') == 3
     assert "London 38ms · Frankfurt 120ms" in page
+
+
+@pytest.mark.parametrize("stacked", [False, True], ids=["spread", "stacked"])
+def test_a_500_place_report_renders_quickly_with_every_place_in_titles_and_table(stacked):
+    import random
+    import time
+    rng = random.Random(3)
+    locs = []
+    for i in range(500):
+        lat, lon = (50 + i * 1e-4, 8.0) if stacked else (rng.uniform(-60, 70), rng.uniform(-170, 170))
+        locs.append(LocationResult(Location("XX", f"Place{i}", lat, lon, 1, "Net", "isp"), "measured",
+                                   stages=Stages(first_byte=100 + i)))
+    r = ScanReport("https://e.com/", NOW, NOW, "0", {}, None, locs, [], [], None)
+    t = time.perf_counter()
+    svg = render_map(r)
+    assert time.perf_counter() - t < 2  # generous; it takes a few milliseconds
+    titles = re.findall(r'<circle class="sw-dot[^>]*><title>(Place\d+) \d+ms</title>', svg)
+    assert sorted(titles) == sorted(f"Place{i}" for i in range(500))
+    assert all(items == [] for items in layers(svg).values())  # above the limit: dots and titles only
+    out = render(r, "html")
+    assert all(f">Place{i}" in out or f"Place{i}," in out or f"Place{i}<" in out for i in range(500))
