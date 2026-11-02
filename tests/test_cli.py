@@ -265,7 +265,7 @@ def test_dotenv_inline_comments_and_empty(tmp_path):
 @pytest.mark.parametrize("args, text", [
     (["--max-ttfb", "1234567"], "max-ttfb 1234567"),
     (["--max-load", "5000000"], "max-load 5000000"),
-    (["--max-blocked", "1234567890"], "max-blocked 1234567890"),
+    (["--max-blocked", "123456789"], "max-blocked 123456789"),
     (["--max-ttfb", "250.5"], "max-ttfb 250.5"),
 ])
 def test_pass_fail_line_prints_limits_exactly(fake, args, text):
@@ -336,4 +336,20 @@ def test_cli_refuses_bad_speed_thresholds_before_any_test(fake, monkeypatch):
     r = scan()
     assert r.exit_code == 2
     assert "FAST_MS and SLOW_MS" in r.stderr
+    assert fake.posts() == []
+
+
+@pytest.mark.parametrize("args", [["--max-ttfb", "1e400"], ["--max-ttfb", "inf"], ["--max-load", "10000000000"],
+                                  ["--max-blocked", "1" + "0" * 400], ["--max-ttfb", "nan"]])
+def test_huge_limits_refused_before_any_test(fake, args):
+    r = scan(*args)
+    assert r.exit_code == 2
+    assert fake.posts() == []
+    assert "Traceback" not in r.stdout + r.stderr
+
+
+def test_max_page_weight_refused_while_browser_test_is_missing(fake):
+    r = scan("--max-page-weight", "1000000")
+    assert r.exit_code == 2
+    assert "--max-page-weight needs the browser test, which is not available in this build yet" in r.stderr
     assert fake.posts() == []

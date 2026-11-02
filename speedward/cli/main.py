@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import time
 from pathlib import Path
@@ -22,6 +23,10 @@ from speedward.reports._view import skipped
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
                   help="Test a website's speed from locations around the world.")
+# The same upper bound as the web form: every limit stays a finite, printable number.
+LIMIT_MAX = 10**9
+NO_BROWSER_LIMIT = ("Error: --max-page-weight needs the browser test, which is not available in this build yet, "
+                    "so that limit could never pass.")
 NOTICE = "Only test sites you own or are authorised to test."
 NO_KEY = ("No Globalping key set (limits: 250 tests/hour, 50 locations). "
           "A key is free up to a limit: https://globalping.io")
@@ -66,10 +71,11 @@ def scan(
     browser: bool = typer.Option(False, "--browser", help="Also run the browser test."),
     fmt: str = typer.Option("md", "--format", help="Report format: json, md or html."),
     out: Path | None = typer.Option(None, "--out", help="Write the report to this file instead of stdout."),
-    max_ttfb: float | None = typer.Option(None, "--max-ttfb", min=1, help="Fail if first byte takes longer than this (ms)."),
-    max_load: float | None = typer.Option(None, "--max-load", min=1, help="Fail if load takes longer than this (ms)."),
-    max_blocked: int | None = typer.Option(None, "--max-blocked", min=0, help="Fail if more locations than this were blocked."),
-    max_page_weight: int | None = typer.Option(None, "--max-page-weight", min=1, help="Fail if the page is heavier than this (bytes)."),
+    max_ttfb: float | None = typer.Option(None, "--max-ttfb", min=1, max=LIMIT_MAX, help="Fail if first byte takes longer than this (ms)."),
+    max_load: float | None = typer.Option(None, "--max-load", min=1, max=LIMIT_MAX, help="Fail if load takes longer than this (ms)."),
+    max_blocked: int | None = typer.Option(None, "--max-blocked", min=0, max=LIMIT_MAX, help="Fail if more locations than this were blocked."),
+    max_page_weight: int | None = typer.Option(None, "--max-page-weight", min=1, max=LIMIT_MAX,
+                                               help="Not available yet: needs the browser test (refused if set)."),
     yes: bool = typer.Option(False, "--yes", help="Go ahead even if the scan costs more than the tests left."),
     estimate: bool = typer.Option(False, "--estimate", help="Print the cost and allowance, then stop."),
     verbose: bool = typer.Option(False, "--verbose", help="Show more detail when something goes wrong."),
@@ -97,6 +103,12 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         _err(f"Error: {clean(str(exc))}")
         raise typer.Exit(2) from None
 
+    if any(v is not None and not math.isfinite(v) for v in (max_ttfb, max_load)):
+        _err("Error: --max-ttfb and --max-load must be numbers from 1 to 1000000000.")
+        raise typer.Exit(2)
+    if max_page_weight is not None:
+        _err(NO_BROWSER_LIMIT)
+        raise typer.Exit(2)
     if browser:
         _err("Note: the browser test is not available in this build yet; continuing without it.")
     plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False)
