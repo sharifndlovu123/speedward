@@ -12,7 +12,15 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from speedward.core.checks import COMPRESSION, CONSISTENCY, DNS_TRACE, HTTP2, MTR
-from speedward.core.speed import CONSISTENCY_RUNS, Overall, PlaceSpeed, SpeedSummary, speed_summary
+from speedward.core.speed import (
+    CONSISTENCY_RUNS,
+    VARIES_MIN_MS,
+    VARIES_RATIO,
+    Overall,
+    PlaceSpeed,
+    SpeedSummary,
+    speed_summary,
+)
 
 SYMBOL = {"measured": "●", "blocked": "○", "no_data": "◌"}
 STATUS_TEXT = {"test_failed": "test failed", "not_run": "did not run", "blocked": "blocked"}
@@ -161,7 +169,8 @@ def finding(o: Overall, s: SpeedSummary) -> dict:
         if o.verdict == "steady":
             return {"check": o.check, "prompt": "",
                     "text": (f"The timings indicate the server wait is steady: {CONSISTENCY_RUNS} runs each in {n}, "
-                             f"median {_ms(o.ms)} (from {_ms(o.low_ms)} to {_ms(o.high_ms)}).")}
+                             f"no slowest run at {VARIES_RATIO:g} times its place's median and {VARIES_MIN_MS:.0f} ms "
+                             "above it.")}
         return {"check": o.check,
                 "text": (f"The timings indicate the server wait varies in {len(o.places)} of {n} "
                          f"({_names(o.places)}): from {_ms(o.low_ms)} to {_ms(o.high_ms)} over {CONSISTENCY_RUNS} runs."),
