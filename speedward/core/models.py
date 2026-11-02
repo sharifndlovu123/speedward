@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from speedward.core.checks import IPV6, PLAIN_HTTP, PORT, REACH_CHECKS, RESOLVER_IPS, RESOLVERS_CHECK
+
 if TYPE_CHECKING:  # bottleneck imports this module; at run time it is imported where it is used
     from speedward.core.bottleneck import Diagnosis
 
@@ -32,7 +34,8 @@ STATUSES = ("measured", "blocked", "test_failed", "not_run")
 # no target and no exception text ever goes in, and from_dict accepts nothing else.
 LIMIT_REACHED = "Globalping limit reached"
 GLOBALPING_FAILED = "the test failed on the Globalping side"
-NOT_RUN_WHAT = ("repeat test", "ping", "network path", "DNS check")
+NOT_RUN_WHAT = ("repeat test", "ping", "network path", "DNS check",
+                "IPv6 check", "plain HTTP check", "DNS resolver check", "port check")
 NOT_RUN_WHY = (LIMIT_REACHED, GLOBALPING_FAILED)
 NOT_RUN_TEXTS = tuple(f"{what}: {why}" for what in NOT_RUN_WHAT for why in NOT_RUN_WHY)
 
@@ -213,6 +216,55 @@ class DnsResult:
         self.answers = [clean(a) for a in self.answers]
 
 
+# Where a plain-HTTP answer sent the visitor (only the first response; redirects are not followed).
+REDIRECTS = ("https", "other")
+
+
+@dataclass
+class ReachResult:
+    """One "More checks" result for one place (speedward/core/checks.py). `row` is the place's index in
+    ScanReport.locations. Only a measured result carries a time or other figures; blocked (the site side
+    refused, timed out, has no address or no open port) and test_failed / not_run carry only a reason."""
+    check: str
+    row: int
+    location: Location
+    status: str
+    reason: str
+    ms: float | None = None
+    resolver: str | None = None  # the "dns" check: which public resolver was asked
+    redirect: str | None = None  # the "http" check, measured: REDIRECTS, or None when it answered itself
+    http_status: int | None = None
+    port: int | None = None  # the "port" check: the TCP port tried
+    loss_pct: float | None = None  # the "port" check, measured: share of attempts that got no answer
+    probe: str | None = None  # PROBE_MATCHES against the cold run's probe; only on a measured result
+
+    def __post_init__(self):
+        _check_status(self.status)
+        if self.check not in REACH_CHECKS:
+            raise ValueError("unknown check")
+        if isinstance(self.row, bool) or not isinstance(self.row, int) or self.row < 0:
+            raise ValueError("row must be a whole number, 0 or more")
+        if (self.check == RESOLVERS_CHECK) != (self.resolver is not None):
+            raise ValueError("a resolver goes with the dns check only")
+        if self.resolver is not None and self.resolver not in RESOLVER_IPS:
+            raise ValueError("resolver is not one of the known public resolvers")
+        if (self.check == PORT) != (self.port is not None):
+            raise ValueError("a port goes with the port check only")
+        if self.port is not None and not 1 <= self.port <= 65535:
+            raise ValueError("port is out of range")
+        if self.redirect is not None and (self.check != PLAIN_HTTP or self.redirect not in REDIRECTS):
+            raise ValueError("redirect is only for the http check and must be known")
+        if self.loss_pct is not None and self.check != PORT:
+            raise ValueError("loss is only for the port check")
+        if self.http_status is not None and self.check not in (PLAIN_HTTP, IPV6):
+            raise ValueError("an HTTP status goes with an http check only")
+        _check_probe(self.probe, "probe")
+        if self.status != "measured" and (self.ms is not None or self.loss_pct is not None
+                                          or self.redirect is not None or self.probe is not None):
+            raise ValueError("only a measured check result may carry figures")
+        self.reason = clean(self.reason)
+
+
 @dataclass
 class ServerPosition:
     lat: float
@@ -249,6 +301,9 @@ class ScanReport:
     # "Where the time goes" (speedward/core/bottleneck.py), set by the runner. None for a report from
     # before it existed: such a report shows no panel and is never given a diagnosis afterwards.
     diagnosis: Diagnosis | None = None
+    # "More checks" results (speedward/core/reach.py builds the "Who can reach it" grid from them). None
+    # when no check was ticked, and for a report from before they existed: no grid is shown then.
+    reach: list[ReachResult] | None = None
 
     def __post_init__(self):
         self.target, self.version = clean(self.target), clean(self.version)
@@ -269,6 +324,10 @@ class ScanReport:
         }
         if self.diagnosis is not None:  # a report from before the diagnosis exports exactly as it came
             out["diagnosis"] = self.diagnosis.to_dict()
+        if self.reach is not None:  # likewise a report without checks: no keys, no grid
+            from speedward.core.reach import reach_grid
+            out["reach"] = [asdict(x) for x in self.reach]
+            out["reach_grid"] = reach_grid(self).to_dict()
         return out
 
     @classmethod
@@ -280,6 +339,7 @@ class ScanReport:
         is accepted only if it is exactly what the report's own results give (diagnosis_from_dict).
         """
         from speedward.core.bottleneck import diagnosis_from_dict
+        from speedward.core.reach import grid_from_dict
 
         d = _obj(data, "report")
         if d.get("schema_version") != SCHEMA_VERSION:
@@ -300,6 +360,11 @@ class ScanReport:
         )
         if d.get("diagnosis") is not None:
             report.diagnosis = diagnosis_from_dict(d["diagnosis"], report)
+        if d.get("reach") is not None:
+            report.reach = _reach_list(d["reach"], len(report.locations))
+            grid_from_dict(d.get("reach_grid"), report)  # must be exactly what the results give
+        elif d.get("reach_grid") is not None:
+            raise ValueError("a reach grid needs its results")
         return report
 
 
@@ -307,6 +372,11 @@ class ScanReport:
 
 def _options(value) -> dict:
     options = copy.deepcopy(_obj(value, "options"))
+    if "checks" in options:
+        checks = options["checks"]
+        if (not isinstance(checks, list) or not all(isinstance(x, str) and x in REACH_CHECKS for x in checks)
+                or len(set(checks)) != len(checks)):
+            raise ValueError("checks must list known checks, each once")
     if "not_run" in options:
         skipped = options["not_run"]
         if not isinstance(skipped, list) or not all(isinstance(x, str) and x in NOT_RUN_TEXTS for x in skipped):
@@ -451,6 +521,28 @@ def _path(d: dict) -> PathResult:
 def _dns(d: dict) -> DnsResult:
     return DnsResult(_location(d.get("location")), _s(d, "status"), _s(d, "reason"),
                      _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0, MAX_MS), _s_or_none(d, "probe"))
+
+
+def _reach_list(value, rows: int) -> list[ReachResult]:
+    if not isinstance(value, list):
+        raise ValueError("reach must be a list")
+    out, seen = [], set()
+    for x in value:
+        d = _obj(x, "reach result")
+        row = d.get("row")
+        if isinstance(row, bool) or not isinstance(row, int) or not 0 <= row < rows:
+            raise ValueError("reach row must name a location")
+        r = ReachResult(check=_s(d, "check"), row=row, location=_location(d.get("location")),
+                        status=_s(d, "status"), reason=_s(d, "reason"), ms=_num_or_none(d, "ms", 0, MAX_MS),
+                        resolver=_s_or_none(d, "resolver"), redirect=_s_or_none(d, "redirect"),
+                        http_status=_int_or_none(d, "http_status"), port=_int_or_none(d, "port"),
+                        loss_pct=_num_or_none(d, "loss_pct", 0, 100), probe=_s_or_none(d, "probe"))
+        key = (r.check, r.row, r.resolver)
+        if key in seen:
+            raise ValueError("one result per check, place and resolver")
+        seen.add(key)
+        out.append(r)
+    return out
 
 
 # What Geolocator emits: a configured position, a geo-IP database, or the web form's pin.
