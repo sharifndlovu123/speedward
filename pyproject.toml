@@ -21,7 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 geoip = ["maxminddb>=2.5"]
 browser = ["playwright>=1.44"]
-dev = ["pytest>=8", "pytest-django>=4.8"]
+dev = ["pytest>=8", "pytest-django>=4.8", "ruff>=0.6"]
 e2e = ["pytest-playwright>=0.5", "gunicorn", "axe-playwright-python>=0.1.4", "httpx"]
 
 [project.scripts]
@@ -37,3 +37,23 @@ speedward = ["core/*.json", "reports/*.j2", "reports/*.json", "web/templates/**/
 testpaths = ["tests"]
 DJANGO_SETTINGS_MODULE = "speedward.web.settings"
 filterwarnings = ["ignore:No directory at:UserWarning"]
+
+[tool.ruff]
+target-version = "py311"
+# The code base is written with long lines and is not run through a formatter; 150 fits all but one line.
+line-length = 150
+extend-exclude = ["speedward.egg-info"]
+
+[tool.ruff.lint]
+# E/F pyflakes+pycodestyle, I import order, B bugbear, UP pyupgrade, S bandit (checked on app code only, see per-file-ignores).
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = [
+  "B905",  # zip() without strict=: lengths are equal by construction; strict= would add a new runtime failure mode
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]    # asserts, dummy tokens and throwaway servers are normal in tests
+"e2e/**" = ["S"]      # same as tests; also starts a local gunicorn subprocess on purpose
+"scripts/**" = ["S"]  # developer scripts, not shipped
+"speedward/cli/main.py" = ["B008"]  # typer declares options as call expressions in defaults (its documented API)
+"tests/test_map.py" = ["B008"]      # ServerPosition is an immutable value used as a default in a test helper

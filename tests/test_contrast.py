@@ -4,6 +4,7 @@ Text needs 4.5:1, large text (the big result numerals) and non-text UI (hairline
 map dots, lines and markers) need 3:1. Both the light and the dark theme are checked.
 """
 import re
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -127,11 +128,11 @@ def _blend(fg: str, bg: str, alpha: float) -> str:
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_speed_lines_pass_3_to_1_as_drawn(theme):
     """Lines are drawn with an opacity: the colour that reaches the screen must still be 3:1 on land."""
-    from speedward.core.models import LocationResult, Location, Stages
-    from datetime import datetime, timezone
-    from speedward.core.models import ScanReport
+    from datetime import datetime
+
+    from speedward.core.models import Location, LocationResult, ScanReport, Stages
     from speedward.reports.map import render_map
-    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 1, tzinfo=UTC)
     locs = [LocationResult(Location("JP", "Tokyo", 35.7, 139.7, 1, "n", "isp"), "measured",
                            stages=Stages(first_byte=fb, total=fb), server_position=None) for fb in (100, 500, 900)]
     from speedward.core.models import ServerPosition

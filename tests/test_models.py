@@ -1,9 +1,17 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from speedward.core.models import (
-    SCHEMA_VERSION, DnsResult, Hop, Location, LocationResult, PathResult, ScanReport, Stages, clean,
+    SCHEMA_VERSION,
+    DnsResult,
+    Hop,
+    Location,
+    LocationResult,
+    PathResult,
+    ScanReport,
+    Stages,
+    clean,
 )
 
 LOC = Location("ZA", "Cape Town", -33.9, 18.4, 37457, "Example ISP", "isp")
@@ -60,7 +68,7 @@ def test_non_measured_dns_cannot_carry_data():
 
 
 def test_scan_report_to_dict_shape():
-    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 1, tzinfo=UTC)
     rep = ScanReport("example.com", now, now, "0.1", {}, None,
                      [LocationResult(LOC, "measured", stages=STAGES)], [], [], None)
     d = rep.to_dict()
@@ -76,11 +84,12 @@ def test_scan_report_to_dict_shape():
 import copy  # noqa: E402
 import json  # noqa: E402
 
-from speedward.core.models import BrowserResult, DnsResult as _Dns, ServerPosition  # noqa: E402
+from speedward.core.models import BrowserResult, ServerPosition  # noqa: E402
+from speedward.core.models import DnsResult as _Dns  # noqa: E402
 
 
 def _full_report() -> ScanReport:
-    t = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+    t = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
     return ScanReport(
         target="https://example.com/", started=t, finished=t, version="0.1.0",
         options={"locations": [{"magic": "Tokyo"}], "traceroute": True, "dns": True, "browser": False},

@@ -67,7 +67,7 @@ def main():
         for name, payload in specs.items():
             r, body = post(client, out, name, payload)
             if r.status_code == 202:
-                res = poll(client, out, name, body["id"])
+                poll(client, out, name, body["id"])
                 if name == "http":
                     first_id = body["id"]
         if first_id:  # repeat from the same probes

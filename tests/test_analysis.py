@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from speedward.core.analysis import Limits, cdn_status, evaluate_limits, summarise
 from speedward.core.models import BrowserResult, Location, LocationResult, ScanReport, Stages
 
-NOW = datetime(2026, 11, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 1, tzinfo=UTC)
 
 
 def loc(city="Berlin", country="DE"):
@@ -164,8 +164,8 @@ def test_plain_number(value, text):
 
 
 def test_failure_message_prints_large_numbers_exactly():
-    from tests.test_web import report_dict
     from speedward.core.models import ScanReport
+    from tests.test_web import report_dict
     d = report_dict()
     d["locations"][0]["stages"]["first_byte"] = 9876543.0
     out = evaluate_limits(ScanReport.from_dict(d), Limits(max_ttfb=1234567))

@@ -19,7 +19,8 @@ from speedward.core.runner import ScanError, run_scan
 from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
 
-app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False, help="Test a website's speed from locations around the world.")
+app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
+                  help="Test a website's speed from locations around the world.")
 NOTICE = "Only test sites you own or are authorised to test."
 NO_KEY = ("No Globalping key set (limits: 250 tests/hour, 50 locations). "
           "A key is free up to a limit: https://globalping.io")
@@ -70,7 +71,7 @@ def scan(
         _err("The scan failed unexpectedly.")
         if verbose:
             _err(f"Detail: {clean(str(exc))}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
 
 
 def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load, max_blocked, max_page_weight, yes, estimate, verbose):
@@ -83,7 +84,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         specs = parse_locations(locations)
     except ValueError as exc:
         _err(f"Error: {clean(str(exc))}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
 
     if browser:
         _err("Note: the browser test is not available in this build yet; continuing without it.")
@@ -101,7 +102,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         custom = config.check_endpoint(base_url, token)
     except config.EndpointRefused as exc:
         _err(str(exc))
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     if custom:
         kwargs["base_url"] = custom
     client = GlobalpingClient(token=token, **kwargs)
@@ -110,7 +111,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         allowance = client.allowance()
     except GlobalpingError as exc:
         _err(f"Error: {clean(str(exc))}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
 
     cost = estimate_cost(plan)
     if not allowance.authenticated:
@@ -141,12 +142,12 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         _err(START_FAILED)
         if verbose:
             _err(f"Detail: {clean(str(exc))}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     except GlobalpingError as exc:
         _err("The scan failed because Globalping could not be used.")
         if verbose:
             _err(f"Detail: {clean(str(exc))}")
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
 
     text = render(report, fmt)
     if out:
@@ -156,7 +157,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         except OSError:
             _err("Could not write the report file.")
             typer.echo(text)
-            raise typer.Exit(2)
+            raise typer.Exit(2) from None
     else:
         typer.echo(text)
 

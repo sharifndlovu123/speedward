@@ -19,11 +19,11 @@ from pathlib import Path
 from speedward.core.geo import _public_ip
 from speedward.core.models import (  # noqa: F401 - re-exported
     BAD_IP,
-    HEADER_TOO_FAST,
     DB_UNREADABLE,
     DISAGREE,
     EDGE_NOTES,
     EDGE_REASONS,
+    HEADER_TOO_FAST,
     NO_DB,
     NO_IP,
     NOT_AVAILABLE,

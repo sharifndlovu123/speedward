@@ -1,10 +1,10 @@
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from speedward.core.models import (Location, LocationResult, ScanReport, ServerPosition, Stages)
+from speedward.core.models import Location, LocationResult, ScanReport, ServerPosition, Stages
 from speedward.reports.map import render_map
 
-NOW = datetime(2026, 11, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 1, tzinfo=UTC)
 
 
 def loc(city="Tokyo", lat=35.7, lon=139.7):

@@ -2,8 +2,7 @@
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick
-from e2e.test_session_storage import TARGET, run_scan
+from e2e.test_session_storage import run_scan
 
 SIZES = [{"width": 1280, "height": 800}, {"width": 360, "height": 740}]
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from speedward import __version__
@@ -25,12 +25,12 @@ from speedward.core.globalping import (
     classify,
 )
 from speedward.core.models import (
+    NO_DB,
     DnsResult,
     Hop,
     Location,
     LocationResult,
     PathResult,
-    NO_DB,
     ScanReport,
     ServerPosition,
     Stages,
@@ -230,7 +230,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
     if ":" in host:  # IPv6 literal; Globalping takes it bare
         host = host.strip("[]")
     http_opts = _http_options(parts)
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     scan = _Scan(client, host, progress)
     n = len(plan.locations)
 
@@ -402,6 +402,6 @@ def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dn
                "dns": plan.dns, "browser": plan.browser}
     if scan.skipped:
         options["not_run"] = list(scan.skipped)
-    return ScanReport(target=target, started=started, finished=datetime.now(timezone.utc),
+    return ScanReport(target=target, started=started, finished=datetime.now(UTC),
                       version=__version__, options=options, server=server, locations=results,
                       paths=paths, dns=dns, browser=None)
