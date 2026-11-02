@@ -847,3 +847,44 @@ def test_views_close_their_globalping_clients(client, monkeypatch):
     run_full_scan(client)
     assert len(made) >= 3
     assert all(c._http.is_closed for c in made)
+
+
+# --- "where the time goes" ---------------------------------------------------------------------------
+
+def _with_diagnosis(d: dict) -> dict:
+    from speedward.core.bottleneck import diagnose
+    from speedward.core.models import ScanReport
+    r = ScanReport.from_dict(d)
+    r.diagnosis = diagnose(r)
+    return json.loads(json.dumps(r.to_dict()))
+
+
+def test_render_shows_the_panel_for_a_report_with_a_diagnosis(client):
+    result = _with_diagnosis(report_dict())
+    html = post_json(client, reverse("render"), {"result": result, "limits": {}}).content.decode()
+    assert '<section class="bottleneck"' in html and 'class="bn-head"' in html
+    assert "Not enough places for a conclusion." in html
+    assert 'data-bn-view="all"' in html and 'data-bn-show="1"' in html  # one view per place, blocked too
+    assert "connection timed out. No timings, left out of every figure." in html
+    assert html.index('class="bottleneck"') < html.index("<h3>Locations</h3>")
+
+
+def test_render_shows_no_panel_for_an_old_report(client):
+    html = post_json(client, reverse("render"), {"result": report_dict(), "limits": {}}).content.decode()
+    assert "bottleneck" not in html and "Where the time goes" not in html
+
+
+def test_render_refuses_a_diagnosis_that_was_changed(client):
+    result = _with_diagnosis(report_dict())
+    result["diagnosis"]["verdict"] = "biggest"
+    assert post_json(client, reverse("render"), {"result": result, "limits": {}}).status_code == 400
+    assert post_json(client, reverse("export", args=["json"]), {"result": result}).status_code == 400
+
+
+def test_a_scan_result_carries_its_diagnosis_through_render_and_export(client):
+    result = run_full_scan(client)
+    assert result["diagnosis"]["measured"] == 2
+    html = post_json(client, reverse("render"), {"result": result, "limits": {}}).content.decode()
+    assert "Where the time goes" in html
+    exported = json.loads(post_json(client, reverse("export", args=["json"]), {"result": result}).content)
+    assert exported["diagnosis"] == result["diagnosis"]

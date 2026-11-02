@@ -115,12 +115,12 @@ def _diagram(d: Diagnosis, stages: list[StageFigure], total: float | None, overa
         visitor = ("Test places", f"average of {d.measured}")
         edge_title = f"HIT {c.hit} · MISS {c.miss}" if c.hit or c.miss else "no cache header"
         codes = sorted({p.edge for p in d.places if p.edge})
-        edge_note = f"answered by {', '.join(codes)}" if codes else "who answered, not how long"
+        edge_note = f"answered by {', '.join(codes)}" if codes else "no edge code seen"
     else:
         caption = f"Path of one request · {place.place} · total {ms(total)}"
         visitor = ("Test place", place.place)
         edge_title = place.cdn or "no cache header"
-        edge_note = f"answered by {place.edge}" if place.edge else "who answered, not how long"
+        edge_note = f"answered by {place.edge}" if place.edge else "no edge code seen"
     reason = ""
     if d.verdict == "too_few":
         reason = (f"Not enough places for a conclusion: {_plural(d.measured, 'place')} measured, at least "
@@ -230,7 +230,7 @@ def _card_distance(d: Diagnosis) -> dict:
     near, far = x.nearest, x.farthest
     if near is not None and far is not None and near.row != far.row and near.connect_ms is not None \
             and far.connect_ms is not None:
-        title = {True: "Far places pay more", False: "Distance is not the main cost",
+        title = {True: "Far places pay more", False: "No clear distance trend",
                  None: "Connect time by distance"}[x.connect_grows]
         text = (f"{far.place} ({far.km:,.0f} km from the server that answered) takes {far.connect_ms:.0f} ms to "
                 f"connect vs {near.connect_ms:.0f} ms in {near.place} ({near.km:,.0f} km).")

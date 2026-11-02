@@ -11,7 +11,7 @@
 .left-col .bn-headline{font-size:1.5rem}
 .bn-detail{color:var(--mute);margin:0 0 8px}
 .bn-head button{margin:2px 0 8px}
-.bn-body .bn-title{margin-top:8px}
+.bn-body .bn-title{margin-top:8px;scroll-margin-top:64px}
 .bn-showing{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 6px}
 .bn-showing p{margin:0;font-weight:600}
 .bn-reason{font-weight:600;margin:6px 0}

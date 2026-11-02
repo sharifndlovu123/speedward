@@ -178,3 +178,9 @@ def test_each_stage_has_a_headline(stage_args, phrase):
     v = view(diagnosed(ok("London", **stage_args), ok("Tokyo", **stage_args), ok("Lagos", **stage_args),
                        server=None).diagnosis)
     assert v["headline"] == phrase
+
+
+def test_export_heading_comes_first_and_only_once():
+    html = render_bottleneck(server_heavy())
+    assert html.count("Where the time goes</h2>") == 1
+    assert html.index("Where the time goes</h2>") < html.index('class="bn-head"')

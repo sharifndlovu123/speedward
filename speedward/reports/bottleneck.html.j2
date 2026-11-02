@@ -14,6 +14,7 @@
 {%- endmacro %}
 <section class="bottleneck" aria-label="Where the time goes">
 <style>{{ css }}</style>
+{% if not interactive %}<{{ h }} class="bn-title">Where the time goes</{{ h }}>{% endif %}
 <div class="bn-head">
 <p class="bn-kicker">{{ v.kicker }}</p>
 <p class="bn-headline">{{ v.headline }}</p>
@@ -21,7 +22,7 @@
 {% if interactive and v.overall %}<button type="button" class="secondary" data-bn-open>See the request path</button>{% endif %}
 </div>
 <div class="bn-body">
-<{{ h }} class="bn-title" tabindex="-1">Where the time goes</{{ h }}>
+{% if interactive %}<{{ h }} class="bn-title" tabindex="-1">Where the time goes</{{ h }}>{% endif %}
 {% if v.overall %}
 {% if interactive %}<div class="bn-showing"><p aria-live="polite">Showing: <span data-bn-showing>{{ v.average_label }}</span></p><button type="button" class="secondary" data-bn-show="all" hidden>Show the average</button></div>{% endif %}
 <div class="bn-view" data-bn-view="all">
