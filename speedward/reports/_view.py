@@ -1,6 +1,8 @@
 """Presentation helpers shared by the HTML and Markdown reports. Only measured data becomes numbers."""
 from __future__ import annotations
 
+import re
+
 from speedward.core.analysis import STAGE_NAMES, summarise
 from speedward.core.edge import edge_city
 from speedward.core.models import DB_UNREADABLE, NO_DB, LocationResult, ScanReport
@@ -17,6 +19,13 @@ NA = "not available"
 
 def ms(v: float | None) -> str:
     return NA if v is None else f"{v:.0f} ms"
+
+
+def numeral(text: str) -> tuple[str, str]:
+    """Split a figure like "412 ms" into the number and its unit (with the leading space), so the number
+    can be set large. Joined back together it is the same text; "-38%" and words stay whole."""
+    m = re.fullmatch(r"(-?\d[\d.,]*%?)(\s+\S+)?", text)
+    return (m.group(1), m.group(2) or "") if m else (text, "")
 
 
 def label(r: LocationResult) -> str:
@@ -170,6 +179,8 @@ def context(report: ScanReport) -> dict:
     return {
         "r": report, "s": s, "target": report.target.split("://", 1)[-1],
         "avg": ms(s.avg_first_byte) if s.avg_first_byte is not None else NO_DATA,
+        "avg_fig": numeral(ms(s.avg_first_byte)) if s.avg_first_byte is not None else (NO_DATA, ""),
+        "cache_fig": numeral(cache),
         "cache": cache, "cache_na": s.cache_gain_pct is None, "cache_na_note": CACHE_NA_NOTE,
         "cache_note": CACHE_NOTE,
         "excluded_line": excluded_line(s),

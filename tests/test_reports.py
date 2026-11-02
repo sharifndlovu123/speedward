@@ -184,3 +184,26 @@ def test_new_columns_are_escaped_in_markdown_and_html():
     assert "1.2.3.4\\|<b>x</b>" in md_row(md, "Tokyo")
     html = render(rep(locations=hostile, server=None), "html")
     assert "<b>x</b>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html
+
+
+def test_numeral_splits_the_unit_and_keeps_the_text():
+    from speedward.reports._view import numeral
+    assert numeral("412 ms") == ("412", " ms")
+    assert numeral("-38%") == ("-38%", "")
+    assert numeral("no data") == ("no data", "")
+    assert numeral("n/a") == ("n/a", "")
+    assert "".join(numeral("1.5 KB")) == "1.5 KB"
+
+
+def test_summary_figures_keep_wording_and_never_invent_a_number():
+    def text(html):
+        return re.sub(r"<[^>]+>", "", html)
+    failed = [LocationResult(loc("Beijing"), "blocked", "timed out")]
+    html = render(rep(locations=failed), "html")
+    figs = text(re.search(r'<section class="figures".*?</section>', html, re.S).group(0))
+    assert "Average first byteno datameasured locations only" in figs.replace("\n", "")
+    assert "the site refused or timed out" in figs
+    assert "Blocked1 / 1" in figs.replace("\n", "")
+    ok_html = render(rep(), "html")
+    figs = text(re.search(r'<section class="figures".*?</section>', ok_html, re.S).group(0))
+    assert "920 ms" in figs
