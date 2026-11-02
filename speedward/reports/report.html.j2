@@ -6,9 +6,9 @@
 <title>Speed report: {{ target }}</title>
 <style>
 /* Same tokens as the web UI (paper, ink, hairlines); self-contained, no outside requests. */
-:root{--paper:#F0EAE0;--ink:#1C1C1C;--mute:#5A5650;--faint:#7A746B;--hair:#1C1C1C;--warn:#9A3B00;--err:#A3200F;--bar:#1C1C1C;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;color-scheme:dark}}
-:root[data-theme="dark"]{--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;color-scheme:dark}
+:root{--paper:#F0EAE0;--ink:#1C1C1C;--mute:#5A5650;--faint:#7A746B;--hair:#1C1C1C;--warn:#9A3B00;--err:#A3200F;--bar:#1C1C1C;--accent:#C62F17;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;--accent:#C62F17;color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;--accent:#C62F17;color-scheme:dark}
 *{box-sizing:border-box}
 html,body{background:var(--paper)}
 body{margin:0;color:var(--ink);font:15px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
@@ -56,6 +56,8 @@ footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:v
 <p class="excluded-note">{{ excluded_line }}</p>
 {% if skipped %}<ul class="skipped" aria-label="Measurements that did not run">{% for n in skipped %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 <p class="mute">{{ cache_note }}</p>
+
+{{ bottleneck }}
 
 <section>
 <h2>Locations</h2>

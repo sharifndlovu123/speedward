@@ -145,3 +145,42 @@ def test_speed_lines_pass_3_to_1_as_drawn(theme):
     for name, op in lines:
         drawn = _blend(t[name], t["land"], float(op or 1))
         assert ratio(drawn, t["land"]) >= UI, f"{theme} {name} line as drawn: {ratio(drawn, t['land']):.2f}"
+
+
+# --- "Where the time goes" block diagram (speedward/reports/bottleneck.css, shared by page and export) ---
+
+BOTTLENECK_CSS = (Path(__file__).parent.parent / "speedward/reports/bottleneck.css").read_text()
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("tokens", [PAGE, EXPORT], ids=["page", "export"])
+def test_biggest_block_outline_and_text(tokens, theme):
+    t = tokens[theme]
+    assert ratio(t["accent"], t["paper"]) >= UI, "the biggest block's red outline on the page"
+    assert ratio(t["accent"], t["ink"]) >= UI, "the red outline against the block's ink fill"
+    assert ratio(t["paper"], t["ink"]) >= TEXT, "paper text inside the filled block"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("tokens", [PAGE, EXPORT], ids=["page", "export"])
+def test_text_on_the_hatched_possible_block(tokens, theme):
+    """The hatch lines sit behind ink and muted text: the text must still pass on the hatch colour."""
+    m = re.search(r"\.bn-block\.bn-possible\{[^}]*rgba\((\d+),(\d+),(\d+),([\d.]+)\)", BOTTLENECK_CSS)
+    assert m, "possible block hatch not found"
+    hatch = "#" + "".join(f"{int(c):02x}" for c in m.groups()[:3])
+    t = tokens[theme]
+    line = _blend(hatch, t["paper"], float(m.group(4)))
+    for fg in ("ink", "mute"):
+        assert ratio(t[fg], line) >= TEXT, f"{theme} --{fg} on the hatch: {ratio(t[fg], line):.2f}"
+
+
+def test_diagram_css_is_flat_self_contained_and_uses_known_tokens():
+    css = re.sub(r"/\*.*?\*/", "", BOTTLENECK_CSS, flags=re.S)
+    assert "box-shadow" not in css and "url(" not in css and "@import" not in css
+    assert "border-radius:0" in css  # the place buttons drop the pill shape
+    assert re.search(r"@media \(prefers-reduced-motion:\s*reduce\)\{\.bn-bar\{animation:none\}\}", css)
+    used = set(re.findall(r"var\(--([\w-]+)\)", css))
+    for name, tokens in (("page", PAGE), ("export", EXPORT)):
+        for theme in ("light", "dark"):
+            missing = used - set(tokens[theme]) - {"hl"}  # --hl (hover) has a fallback and is web-only
+            assert not missing, f"{name} {theme} lacks {missing}"
