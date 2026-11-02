@@ -16,6 +16,7 @@ from speedward.core.locations import CATALOG
 from speedward.core.models import UNCERTAIN, LocationResult, ScanReport
 from speedward.core.reach import reach_grid
 
+from ._labels import Mark, place_labels, text_box
 from ._view import CDN_EDGE_NOTE, NA, SOURCE_TEXT, _from_header, answered_by, position_source
 
 FAST_MS = DEFAULT_FAST_MS
@@ -24,6 +25,11 @@ UNKNOWN_HINT_WEB = "set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON"
 # A square closer than this (map pixels at width 1000) to its circle is drawn as a frame around it.
 HERE_PX = 9
 SLOW_MS = DEFAULT_SLOW_MS
+
+# Label sizes in map units (at width 1000) per screen width, so a label never renders much below
+# 10 CSS px: the full map from 1001 px up, about 660 to 1000 px wide maps, and phones (about 340 px
+# and up). Larger labels leave room for fewer, so on a phone only the most important ones show.
+LABEL_TIERS = ((None, 11.0), (1000, 15.0), (700, 30.0))
 
 _STATUS_TEXT = {"blocked": "blocked", "test_failed": "test failed", "not_run": "did not run"}
 
@@ -57,6 +63,12 @@ _STYLE = (
     ".sw-dot.sw-sel{stroke:var(--ink);stroke-width:3}"
     ".sw-dot:focus-visible,.sw-pick:focus-visible{outline:none;stroke:var(--ink);stroke-width:4;"
     "filter:drop-shadow(0 0 2px var(--bg))}"
+    # Leader lines from a shared label to its places: one thin ink hairline at any map size.
+    ".sw-lead{fill:none;stroke:var(--ink);stroke-width:1px;vector-effect:non-scaling-stroke;opacity:.6}"
+    # One set of labels per screen width (see LABEL_TIERS); only one set is shown at a time.
+    ".sw-lt1,.sw-lt2{display:none}"
+    "@media (max-width:1000px){.sw-lt0{display:none}.sw-lt1{display:inline}}"
+    "@media (max-width:700px){.sw-lt1{display:none}.sw-lt2{display:inline}}"
 )
 
 
@@ -175,7 +187,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             spots.setdefault((r.server_ip, p.lat, p.lon, p.source, r.edge_code), []).append(r)
 
     grid = reach_grid(report) if report.reach is not None else None
-    arcs, squares, dots, labels = [], [], [], []
+    arcs, squares, dots, marks, obstacles = [], [], [], [], []
     for row, r in enumerate(report.locations):
         if r.location.lat is None or r.location.lon is None:
             continue
@@ -189,12 +201,13 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             line = f'stroke="{col}" stroke-width="{_num(1.6 * k)}" fill="none"'
             dot = f'fill="{col}"'
             none = ""
-            text = f"{name} {fb:.0f}ms"
+            text = short = f"{name} {fb:.0f}ms"
         else:
             if r.status == "measured":
-                text = f"{name} no data"
+                text = short = f"{name} no data"
             else:
-                text = f"{name} {_STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"
+                short = f"{name} {_STATUS_TEXT[r.status]}"
+                text = f"{short}: {r.reason or 'no reason given'}"
             line = dashed
             dot = 'fill="var(--off)"'
             none = " sw-none"
@@ -223,9 +236,11 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
         if none == " sw-part":
             dots.append(f'<circle class="sw-part-ring" aria-hidden="true" cx="{_num(x)}" cy="{_num(y)}" '
                         f'r="{_num(7 * k)}"/>')
-        dim = "" if fb is not None else ' opacity="0.7"'
-        labels.append(f'<text x="{_num(x + 9 * k)}" y="{_num(y - 6 * k)}" font-size="{_num(fs)}"'
-                      f"{dim}>{escape(text)}</text>")
+        # The label's rank when space is short: blocked first, then measured, then the rest; by name.
+        level = 0 if (r.status == "blocked" or blocked_in) else 1 if r.status == "measured" else 2
+        reach = (7 if none == " sw-part" else 4) * k + 1.5  # the dot or ring with its stroke
+        marks.append(Mark(row, x, y, reach, text, short, (level, name.casefold(), row), dim=fb is None))
+        obstacles.append((x - reach, y - reach, x + reach, y + reach))
 
     on_top = []
     for group in spots.values():
@@ -243,26 +258,53 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             text += f", {answered_by(r)}"
         if ips_differ or r.server_position.source == "cdn header":
             text += f". {CDN_EDGE_NOTE}"
+        size = 14 * k if here else 7 * k
+        obstacles.append((qx - size / 2 - 1, qy - size / 2 - 1, qx + size / 2 + 1, qy + size / 2 + 1))
         if here:
-            on_top.append(square("sw-sq sw-here", qx, qy, 14 * k, text))
+            on_top.append(square("sw-sq sw-here", qx, qy, size, text))
         else:
-            squares.append(square("sw-sq", qx, qy, 7 * k, text))
+            squares.append(square("sw-sq", qx, qy, size, text))
 
     out += arcs + squares + dots + on_top
+    fixed = []
     if anchor is not None:
         label_text, tip = anchor
         out.append(square("sw-sq sw-server", sx, sy, 12 * k, tip))
-        out.append(f'<text x="{_num(sx + 10 * k)}" y="{_num(sy + 4 * k)}" font-size="{_num(fs)}" '
-                   f'font-weight="600">{escape(label_text)}</text>')
+        obstacles.append((sx - 7 * k, sy - 7 * k, sx + 7 * k, sy + 7 * k))
+        fixed.append(Mark(-1, sx, sy, 7 * k, label_text, label_text, (-1,)))
     elif not located:
+        unknown = f"Server position unknown: {UNKNOWN_HINT_WEB if pin_hint else UNKNOWN_HINT}"
         out.append(f'<text x="{_num(sx)}" y="{_num(sy + 4 * k)}" font-size="{_num(fs)}" font-weight="600">'
-                   f"Server position unknown: {UNKNOWN_HINT_WEB if pin_hint else UNKNOWN_HINT}</text>")
-    out += labels
+                   f"{unknown}</text>")
+        obstacles.append(text_box(unknown, fs, sx, sy + 4 * k, "start"))
+    for tier, (_, size) in enumerate(LABEL_TIERS):
+        out.append(_label_layer(tier, marks, obstacles, fixed, W, H, fs if tier == 0 else size * k))
     if unplaced:
         names = ", ".join(escape(_city(r)) for r in unplaced)
         out.append(f'<text x="{_num(8 * k)}" y="{_num(H + 17 * k)}" font-size="{_num(fs)}">'
                    f"Not shown on map: {names}</text>")
     out.append("</svg>")
+    return "".join(out)
+
+
+def _label_layer(tier: int, marks: list[Mark], obstacles: list, fixed: list[Mark], W: float, H: float,
+                 fs: float) -> str:
+    """One set of place labels at one size, placed so none overlap or run off the map (see _labels)."""
+    placement = place_labels(marks, obstacles, W, H, fs, fixed=fixed)
+    out = [f'<g class="sw-labels sw-lt{tier}" font-size="{_num(fs)}">']
+    lines = "".join(f"M{_num(a)},{_num(b)}L{_num(c)},{_num(d)}" for lab in placement.labels for a, b, c, d in lab.leaders)
+    if lines:
+        out.append(f'<path class="sw-lead" aria-hidden="true" d="{lines}"/>')
+    for lab in placement.labels:
+        attrs = f'x="{_num(lab.x)}" y="{_num(lab.y)}"'
+        if lab.anchor != "start":
+            attrs += f' text-anchor="{lab.anchor}"'
+        if lab.keys == (-1,):
+            attrs += ' font-weight="600"'
+        if lab.dim:
+            attrs += ' opacity="0.7"'
+        out.append(f"<text {attrs}>{escape(lab.text)}</text>")
+    out.append("</g>")
     return "".join(out)
 
 
