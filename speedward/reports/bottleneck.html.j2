@@ -4,7 +4,7 @@
 {% macro diagram(g) -%}
 <p class="bn-cap">{{ g.caption }}</p>
 {% if g.reason %}<p class="bn-reason">{{ g.reason }}</p>{% endif %}
-<ol class="bn-path" aria-label="{{ g.label }}">
+<ol class="bn-path" role="list" aria-label="{{ g.label }}">
 <li class="bn-block bn-visitor"><span class="bn-k">Visitor</span><b>{{ g.visitor[0] }}</b><span class="bn-n">{{ g.visitor[1] }}</span></li>
 {% for b in g.blocks %}{% if b.stage == "server_wait" %}<li class="bn-block bn-edge"><span class="bn-k">Edge / CDN · seen, not timed</span><b>{{ g.edge.title }}</b><span class="bn-n">{{ g.edge.note }}</span></li>
 {% endif %}<li class="bn-block bn-{{ b.mark }}"><span class="bn-k">{{ b.n }} · {{ b.name }}{% if b.flag %} · <strong>{{ b.flag }}</strong>{% endif %}</span><b class="bn-ms">{{ b.ms }}</b><span class="bn-n">{{ b.note }}</span></li>

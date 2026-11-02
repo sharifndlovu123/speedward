@@ -116,7 +116,7 @@ def test_never_claims_a_cause():
 
 def test_html_panel_lists_the_path_for_screen_readers():
     html = render_bottleneck(server_heavy())
-    assert '<ol class="bn-path"' in html and 'aria-label="Request path' in html
+    assert '<ol class="bn-path" role="list"' in html and 'aria-label="Request path' in html  # VoiceOver keeps a list-style:none list
     overall = html.split("</ol>")[0]
     assert overall.count('class="bn-block') == 7  # visitor, five stages, edge
     assert "bn-edge" in html and "seen, not timed" in html
