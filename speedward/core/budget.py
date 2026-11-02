@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from speedward.core.checks import PER_PLACE
 from speedward.core.globalping import Allowance
 
 BASE_PER_LOCATION = 3  # cold http + warm http + ping
@@ -14,6 +15,7 @@ class Plan:
     traceroute: bool = False
     dns: bool = False
     browser: bool = False  # runs locally, costs no Globalping tests
+    checks: tuple[str, ...] = ()  # ticked "More checks" (speedward.core.checks.REACH_CHECKS)
 
 
 @dataclass
@@ -23,9 +25,27 @@ class BudgetVerdict:
     reason: str = ""
 
 
+@dataclass
+class CostLine:
+    key: str  # "base", "traceroute", "dns_answers" or a check name
+    per_place: int
+    cost: int
+
+
+def cost_breakdown(plan: Plan) -> list[CostLine]:
+    """What each part of the scan costs: the default, each optional measurement and each ticked check."""
+    n = len(plan.locations)
+    parts = [("base", BASE_PER_LOCATION)]
+    if plan.traceroute:
+        parts.append(("traceroute", 1))
+    if plan.dns:
+        parts.append(("dns_answers", 1))
+    parts += [(c, PER_PLACE[c]) for c in plan.checks]
+    return [CostLine(key, per, per * n) for key, per in parts]
+
+
 def estimate_cost(plan: Plan) -> int:
-    per_location = BASE_PER_LOCATION + int(plan.traceroute) + int(plan.dns)
-    return len(plan.locations) * per_location
+    return sum(line.cost for line in cost_breakdown(plan))
 
 
 def check_budget(plan: Plan, allowance: Allowance) -> BudgetVerdict:
