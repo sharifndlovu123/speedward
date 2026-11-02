@@ -163,7 +163,7 @@ With no position at all, the map says "Server position unknown: set GEOIP_DB, dr
 
 ## How to read the map and the statuses
 
-The map has one dot per test location, coloured by first-byte time against `FAST_MS` and `SLOW_MS`, and a square at the server that answered it where that can be placed (see above). Each row in the table has one status:
+The map has one dot per test location, coloured by first-byte time against `FAST_MS` and `SLOW_MS` (a place with no data is a hollow grey ring), and a square at the server that answered it where that can be placed (see above). Each row in the table has one status:
 
 - **measured**: the test ran and the site answered. Only these rows have timings and count in averages and pass/fail limits.
 - **blocked**: the site itself refused the request or timed out.

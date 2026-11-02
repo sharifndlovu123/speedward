@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - One test: `.venv/bin/pytest tests/test_runner.py::test_name -v`
 - End-to-end (browser): `pip install -e ".[e2e]" && playwright install chromium`, then `.venv/bin/pytest e2e`
 - CLI: `.venv/bin/speedward scan URL --estimate` (then without `--estimate`; `--help` lists options)
-- Web UI: the world map is the page background; panels (address, picker, results) float over it. The location picker replaces the old free-text locations box; a hidden `locations` input carries the comma-separated picks.
+- Web UI: the world map is the page background; panels (address, picker, results) float over it. Look is creative-minimal: paper/ink tokens in `static/css/app.css`, mirrored in `reports/map.py` (`_STYLE`) and `reports/report.html.j2`; flat hairline panels, pills only on buttons and chips, red accent only for server marker and Start. `tests/test_contrast.py` checks the token pairs and `e2e/test_a11y.py` runs axe-core (WCAG 2.2 AA) and reflow checks. The location picker replaces the old free-text locations box; a hidden `locations` input carries the comma-separated picks.
 - Web app locally: `DEBUG=1 django-admin runserver --settings=speedward.web.settings`
 - Docker: `docker build -t speedward .` (gunicorn, one worker plus threads)
 - Live check (uses real tests, site you own): `.venv/bin/python scripts/smoke_live.py URL`

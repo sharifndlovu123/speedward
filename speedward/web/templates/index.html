@@ -8,7 +8,7 @@
   <div id="results-bar" class="results-bar" hidden>
     <h2 id="results-title"></h2>
     <div class="actions">
-      <span class="mute">Export:</span>
+      <span class="export-label">Export</span>
       <button type="button" data-export="html">HTML report</button>
       <button type="button" data-export="json">JSON</button>
       <button type="button" data-export="md">Markdown</button>
@@ -22,7 +22,7 @@
 
 <form id="scan-form" class="scan-form" autocomplete="off" novalidate>
   <div id="middle" class="middle">
-    <div id="left-col" class="left-col">
+    <div id="left-col" class="left-col" role="region" aria-label="Test settings and summary">
       <div id="notice" class="notice panel" role="status" hidden></div>
 
       <section id="saved-banner" class="banner panel" hidden aria-label="Saved results">
@@ -38,8 +38,12 @@
         <p class="mute">Kept only until you close this tab ({{ ttl_minutes }} minutes at most). Export now if you want to keep these results.</p>
       </section>
 
+      <section id="progress" class="panel" hidden aria-live="polite">
+        <h2>Testing</h2>
+        <ul id="progress-lines"></ul>
+      </section>
       <div id="form-panel" class="panel">
-        <div class="panel-head"><label for="url">Site address</label>
+        <div class="panel-head"><label for="url"><span class="step" aria-hidden="true">01</span>Site address</label>
           <button type="button" class="collapse secondary" aria-expanded="true" data-collapse="form-panel">Hide</button></div>
         <div class="panel-body">
           <input id="url" name="url" type="url" inputmode="url" placeholder="https://example.com" required>
@@ -78,21 +82,20 @@
           </div>
           <p id="over" class="warn" hidden></p>
           <label class="check" id="confirm-wrap" hidden><input type="checkbox" id="confirm" name="confirm" value="1"> Go ahead anyway. Tests over the hourly allowance use Globalping credits if you have them; otherwise they will not run.</label>
-          <p id="form-error" class="error" role="alert" hidden></p>
-          <button type="submit" id="start">Start test</button>
+          <div class="form-foot">
+            <p id="form-error" class="error" role="alert" hidden></p>
+            <button type="submit" id="start">Start test</button>
+          </div>
           <p class="mute small">Tests run on the <a href="https://globalping.io" rel="noopener noreferrer">Globalping</a> network. Nothing about the sites you test is stored on this server.</p>
         </div>
       </div>
 
-      <section id="progress" class="panel" hidden aria-live="polite">
-        <h2>Testing</h2>
-        <ul id="progress-lines"></ul>
-      </section>
     </div>
+    <p id="edge-coords" class="edge-coords" aria-hidden="true" hidden></p>
   </div>
 
   <div id="picker-strip" class="panel strip">
-    <div class="panel-head"><b>Locations</b> <span class="mute">Click a dot on the map or a name to switch it on or off.</span>
+    <div class="panel-head"><b><span class="step" aria-hidden="true">02</span>Locations</b> <span class="mute">Click a dot on the map or a name to switch it on or off.</span>
       <button type="button" id="sheet-toggle" class="collapse secondary" aria-expanded="false">More</button>
       <button type="button" class="collapse secondary" aria-expanded="true" data-collapse="picker-strip">Hide</button></div>
     <div class="panel-body">

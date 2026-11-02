@@ -5,43 +5,58 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Speed report: {{ target }}</title>
 <style>
-:root{--bg:#fff;--ink:#1f2933;--mute:#5f6b7a;--line:#d8dee6;--card:#f6f8fa;--bar:#2b5fd9;--warn:#b45309}
-@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--ink:#e6e9ee;--mute:#9aa4b2;--line:#2b3340;--card:#161b22;--bar:#7aa2ff;--warn:#f0b429}}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
-main{max-width:1000px;margin:0 auto;padding:16px}
-h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.1rem;margin:28px 0 8px}
-.mute{color:var(--mute)}.map svg{width:100%;height:auto;display:block;border-radius:8px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:16px 0}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-.tile b{display:block;font-size:1.4rem}.tile small{color:var(--mute)}
-table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-tr.excluded{opacity:.6;font-style:italic}.scroll{overflow-x:auto}
-.bar{background:var(--bar);height:14px;border-radius:3px}.stage{display:grid;grid-template-columns:90px 1fr 80px;gap:8px;align-items:center;margin:4px 0}
+/* Same tokens as the web UI (paper, ink, hairlines); self-contained, no outside requests. */
+:root{--paper:#F0EAE0;--ink:#1C1C1C;--mute:#5A5650;--faint:#7A746B;--hair:#1C1C1C;--warn:#9A3B00;--err:#A3200F;--bar:#1C1C1C;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--paper)}
+body{margin:0;color:var(--ink);font:15px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+main{max-width:1040px;margin:0 auto;padding:32px 20px 48px}
+header{border-bottom:1px solid var(--hair);padding-bottom:14px;margin-bottom:20px}
+.kicker,h2,.figure .cap,th,dt{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+h1{font-size:clamp(1.75rem,5vw,3rem);font-weight:800;letter-spacing:-.03em;line-height:1.05;margin:6px 0;overflow-wrap:anywhere}
+h2{margin:36px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--hair)}
+h3{font-size:1rem;margin:18px 0 6px}
+a{color:var(--ink)}
+.mute{color:var(--mute)}.map svg{width:100%;height:auto;display:block}
+.figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:24px 0 12px;padding-bottom:18px;border-bottom:1px solid var(--hair)}
+.figure{display:flex;flex-direction:column}
+.figure .num{order:1;font-size:clamp(2.5rem,7vw,4rem);font-weight:100;letter-spacing:-.04em;line-height:.9;color:var(--faint)}
+.figure:first-child .num{font-size:clamp(3.5rem,10vw,6rem);font-weight:800;color:var(--ink)}
+.figure .unit{font-size:.36em;font-weight:500;letter-spacing:0;color:var(--mute)}
+.figure:first-child .unit{color:var(--ink)}
+.figure .cap{order:2;margin-top:8px}.figure .note{order:3;font-size:.8rem;color:var(--mute)}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+tr.excluded{color:var(--mute);font-style:italic}.scroll{overflow-x:auto}
+.bar{background:var(--bar);height:6px}.stage{display:grid;grid-template-columns:90px 1fr 80px;gap:10px;align-items:center;margin:6px 0}
+dl{display:grid;grid-template-columns:minmax(120px,max-content) 1fr;gap:4px 16px}dd{margin:0;overflow-wrap:anywhere}
 .flag{color:var(--warn);font-weight:600}
-footer{margin-top:32px;color:var(--mute);font-size:.85rem}
+footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:var(--mute);font-size:.85rem}
 </style>
 </head>
 <body>
 <main>
 <header>
-<h1>Speed report: {{ target }}</h1>
+<div class="kicker">speedward · speed report</div>
+<h1>{{ target }}</h1>
 <div class="mute">{{ r.started.isoformat() }} &middot; speedward {{ r.version }}</div>
 </header>
 
 <section class="map" aria-label="Map">{{ map_svg }}</section>
 
-<section class="tiles" aria-label="Summary">
-<div class="tile"><small>Average first byte</small><b>{{ avg }}</b><small>measured locations only</small></div>
-<div class="tile"><small>Cache gain</small><b>{{ cache }}</b>{% if cache_na %}<small>{{ cache_na_note }}</small>{% endif %}</div>
-<div class="tile"><small>Blocked</small><b>{{ s.blocked }}</b><small>the site refused or timed out</small></div>
-{% if browser %}<div class="tile"><small>Page weight</small><b>{{ browser.weight }}</b><small>{{ browser.requests }}</small></div>{% endif %}
+<section class="figures" aria-label="Summary">
+<div class="figure"><small class="cap">Average first byte</small><b class="num">{{ avg_fig[0] }}{% if avg_fig[1] %}<span class="unit">{{ avg_fig[1] }}</span>{% endif %}</b><small class="note">measured locations only</small></div>
+<div class="figure"><small class="cap">Cache gain</small><b class="num">{{ cache_fig[0] }}{% if cache_fig[1] %}<span class="unit">{{ cache_fig[1] }}</span>{% endif %}</b>{% if cache_na %}<small class="note">{{ cache_na_note }}</small>{% endif %}</div>
+<div class="figure"><small class="cap">Blocked</small><b class="num">{{ s.blocked }}<span class="unit"> / {{ s.measured + s.excluded }}</span></b><small class="note">the site refused or timed out</small></div>
+{% if browser %}<div class="figure"><small class="cap">Page weight</small><b class="num">{{ browser.weight }}</b><small class="note">{{ browser.requests }}</small></div>{% endif %}
 </section>
-<p>{{ excluded_line }}</p>
+<p class="excluded-note">{{ excluded_line }}</p>
 <p class="mute">{{ cache_note }}</p>
 
 <section>
 <h2>Locations</h2>
-<div class="scroll"><table>
+<div class="scroll" tabindex="0" role="region" aria-label="Locations table"><table>
 <thead><tr><th>Location</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Answered by</th><th>Position source</th><th>Status</th></tr></thead>
 <tbody>
 {% for row in rows %}<tr{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
@@ -58,14 +73,14 @@ footer{margin-top:32px;color:var(--mute);font-size:.85rem}
 
 <section>
 <h2>Server identity</h2>
-<dl>{% for k, v in identity %}<dt class="mute">{{ k }}</dt><dd>{{ v }}</dd>
+<dl>{% for k, v in identity %}<dt>{{ k }}</dt><dd>{{ v }}</dd>
 {% endfor %}</dl>
 </section>
 
 {% if dns %}<section>
 <h2>DNS</h2>
 {% if dns_differs %}<p class="flag">Answers differ between locations (common with CDNs that answer by region).</p>{% endif %}
-<div class="scroll"><table><thead><tr><th>Location</th><th>Answers</th><th>Lookup</th></tr></thead><tbody>
+<div class="scroll" tabindex="0" role="region" aria-label="DNS table"><table><thead><tr><th>Location</th><th>Answers</th><th>Lookup</th></tr></thead><tbody>
 {% for d in dns %}<tr><td>{{ d.location }}</td><td>{{ d.answers }}</td><td>{{ d.lookup }}</td></tr>
 {% endfor %}</tbody></table></div>
 </section>{% endif %}
@@ -73,7 +88,7 @@ footer{margin-top:32px;color:var(--mute);font-size:.85rem}
 {% if paths %}<section>
 <h2>Routes</h2>
 {% for p in paths %}<h3>{{ p.location }}</h3>
-{% if p.note %}<p>{{ p.note }}</p>{% else %}<div class="scroll"><table><thead><tr><th>Hop</th><th>Host</th><th>RTT</th><th>Loss</th></tr></thead><tbody>
+{% if p.note %}<p>{{ p.note }}</p>{% else %}<div class="scroll" tabindex="0" role="region" aria-label="Route from {{ p.location }}"><table><thead><tr><th>Hop</th><th>Host</th><th>RTT</th><th>Loss</th></tr></thead><tbody>
 {% for h in p.hops %}<tr><td>{{ h.n }}</td><td>{{ h.host }}</td><td>{{ h.rtt }}</td><td>{{ h.loss }}</td></tr>
 {% endfor %}</tbody></table></div>{% endif %}
 {% endfor %}

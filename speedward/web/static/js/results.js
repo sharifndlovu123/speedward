@@ -81,6 +81,7 @@
     setText(el, text || "");
     show(el, !!text);
     if (text && hasResults) { setPicking(true); }  // the panel with the message must be on screen
+    if (text && el.scrollIntoView) { el.scrollIntoView({ block: "nearest" }); }  // short windows scroll the column
   }
 
   function post(url, data, asJson) {
@@ -465,6 +466,7 @@
       var el = $(id);
       if (on) { el.setAttribute("inert", ""); } else { el.removeAttribute("inert"); }
     });
+    colFocus();
     var svg = $("picker-map").querySelector("svg");
     if (svg) {
       svg.classList.toggle("sw-scanning", on);
@@ -559,6 +561,8 @@
     });
   }
 
+  function deg(n, pos, neg) { return Math.abs(n).toFixed(2) + "° " + (n >= 0 ? pos : neg); }
+
   function dir(n, pos, neg) { return Math.abs(n).toFixed(2) + " " + (n >= 0 ? pos : neg); }
 
   function renderPin() {
@@ -573,6 +577,10 @@
     label.setAttribute("text-anchor", flip ? "end" : "start");
     label.setAttribute("x", String((flip ? -15 : 15) * vb.width / 1000));
     pinEl.setAttribute("aria-label", "Server position pin, " + pinWhere());
+    // Edge label: the pin's own position, only while one is set (never a guessed place).
+    var coords = $("edge-coords");
+    setText(coords, pin ? "Server pin · " + deg(pin.lat, "N", "S") + " · " + deg(pin.lon, "E", "W") : "");
+    show(coords, !!pin && !$("picker-map").hidden);
     var sel = $("server-city");
     var value = "";
     if (pin) {
@@ -713,10 +721,19 @@
     show($("picker-strip"), showPicker);
     show($("results-panel"), hasResults && !picking);
     show($("results-bar"), hasResults);
+    show($("edge-coords"), showPicker && !!pin);
     if (showPicker) { setDrawer(false); }  // otherwise the Table button and dots control the drawer
     var t = $("locations-toggle");
     t.setAttribute("aria-pressed", picking ? "true" : "false");
     document.body.classList.toggle("has-results", hasResults);
+    colFocus();
+  }
+
+  // When the side column shows no form (picks locked while testing, or the results summary) it can
+  // still scroll but holds nothing focusable: let the keyboard reach it so all of it can be read.
+  function colFocus() {
+    var col = $("left-col");
+    if (picksLocked || (hasResults && !picking)) { col.setAttribute("tabindex", "0"); } else { col.removeAttribute("tabindex"); }
   }
 
   function setPicking(on) {
@@ -803,7 +820,7 @@
         return nodes;
       }
       var mapNodes = take("section.map");
-      var panelNodes = take(".verdict, .failed-list, .legend, .position-note, #map-detail, .tiles");
+      var panelNodes = take(".figures, .excluded-note, .verdict, .failed-list, #map-detail, .legend, .position-note");
       var rest = doc.querySelector(".fragment") || doc.body;
       var mapBox = $("results-map");
       mapBox.replaceChildren.apply(mapBox, mapNodes);
@@ -815,6 +832,7 @@
       hasResults = true;
       picking = false;
       applyMode();
+      $("left-col").scrollTop = 0;  // the headline figures first
     }).catch(function () {
       removeSaved();
       current = null;
@@ -933,6 +951,7 @@
           lockPicks(true);
           progress(["Starting"]);
           show($("progress"), true);
+          $("left-col").scrollTop = 0;  // progress is at the top of the column: bring it on screen
           poll(data.id);
           return;
         }

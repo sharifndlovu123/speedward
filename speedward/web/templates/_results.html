@@ -1,8 +1,16 @@
 <div class="fragment">
+<section class="figures" aria-label="Summary">
+<div class="figure"><small class="cap">Average first byte</small><b class="num">{{ avg_fig.0 }}{% if avg_fig.1 %}<span class="unit">{{ avg_fig.1 }}</span>{% endif %}</b><small class="note">measured locations only</small></div>
+<div class="figure"><small class="cap">Cache gain</small><b class="num">{{ cache_fig.0 }}{% if cache_fig.1 %}<span class="unit">{{ cache_fig.1 }}</span>{% endif %}</b>{% if cache_na %}<small class="note">{{ cache_na_note }}</small>{% endif %}</div>
+<div class="figure"><small class="cap">Blocked</small><b class="num">{{ s.blocked }}<span class="unit"> / {{ s.measured|add:s.excluded }}</span></b><small class="note">the site refused or timed out</small></div>
+{% if browser %}<div class="figure"><small class="cap">Page weight</small><b class="num">{{ browser.weight }}</b><small class="note">{{ browser.requests }}</small></div>{% endif %}
+</section>
+<p class="excluded-note">{{ excluded_line }}</p>
 <p class="verdict{% if verdict_failed %} failed{% endif %}">{{ verdict }}</p>
 {% if failed %}<ul class="failed-list">{% for f in failed %}<li>Failed: {{ f }}</li>{% endfor %}</ul>{% endif %}
 
 <section class="map" aria-label="Map">{{ map_svg }}</section>
+<p id="map-detail" class="map-detail" aria-live="polite"></p>
 <p class="mute legend">Circle = test location. Square = server that answered it (a CDN edge when the addresses differ; a frame around the circle when in the same city). Lines: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms; dashed grey: no data. Select a dot to find its row.</p>
 {% if position_note %}<div class="position-note">
 {% if position_note == "setup" %}<p>No server positions yet. Results still show every number; lines need the free offline location file.</p>
@@ -17,20 +25,12 @@
 {% else %}<p>No server positions: the addresses that answered could not be placed with confidence (see Position source in the table). Lines are drawn only from a position that can be trusted.</p>
 {% endif %}<button type="button" class="secondary" data-place-pin>Place a server manually (your own claim)</button>
 </div>{% endif %}
-<p id="map-detail" class="map-detail" aria-live="polite"></p>
 
-<section class="tiles" aria-label="Summary">
-<div class="tile"><small>Average first byte</small><b>{{ avg }}</b><small>measured locations only</small></div>
-<div class="tile"><small>Cache gain</small><b>{{ cache }}</b>{% if cache_na %}<small>{{ cache_na_note }}</small>{% endif %}</div>
-<div class="tile"><small>Blocked</small><b>{{ s.blocked }}</b><small>the site refused or timed out</small></div>
-{% if browser %}<div class="tile"><small>Page weight</small><b>{{ browser.weight }}</b><small>{{ browser.requests }}</small></div>{% endif %}
-</section>
-<p>{{ excluded_line }}</p>
 <p class="mute">{{ cache_note }}</p>
 
 <section>
 <h3>Locations</h3>
-<div class="scroll"><table>
+<div class="scroll" tabindex="0" role="region" aria-label="Locations table"><table>
 <thead><tr><th>Location</th><th>Network</th><th>No cache</th><th>Cache</th><th>Delay</th><th>CDN</th><th>Answered by</th><th>Position source</th><th>Status</th></tr></thead>
 <tbody>
 {% for row in rows %}<tr data-row="{{ row.index }}"{% if row.excluded %} class="excluded"{% endif %}><td>{{ row.location }}</td><td>{{ row.network }}</td><td>{{ row.cold }}</td><td>{{ row.warm }}</td><td>{{ row.delay }}</td><td>{{ row.cdn }}</td><td>{{ row.answered }}</td><td>{{ row.source }}</td><td>{{ row.status }}</td></tr>
@@ -54,7 +54,7 @@
 {% if dns %}<section>
 <h3>DNS</h3>
 {% if dns_differs %}<p class="warn">Answers differ between locations (common with CDNs that answer by region).</p>{% endif %}
-<div class="scroll"><table><thead><tr><th>Location</th><th>Answers</th><th>Lookup</th></tr></thead><tbody>
+<div class="scroll" tabindex="0" role="region" aria-label="DNS table"><table><thead><tr><th>Location</th><th>Answers</th><th>Lookup</th></tr></thead><tbody>
 {% for d in dns %}<tr><td>{{ d.location }}</td><td>{{ d.answers }}</td><td>{{ d.lookup }}</td></tr>
 {% endfor %}</tbody></table></div>
 </section>{% endif %}
@@ -62,7 +62,7 @@
 {% if paths %}<section>
 <h3>Routes</h3>
 {% for p in paths %}<h4>{{ p.location }}</h4>
-{% if p.note %}<p>{{ p.note }}</p>{% else %}<div class="scroll"><table><thead><tr><th>Hop</th><th>Host</th><th>RTT</th><th>Loss</th></tr></thead><tbody>
+{% if p.note %}<p>{{ p.note }}</p>{% else %}<div class="scroll" tabindex="0" role="region" aria-label="Route from {{ p.location }}"><table><thead><tr><th>Hop</th><th>Host</th><th>RTT</th><th>Loss</th></tr></thead><tbody>
 {% for h in p.hops %}<tr><td>{{ h.n }}</td><td>{{ h.host }}</td><td>{{ h.rtt }}</td><td>{{ h.loss }}</td></tr>
 {% endfor %}</tbody></table></div>{% endif %}
 {% endfor %}
