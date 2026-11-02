@@ -363,3 +363,20 @@ def test_smoke_script_uses_only_public_names():
     assert imported and not [name for name in imported if name.startswith("_")]
     from speedward.cli.main import environment
     assert callable(environment)
+
+
+def test_scan_prints_a_short_where_the_time_goes(fake):
+    r = scan()
+    assert r.exit_code == 0
+    assert "Where the time goes: Not enough places for a conclusion." in r.stderr
+    assert "## Where the time goes" in r.stdout
+
+
+def test_scan_with_three_places_names_the_biggest_cost(fake):
+    from tests.fake_globalping import three_places
+    fake.by_type["http"] = three_places()
+    r = runner.invoke(app, ["scan", "example.com", "--locations", "Berlin,Tokyo,London"])
+    assert r.exit_code == 0
+    lines = [line for line in r.stderr.splitlines() if line.startswith(("Where the time goes", "Check "))]
+    assert lines[0] == "Where the time goes: Waiting for the server is the biggest cost."
+    assert any(line.startswith("Check first: ") for line in lines)

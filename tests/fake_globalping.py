@@ -16,6 +16,20 @@ def fixture(name: str) -> dict:
     return json.loads((FIXTURES / f"{name}.json").read_text())
 
 
+def three_places() -> dict:
+    """http_ok plus a third probe (London) whose server wait is most of its time, so a scan has the three
+    measured places a "where the time goes" conclusion needs. Derived from the recording; the London
+    timings are made up for tests only."""
+    doc = fixture("http_ok")
+    london = copy.deepcopy(doc["results"][0])
+    london["probe"].update(country="GB", city="London", latitude=51.51, longitude=-0.13, asn=20473,
+                           network="Vultr", tags=["datacenter-network", "u-test-london"])
+    london["result"]["timings"] = {"total": 200, "dns": 4, "tcp": 6, "tls": 10, "firstByte": 170, "download": 10}
+    london["result"]["headers"]["cf-cache-status"] = "MISS"
+    doc["results"].append(london)
+    return doc
+
+
 class FakeGlobalping:
     def __init__(self, valid_token: str | None = None):
         self.valid_token = valid_token  # when set, any other bearer token gets 401
