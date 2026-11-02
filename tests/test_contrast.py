@@ -192,3 +192,38 @@ def test_diagram_css_is_flat_self_contained_and_uses_known_tokens():
         for theme in ("light", "dark"):
             missing = used - set(tokens[theme]) - {"hl"}  # --hl (hover) has a fallback and is web-only
             assert not missing, f"{name} {theme} lacks {missing}"
+
+
+# --- "Who can reach it" (speedward/reports/reach.css, shared by page and export) and More checks -------
+
+REACH_CSS = (Path(__file__).parent.parent / "speedward/reports/reach.css").read_text()
+
+
+def test_reach_panel_has_no_red_and_is_flat_and_self_contained():
+    css = re.sub(r"/\*.*?\*/", "", REACH_CSS, flags=re.S)
+    assert "--accent" not in css and "#c62f17" not in css.lower()
+    assert "box-shadow" not in css and "url(" not in css and "@import" not in css and "border-radius" not in css
+    assert re.search(r"@media \(prefers-reduced-motion:\s*reduce\)\{\.rc-finding\{animation:none\}\}", css)
+    used = set(re.findall(r"var\(--([\w-]+)\)", css))
+    for name, tokens in (("page", PAGE), ("export", EXPORT)):
+        for theme in ("light", "dark"):
+            assert not used - set(tokens[theme]), f"{name} {theme} lacks {used - set(tokens[theme])}"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("tokens", [PAGE, EXPORT], ids=["page", "export"])
+def test_finding_text_on_its_tinted_box(tokens, theme):
+    m = re.search(r"\.rc-finding\{[^}]*color-mix\(in srgb,var\(--ink\) (\d+)%,transparent\)", REACH_CSS)
+    assert m, "finding tint not found"
+    t = tokens[theme]
+    box = _blend(t["ink"], t["paper"], int(m.group(1)) / 100)
+    assert ratio(t["ink"], box) >= TEXT
+    assert ratio(t["ink"], t["paper"]) >= UI  # the 3px ink rule beside it, and the grid hairlines
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_more_checks_total_bar_is_paper_on_ink(theme):
+    rule = re.search(r"\.mc-total\{([^}]*)\}", APP_CSS).group(1)
+    assert "background:var(--ink)" in rule and "color:var(--paper)" in rule
+    t = PAGE[theme]
+    assert ratio(t["paper"], t["ink"]) >= TEXT
