@@ -397,3 +397,32 @@ def test_a_huge_posted_speed_list_is_refused_before_reading_items():
     d["speed"] = [None] * (3 * 8 + 1)
     with pytest.raises(ValueError, match="more speed results"):
         ScanReport.from_dict(d)
+
+
+# --- silent hops and a path that reached the site ------------------------------------------------------
+
+@pytest.mark.parametrize("kw", [{"asn": 64500}, {"avg_ms": 3.0}, {"jitter_ms": 0.2}, {"loss_pct": 50.0}])
+def test_a_silent_hop_has_no_figures(kw):
+    fields = {"n": 2, "host": "*", "asn": None, "avg_ms": None, "loss_pct": 100.0, "jitter_ms": None, **kw}
+    with pytest.raises(ValueError):
+        PathHop(**fields)
+    assert PathHop(2, "*", None, None, None, None).loss_pct is None  # loss not given is fine
+
+
+def test_a_path_that_reached_the_site_ends_on_an_answering_hop():
+    with pytest.raises(ValueError):
+        sr("mtr", 0, hops=[hop(1, 1.0), hop(2, None, host="*")], reached=True)
+    with pytest.raises(ValueError):
+        sr("mtr", 0, hops=[], reached=True)
+    assert sr("mtr", 0, hops=[hop(1, 1.0), hop(2, None, host="*")], reached=False).reached is False
+
+
+@pytest.mark.parametrize("change", [
+    lambda d: d["speed"][-1]["hops"][-1].update(host="*"),  # reached, but ends silent
+    lambda d: d["speed"][-1]["hops"][0].update(host="*"),  # silent with a time and an ASN
+])
+def test_tampered_paths_are_refused(change):
+    d = json.loads(json.dumps(full().to_dict()))
+    change(d)
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)

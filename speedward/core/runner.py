@@ -769,7 +769,7 @@ def _mtr_fields(res: dict) -> dict:
         asn = asns[0] if isinstance(asns, list) and asns and isinstance(asns[0], int) \
             and not isinstance(asns[0], bool) else None
         if address is None:  # observed: a silent hop has no address, 100% loss and no times
-            hops.append(PathHop(n, "*", None, None, _pct(stats.get("loss")), None))
+            hops.append(PathHop(n, "*", None, None, 100 if _pct(stats.get("loss")) == 100 else None, None))
             continue
         hops.append(PathHop(n, _str(hop.get("resolvedHostname")) or address, asn, _ms_or_none(stats.get("avg")),
                             _pct(stats.get("loss")), _jitter(hop.get("timings"))))

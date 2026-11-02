@@ -241,3 +241,11 @@ def test_not_judged_places_never_make_the_finding_or_the_download_note():
     assert s.overall[0].verdict == "too_few"
     assert "download" not in diagram_notes(s)["overall"]
     assert all("download" not in diagram_notes(s)["places"][i] for i in range(3))
+
+
+def test_an_odd_silent_hop_never_breaks_the_scan(fake):
+    res = speed_recorded("mtr_icmp_far")
+    res["hops"][3]["stats"]["loss"] = 40  # no address but partial loss: not observed, kept as unknown
+    fake.by_type["mtr"] = on_probes(res, type="mtr")
+    hop = by(scan(fake, checks=("mtr",)), "mtr")[0].hops[3]
+    assert (hop.host, hop.loss_pct) == ("*", None)

@@ -324,6 +324,9 @@ class PathHop:
         if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
             raise ValueError("hop number must be a whole number, 1 or more")
         self.host = clean(self.host)
+        if self.host == "*" and (self.asn is not None or self.avg_ms is not None or self.jitter_ms is not None
+                                 or self.loss_pct not in (None, 100)):
+            raise ValueError("a silent hop has no network, no times and no partial loss")
 
 
 @dataclass
@@ -378,6 +381,8 @@ class SpeedResult:
             raise ValueError("trace steps go with the dnstrace check only")
         if (self.hops or self.reached is not None) and self.check != MTR:
             raise ValueError("path hops go with the mtr check only")
+        if self.reached and (not self.hops or self.hops[-1].host == "*"):
+            raise ValueError("a path that reached the site ends on a hop that answered")
         if len(self.trace) > MAX_TRACE_STEPS or len(self.hops) > MAX_PATH_HOPS:
             raise ValueError("too many steps or hops")
         if self.status == "measured":
