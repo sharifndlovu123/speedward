@@ -184,3 +184,33 @@ def test_round_trip_of_a_scan_with_checks(fake):
     from speedward.core.models import ScanReport
     report = scan(fake)
     assert ScanReport.from_dict(report.to_dict()).to_dict() == report.to_dict()
+
+
+# --- review fixes -----------------------------------------------------------------------------------
+
+def test_dns_check_failure_is_never_blocked_even_if_source_says_target(fake):
+    fake.by_kind["dns_1.1.1.1"] = on_probes({"status": "failed", "failureSource": "target",
+                                             "rawOutput": "connection timed out; no servers could be reached"},
+                                            type="dns")
+    got = by(scan(fake), "dns", "1.1.1.1")[0]
+    assert got.status == "test_failed" and got.reason.startswith("the resolver lookup failed")
+
+
+@pytest.mark.parametrize("stats", [None, {}, {"rcv": "x", "loss": None}, {"total": 3}, {"rcv": 2, "avg": None}])
+def test_port_with_missing_or_malformed_stats_is_test_failed(fake, stats):
+    res = recorded("ping_tcp_ok")
+    if stats is None:
+        res.pop("stats")
+    else:
+        res["stats"] = stats
+    fake.by_kind["port"] = on_probes(res, type="ping")
+    got = by(scan(fake), "port")[0]
+    assert (got.status, got.reason) == ("test_failed", "the reply counts were not available")
+
+
+@pytest.mark.parametrize("stats", [{"rcv": 0, "loss": None, "avg": None}, {"loss": 100, "avg": None}])
+def test_port_closed_only_on_explicit_zero_replies_or_full_loss(fake, stats):
+    res = recorded("ping_tcp_ok")
+    res["stats"] = stats
+    fake.by_kind["port"] = on_probes(res, type="ping")
+    assert by(scan(fake), "port")[0].status == "blocked"

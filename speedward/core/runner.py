@@ -466,6 +466,10 @@ def _check_results(cold, doc, why: str, reused: bool, build, **fixed) -> list[Re
             continue
         status, reason = classify(item)
         res = _result(item)
+        if fixed.get("check") == RESOLVERS_CHECK and status != "measured":
+            # The test's "target" is the public resolver here: a lookup that did not finish is never the
+            # site's doing. Only a finished answer (no address, NXDOMAIN) can be blocked (_dns_fields).
+            status, reason = "test_failed", f"the resolver lookup failed: {reason}"
         if status != "measured":
             code = res.get("statusCode") if status == "blocked" and isinstance(res.get("statusCode"), int) else None
             extra = {"http_status": code} if code is not None and fixed.get("check") in (IPV6, PLAIN_HTTP) else {}
@@ -518,8 +522,10 @@ def _port_fields(port: int):
     def build(res: dict) -> dict:
         stats = res.get("stats") if isinstance(res.get("stats"), dict) else {}
         rcv, avg, loss = _num(stats.get("rcv")), _num(stats.get("avg")), _num(stats.get("loss"))
-        if not rcv or avg is None:  # observed: a closed port still "finishes", with no reply at all
+        if rcv == 0 or loss == 100:  # observed: a closed port still "finishes", with no reply at all
             return {"status": "blocked", "reason": f"no answer on port {port} (closed or filtered)"}
+        if rcv is None or rcv < 0 or avg is None or avg < 0:
+            return {"status": "test_failed", "reason": "the reply counts were not available"}
         return {"ms": avg, "loss_pct": loss if loss is not None and 0 <= loss <= 100 else None}
     return build
 
