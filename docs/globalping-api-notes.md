@@ -228,3 +228,24 @@ So fewer probes than `limit` can be returned when fewer match, and the cost is t
 ### Other
 
 - The OpenAPI spec (`https://api.globalping.io/v1/spec.yaml`) lists a top-level `timeout` (integer, 5 to 30, probe-side wall-clock timeout). Not tried here.
+
+## Extra options for speed tests (observed 2026-11-02)
+
+Source: the published OpenAPI spec (`/v1/spec.yaml`) plus one authenticated single-probe test per option (10 tests, target `example.com`, one Frankfurt probe). A single run per option is not a benchmark: it shows the option is accepted and what the result carries, nothing about speed.
+
+| Option | Observed result |
+| --- | --- |
+| http `measurementOptions.protocol: "HTTP2"` | Accepted. `rawOutput` starts `HTTP/2.0 200`, so HTTP/1.1 vs HTTP/2 can be compared. HTTP/3 is not offered (`alt-svc: h3` on the response only says the server supports it). |
+| http `request.headers` (e.g. `Accept-Encoding`) | Accepted. `identity` returned no `content-encoding`; `br` returned `content-encoding: br`. |
+| http `resolver` (IPv4 address) | Accepted (`8.8.8.8` worked). Compare `timings.dns` per resolver. |
+| http `ipVersion: 6` | Accepted; result finished over IPv6 (`timings.dns` 37 ms on that cold run). |
+| ping `protocol: "TCP"`, `port`, `packets` (max 16) | Accepted (`TCP`, port 443, 8 packets): `timings[].rtt` and `stats` (min/avg/max/loss); no `ttl` for TCP. This is a clean TCP round trip to the real service port. |
+| dns `trace: true` | Accepted. `result.hops[]` each with `resolver`, `answers`, `timings.total`: local resolver 0 ms, root 0 ms, TLD (`gtld-servers`) 16 ms, authoritative (`ns.cloudflare.com`) 5 ms. Shows where a slow lookup spends its time. No `statusCode` or top-level `timings` on a trace result. |
+| dns `query.type: "HTTPS"` | Accepted (returns `statusCode` 0 and `timings.total`); record contents not inspected. |
+| mtr `packets` up to 16, `protocol` ICMP/TCP/UDP | Per spec; hop `stats` carries `stDev`, `jMin/jAvg/jMax`, `loss`. Not run here. |
+
+Limits found:
+
+- **Page size is not available.** The response had `transfer-encoding: chunked` and no `content-length`; `rawBody` is capped at the first 10 KB (`truncated`). Compression is knowable (`content-encoding`), size on the wire is not.
+- `timings.download` is noisy for a tiny page (0 to 67 ms across runs), so one run proves nothing about it.
+- Each test is one probe per place, so every comparison below costs one extra test per place per variant.
