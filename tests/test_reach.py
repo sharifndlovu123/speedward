@@ -269,3 +269,9 @@ def test_a_full_size_grid_is_built_quickly():
     again = ScanReport.from_dict(json.loads(json.dumps(report.to_dict())))
     assert len(again.reach) == 5 * MAX_LOCATIONS
     assert time.perf_counter() - began < 5  # linear: well under a second here; quadratic took far longer
+
+
+def test_a_name_that_resolves_does_not_count_as_reaching_the_site():
+    report = rep([ok("A"), ok("B"), blocked("C")],
+                 [rr("dns", 2), rr("port", 0), rr("port", 1), rr("port", 2, "blocked", "x")])
+    assert reach_grid(report).nowhere == ["C, XX"]

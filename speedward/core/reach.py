@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from urllib.parse import urlsplit
 
-from speedward.core.checks import PORT, REACH_CHECKS
+from speedward.core.checks import PORT, REACH_CHECKS, RESOLVERS_CHECK
 from speedward.core.models import LocationResult, ReachResult, ScanReport
 
 MAIN = "main"  # the main scan's own first request (cold http over IPv4)
@@ -21,6 +21,7 @@ MIN_PLACES = 3
 STATES = ("reached", "blocked", "no_data")
 VERDICTS = ("too_few", "all_reached", "some_blocked")
 NO_RESULT = "this check did not run for this place"
+SITE_FREE = (RESOLVERS_CHECK,)  # checks that never contact the site itself
 
 
 @dataclass
@@ -129,7 +130,12 @@ def reach_grid(report: ScanReport) -> Grid:
         blocked = [g.place for g in with_data if g.cells[k].state == "blocked"]
         if blocked:
             grid.findings.append(ColumnFinding(c, len(with_data), len(blocked), blocked))
-    grid.nowhere = [g.place for g in rows if g.worst == "blocked" and all(c.state != "reached" for c in g.cells)]
+    # "Cannot reach it at all": blocked in a check that contacts the site and reached in none of them. A
+    # name that resolves (the dns check) does not mean the site can be reached.
+    site = [k for k, c in enumerate(columns) if c not in SITE_FREE]
+    grid.nowhere = [g.place for g in rows
+                    if any(g.cells[k].state == "blocked" for k in site)
+                    and all(g.cells[k].state != "reached" for k in site)]
     grid.verdict = "some_blocked" if grid.findings else "all_reached"
     return grid
 

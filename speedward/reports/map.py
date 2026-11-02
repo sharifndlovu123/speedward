@@ -14,6 +14,7 @@ from pathlib import Path
 from speedward.core.config import DEFAULT_FAST_MS, DEFAULT_SLOW_MS
 from speedward.core.locations import CATALOG
 from speedward.core.models import UNCERTAIN, LocationResult, ScanReport
+from speedward.core.reach import reach_grid
 
 from ._view import CDN_EDGE_NOTE, NA, SOURCE_TEXT, _from_header, answered_by, position_source
 
@@ -41,6 +42,9 @@ _STYLE = (
     ".sw-dot{stroke:var(--bg);stroke-width:1.5}"
     # No data: a hollow ring, so the state is not told by colour alone (the label says why).
     ".sw-dot.sw-none{fill:var(--bg);stroke:var(--off);stroke-width:2}"
+    # Worst result of the "More checks": measured, but blocked in a check. An open ink ring (shape, not
+    # colour); the label names the checks.
+    ".sw-dot.sw-part{fill:var(--bg);stroke:var(--ink);stroke-width:2.5}"
     # Keyboard focus ring: a stroke, because SVG outlines do not draw in Firefox. Ink on the map
     # background is well above 3:1 in light and dark. The selected dot keeps an ink stroke.
     ".sw-dot:focus,.sw-pick:focus,.sw-sq:focus{outline:none}"
@@ -106,6 +110,13 @@ def _anchor_text(report: ScanReport, measured: list[LocationResult],
     return None
 
 
+def worst_blocked(grid, row: int) -> str:
+    """The checks a place was blocked in, other than the main test ("" when none)."""
+    from .reach import header
+    g = grid.rows[row]
+    return ", ".join(header(grid, c) for c in g.blocked_in if c != "main")
+
+
 def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
                slow_ms: float = SLOW_MS, pin_hint: bool = False) -> str:
     """pin_hint: the map is shown in the web UI, where a pin can be dropped (not in CLI reports or files)."""
@@ -161,6 +172,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             p = r.server_position
             spots.setdefault((r.server_ip, p.lat, p.lon, p.source, r.edge_code), []).append(r)
 
+    grid = reach_grid(report) if report.reach is not None else None
     arcs, squares, dots, labels = [], [], [], []
     for row, r in enumerate(report.locations):
         if r.location.lat is None or r.location.lon is None:
@@ -184,6 +196,11 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             line = dashed
             dot = 'fill="var(--off)"'
             none = " sw-none"
+        blocked_in = worst_blocked(grid, row) if grid is not None else ""
+        if blocked_in:  # the dot shows the place's worst result
+            if r.status == "measured":
+                none = " sw-part"
+            text += f", blocked: {blocked_in}" if r.status == "measured" else f"; also blocked: {blocked_in}"
         title = text
         if r.status == "measured" and r.edge_note and not manual:
             title += f"; {r.edge_note} ({r.edge_reason}), no square drawn"
