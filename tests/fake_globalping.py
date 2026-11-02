@@ -47,12 +47,16 @@ def on_probes(results, base: str = "http_ok", type: str = "http") -> dict:
 
 
 def check_kind(body: dict) -> str:
-    """Which measurement a POST is: "cold"/"repeat" http, "ipv6", "plain_http", "dns_<resolver>",
-    "port", or the plain type (ping, mtr, dns) for the main scan's own measurements."""
+    """Which measurement a POST is: "cold"/"repeat" http, "ipv6", "plain_http", "http2", "compression",
+    "dns_<resolver>", "port", or the plain type (ping, mtr, dns) for the main scan's own measurements."""
     t, opts = body.get("type"), body.get("measurementOptions") or {}
     if t == "http":
         if opts.get("ipVersion") == 6:
             return "ipv6"
+        if opts.get("protocol") == "HTTP2":
+            return "http2"
+        if (opts.get("request") or {}).get("headers"):
+            return "compression"
         if opts.get("protocol") == "HTTP":  # also the main scan of an http:// address
             return "plain_http"
         return "http"

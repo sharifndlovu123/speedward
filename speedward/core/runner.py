@@ -8,6 +8,7 @@ docs/globalping-api-notes.md.
 from __future__ import annotations
 
 import re
+import statistics
 from collections.abc import Callable
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
@@ -16,7 +17,23 @@ from speedward import __version__
 from speedward.core.analysis import cdn_status
 from speedward.core.bottleneck import diagnose
 from speedward.core.budget import Plan
-from speedward.core.checks import IPV6, PLAIN_HTTP, PORT, PORT_PACKETS, RESOLVER_IPS, RESOLVERS_CHECK
+from speedward.core.checks import (
+    COMPRESSION,
+    CONSISTENCY,
+    CONSISTENCY_EXTRA,
+    DNS_TRACE,
+    HTTP2,
+    IPV6,
+    MTR,
+    MTR_PACKETS,
+    PLAIN_HTTP,
+    PORT,
+    PORT_PACKETS,
+    REACH_CHECKS,
+    RESOLVER_IPS,
+    RESOLVERS_CHECK,
+    SPEED_CHECKS,
+)
 from speedward.core.edge import Answer, cf_ray_code, place
 from speedward.core.geo import Geolocator
 from speedward.core.globalping import (
@@ -37,11 +54,14 @@ from speedward.core.models import (
     Hop,
     Location,
     LocationResult,
+    PathHop,
     PathResult,
     ReachResult,
     ScanReport,
     ServerPosition,
+    SpeedResult,
     Stages,
+    TraceStep,
 )
 from speedward.core.target import normalise_target
 
@@ -290,7 +310,8 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         reason = "the test results could not be fetched from Globalping"
         results = [LocationResult(Location("", _magic_label(s), None, None, None, None, None),
                                   "test_failed", reason) for s in plan.locations]
-        return _report(target, started, plan, scan, None, results, [], [], [] if plan.checks else None)
+        return _report(target, started, plan, scan, None, results, [], [], [] if _reach_on(plan) else None,
+                       [] if _speed_on(plan) else None)
 
     cold = _items(cold_doc)
     fields = [_cold_fields(p, item) for p, item in cold]
@@ -339,7 +360,9 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         dns = _dns(cold, doc, why, reused)
 
     # 6. The ticked "More checks", on the same probes.
-    reach = _reach(scan, cold, cold_id, parts, http_opts, plan) if plan.checks else None
+    reach = _reach(scan, cold, cold_id, parts, http_opts, plan) if _reach_on(plan) else None
+    # 6b. The ticked "Is it fast?" checks, on the same probes.
+    speed = _speed(scan, cold, cold_id, parts, http_opts, plan) if _speed_on(plan) else None
 
     # 7. Where the server that answered each measured result is (offline: airport table, geo-IP).
     _place_servers(cold, fields, geo)
@@ -357,7 +380,15 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
 
     server = _server(geo, results)
     progress("Finished")
-    return _report(target, started, plan, scan, server, results, paths, dns, reach)
+    return _report(target, started, plan, scan, server, results, paths, dns, reach, speed)
+
+
+def _reach_on(plan: Plan) -> bool:
+    return any(c in REACH_CHECKS for c in plan.checks)
+
+
+def _speed_on(plan: Plan) -> bool:
+    return any(c in SPEED_CHECKS for c in plan.checks)
 
 
 def _place_servers(cold, fields: list[dict], geo: Geolocator | None) -> None:
@@ -565,7 +596,199 @@ def _reach(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) 
     return out
 
 
-def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dns, reach=None) -> ScanReport:
+# --- "Is it fast?" (speedward/core/checks.py SPEED_CHECKS; summed up in speedward/core/speed.py) ------
+
+PLAIN_ADDRESS = "the address is plain HTTP; HTTP/2 is tried over HTTPS only"
+_ALPN = re.compile(r"alpn", re.IGNORECASE)  # observed inside "tls_parse_stoc_alpn"
+_TOKEN = re.compile(r"[a-z0-9][a-z0-9 ,.-]{0,39}")
+
+
+def _speed_results(cold, doc, why: str, reused: bool, build, failed=None, **fixed) -> list[SpeedResult]:
+    """One SpeedResult per cold probe. `build(result_dict) -> dict` gives the check's own fields for a
+    result `classify` called measured. `failed(item, status, reason) -> (status, reason) or dict` can
+    re-read one it did not (a dict means measured, with those fields)."""
+    out = []
+    matcher = _Matcher(_items(doc))
+    for row, (probe, _) in enumerate(cold):
+        loc = _location(probe)
+        if doc is None:
+            out.append(SpeedResult(row=row, location=loc, status="not_run" if why == LIMIT_REACHED else "test_failed",
+                                   reason=why, **fixed))
+            continue
+        item, same = matcher.take(probe)
+        if item is None:
+            out.append(SpeedResult(row=row, location=loc, status="not_run", reason=NO_CHECK_RESULT, **fixed))
+            continue
+        status, reason = classify(item)
+        fields = None
+        if status == "measured":
+            fields = build(_result(item))
+        elif failed is not None:
+            again = failed(_result(item), status, reason)
+            if isinstance(again, dict):
+                fields = again
+            else:
+                status, reason = again
+        if fields is None:
+            out.append(SpeedResult(row=row, location=loc, status=status, reason=reason, **fixed))
+        elif fields.get("status", "measured") != "measured":
+            out.append(SpeedResult(row=row, location=loc, **fields, **fixed))
+        else:
+            out.append(SpeedResult(row=row, location=loc, status="measured", reason="", **fields,
+                                   probe=_probe_match(reused, same), **fixed))
+    return out
+
+
+def _not_run(cold, reason: str, **fixed) -> list[SpeedResult]:
+    return [SpeedResult(row=row, location=_location(p), status="not_run", reason=reason, **fixed)
+            for row, (p, _) in enumerate(cold)]
+
+
+def _timed(res: dict) -> dict:
+    return {"stages": _stages(res)}
+
+
+def _http2_fields(res: dict) -> dict:
+    version = _http_version(res)
+    if version is None:
+        return {"status": "test_failed", "reason": "the HTTP version of the answer could not be read"}
+    if not version.startswith("HTTP/2"):  # not observed (no fallback was seen), kept as an answer
+        return {"http_version": version, "h2_offered": False}
+    return {"stages": _stages(res), "http_version": version, "h2_offered": True}
+
+
+def _http2_failed(res: dict, status: str, reason: str):
+    """Observed: a server without HTTP/2 makes the probe fail the TLS handshake on ALPN (no fallback to
+    HTTP/1.1). That is the answer to the question, not the site refusing: never "blocked"."""
+    raw = res.get("rawOutput") if isinstance(res.get("rawOutput"), str) else ""
+    if res.get("status") == "failed" and res.get("failureSource") == "target" and _ALPN.search(raw):
+        return {"h2_offered": False}
+    return status, reason
+
+
+def _compression_fields(res: dict) -> dict:
+    value = None
+    for key, v in _headers(res).items():
+        if isinstance(key, str) and key.lower() == "content-encoding":
+            value = v[0] if isinstance(v, list) and v else v
+    if not isinstance(value, str) or not value.strip():
+        encoding = "none"
+    else:
+        encoding = value.strip().lower()
+        encoding = encoding if _TOKEN.fullmatch(encoding) else "unrecognised"
+    return {"stages": _stages(res), "encoding": encoding}
+
+
+def _trace_kind(i: int, last: int, server: str, seen_root: bool, seen_tld: bool) -> str:
+    if i == 0:
+        return "local"
+    if server.lower().rstrip(".").endswith("root-servers.net"):
+        return "root"
+    if i == last:
+        return "authoritative"
+    return "delegation" if seen_tld or not seen_root else "tld"
+
+
+def _trace_fields(res: dict) -> dict:
+    hops = [h for h in res.get("hops") or [] if isinstance(h, dict)][:16]
+    steps, seen_root, seen_tld = [], False, False
+    for i, h in enumerate(hops):
+        server = _str(h.get("resolver")) or "unknown server"
+        kind = _trace_kind(i, len(hops) - 1, server, seen_root, seen_tld)
+        seen_root = seen_root or kind == "root"
+        seen_tld = seen_tld or kind == "tld"
+        timings = h.get("timings") if isinstance(h.get("timings"), dict) else {}
+        ms = _num(timings.get("total"))
+        steps.append(TraceStep(kind, server, ms if ms is not None and 0 <= ms <= 1e9 else None))
+    if not steps:
+        return {"status": "test_failed", "reason": "the trace returned no steps"}
+    return {"trace": steps}
+
+
+def _trace_failed(res: dict, status: str, reason: str):
+    # The trace asks DNS servers, not the site: a trace that did not finish is never the site's doing.
+    return "test_failed", f"the DNS trace failed: {reason}"
+
+
+def _jitter(timings) -> float | None:
+    rtts = [t.get("rtt") for t in timings or [] if isinstance(t, dict)]
+    rtts = [v for v in rtts if _num(v) is not None and 0 <= v <= 1e9]
+    if len(rtts) < 2:
+        return None
+    return round(statistics.fmean(abs(b - a) for a, b in zip(rtts, rtts[1:])), 1)
+
+
+def _pct(value) -> float | None:
+    v = _num(value)
+    return v if v is not None and 0 <= v <= 100 else None
+
+
+def _ms_or_none(value) -> float | None:
+    v = _num(value)
+    return v if v is not None and 0 <= v <= 1e9 else None
+
+
+def _mtr_fields(res: dict) -> dict:
+    hops = []
+    for n, hop in enumerate([h for h in res.get("hops") or [] if isinstance(h, dict)][:64], start=1):
+        stats = hop.get("stats") if isinstance(hop.get("stats"), dict) else {}
+        address = _str(hop.get("resolvedAddress"))
+        asns = hop.get("asn")
+        asn = asns[0] if isinstance(asns, list) and asns and isinstance(asns[0], int) \
+            and not isinstance(asns[0], bool) else None
+        if address is None:  # observed: a silent hop has no address, 100% loss and no times
+            hops.append(PathHop(n, "*", None, None, _pct(stats.get("loss")), None))
+            continue
+        hops.append(PathHop(n, _str(hop.get("resolvedHostname")) or address, asn, _ms_or_none(stats.get("avg")),
+                            _pct(stats.get("loss")), _jitter(hop.get("timings"))))
+    if not hops:
+        return {"status": "test_failed", "reason": "the path test returned no hops"}
+    last = [h for h in res.get("hops") or [] if isinstance(h, dict)][:64][-1]
+    site = _str(res.get("resolvedAddress"))
+    return {"hops": hops, "reached": site is not None and _str(last.get("resolvedAddress")) == site}
+
+
+def _mtr_failed(res: dict, status: str, reason: str):
+    # A path test that did not finish says nothing about the site refusing visitors.
+    return "test_failed", f"the path test failed: {reason}"
+
+
+def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) -> list[SpeedResult]:
+    is_ip = bool(_IP_ADDRESS.search(scan.host))
+    out: list[SpeedResult] = []
+
+    def run(what: str, type: str, options: dict, build, failed=None, **fixed):
+        doc, reused, why = scan.measure(what, type, cold_id, options, fallback_locations=plan.locations)
+        out.extend(_speed_results(cold, doc, why, reused, build, failed, **fixed))
+
+    if CONSISTENCY in plan.checks:
+        scan.progress("Repeating the test for consistency")
+        for k in range(1, CONSISTENCY_EXTRA + 1):
+            run("consistency check", "http", http_opts, _timed, check=CONSISTENCY, run=k)
+    if HTTP2 in plan.checks:
+        if parts.scheme != "https":
+            out.extend(_not_run(cold, PLAIN_ADDRESS, check=HTTP2))
+        else:
+            scan.progress("Trying HTTP/2")
+            run("HTTP/2 check", "http", {**http_opts, "protocol": "HTTP2"}, _http2_fields, _http2_failed, check=HTTP2)
+    if COMPRESSION in plan.checks:
+        scan.progress("Checking compression")
+        request = {**http_opts["request"], "headers": {"Accept-Encoding": "br, gzip"}}
+        run("compression check", "http", {**http_opts, "request": request}, _compression_fields, check=COMPRESSION)
+    if DNS_TRACE in plan.checks:
+        if is_ip:
+            out.extend(_not_run(cold, NOT_A_NAME, check=DNS_TRACE))
+        else:
+            scan.progress("Tracing the DNS lookup")
+            run("DNS trace check", "dns", {"trace": True}, _trace_fields, _trace_failed, check=DNS_TRACE)
+    if MTR in plan.checks:
+        scan.progress("Measuring loss along the path")
+        run("path loss check", "mtr", {"packets": MTR_PACKETS}, _mtr_fields, _mtr_failed, check=MTR)
+    return out
+
+
+def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dns, reach=None,
+            speed=None) -> ScanReport:
     options = {"locations": [dict(s) for s in plan.locations], "traceroute": plan.traceroute,
                "dns": plan.dns, "browser": plan.browser}
     if plan.checks:
@@ -574,6 +797,6 @@ def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dn
         options["not_run"] = list(scan.skipped)
     report = ScanReport(target=target, started=started, finished=datetime.now(UTC),
                         version=__version__, options=options, server=server, locations=results,
-                        paths=paths, dns=dns, browser=None, reach=reach)
+                        paths=paths, dns=dns, browser=None, reach=reach, speed=speed)
     report.diagnosis = diagnose(report)
     return report
