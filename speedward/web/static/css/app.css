@@ -203,11 +203,11 @@ tr.hl{background:var(--hl)}
 @keyframes sw-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes sw-rise{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes sw-fade{from{opacity:0}to{opacity:1}}
-.map-stage{animation:sw-fade .9s var(--ease) both}
-#topbar,.left-col{animation:sw-wipe .8s var(--ease) both}
-.strip{animation:sw-rise .8s var(--ease) .1s both}
-#results-panel,#progress,#saved-banner,#notice{animation:sw-wipe .6s var(--ease) both}
-.drawer{animation:sw-rise .55s var(--ease) both}
+.map-stage{animation:sw-fade .9s var(--ease) backwards}
+#topbar,.left-col{animation:sw-wipe .8s var(--ease) backwards}
+.strip{animation:sw-rise .8s var(--ease) .1s backwards}
+#results-panel,#progress,#saved-banner,#notice{animation:sw-wipe .6s var(--ease) backwards}
+.drawer{animation:sw-rise .55s var(--ease) backwards}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none !important;transition:none !important}
 }
