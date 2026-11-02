@@ -19,8 +19,8 @@ STATUS_TEXT = {"test_failed": "test failed", "not_run": "did not run"}
 KEY = ("● reached (time) · ○ blocked / closed (the site side refused, timed out or has no address) · "
        "◌ no data (the Globalping side failed or the check did not run; left out of every figure). "
        "Marked by symbol and word, never colour alone.")
-MAP_LEGEND = ("With more checks, each dot shows the worst result for its place: an open ink ring means at "
-              "least one check was blocked there (its label says which).")
+MAP_LEGEND = ("With more checks, each dot shows the worst result for its place: a double ink ring means at "
+              "least one check was blocked there (its label says which); a dashed ring is no data.")
 MAX_NAMES = 5
 
 _env = Environment(loader=FileSystemLoader(str(Path(__file__).parent)), autoescape=True)
@@ -71,14 +71,17 @@ def finding(grid: Grid) -> tuple[str, str]:
     if grid.verdict == "too_few":
         return (f"Not enough places for a conclusion: {_plural(grid.judged, 'place')} with a result, at least "
                 f"{grid.min_places} needed. The grid shows each result as it came.", "")
+    if grid.verdict == "unjudged":
+        return ("No conclusion: some places were blocked, but each check with a block has results from fewer "
+                f"than {grid.min_places} places. The grid shows each result as it came.", "")
     if grid.verdict == "all_reached":
         return (f"The timings indicate: every place with a result reached the site in every check that ran "
                 f"({_plural(grid.judged, 'place')}).", "")
     parts = [f"{f.blocked} of {_plural(f.judged, 'place')} {_what(grid, f.column)} ({_names(f.places)})"
              for f in grid.findings]
-    text = "The timings indicate: " + "; ".join(parts)
     if grid.nowhere:
-        text += f"; and {_names(grid.nowhere)} cannot reach it at all"
+        parts.append(("and " if parts else "") + f"{_names(grid.nowhere)} cannot reach it at all")
+    text = "The timings indicate: " + "; ".join(parts)
     checks = [_check(grid, f.column) for f in grid.findings]
     if grid.nowhere:
         checks.append("whether a regional block applies")

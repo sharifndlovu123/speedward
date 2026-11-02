@@ -275,3 +275,55 @@ def test_a_name_that_resolves_does_not_count_as_reaching_the_site():
     report = rep([ok("A"), ok("B"), blocked("C")],
                  [rr("dns", 2), rr("port", 0), rr("port", 1), rr("port", 2, "blocked", "x")])
     assert reach_grid(report).nowhere == ["C, XX"]
+
+
+# --- review fixes -----------------------------------------------------------------------------------
+
+def test_nowhere_never_rests_on_a_failed_main_test():
+    # main no data (Globalping side), one blocked check: not "cannot reach it at all"
+    for check, extra in (("ipv6", {}), ("http", {}), ("port", {})):
+        report = rep([ok("A"), ok("B"), ok("C"), failed("D")],
+                     [rr(check, 0), rr(check, 1), rr(check, 2), rr(check, 3, "blocked", "x", **extra)])
+        assert reach_grid(report).nowhere == [], check
+
+
+def test_nowhere_with_failed_main_needs_two_blocked_site_checks():
+    report = rep([ok("A"), ok("B"), ok("C"), failed("D")],
+                 [rr("ipv6", i) for i in range(3)] + [rr("ipv6", 3, "blocked", "x"),
+                                                     rr("port", 0), rr("port", 1), rr("port", 2),
+                                                     rr("port", 3, "blocked", "y")])
+    assert reach_grid(report).nowhere == ["D, XX"]
+
+
+def test_nowhere_with_blocked_main_and_nothing_reached():
+    report = rep([ok("A"), ok("B"), blocked("C")], [rr("ipv6", 0), rr("ipv6", 1), rr("ipv6", 2, "test_failed", "x")])
+    assert reach_grid(report).nowhere == ["C, XX"]
+
+
+def test_a_column_needs_three_judged_places_for_a_finding():
+    # ipv6 has data in only 2 places (one blocked): no ipv6 finding, though 3 places have data overall
+    report = rep([ok("A"), ok("B"), ok("C")],
+                 [rr("ipv6", 0), rr("ipv6", 1, "blocked", "x"), rr("ipv6", 2, "test_failed", "y")])
+    g = reach_grid(report)
+    assert [f.column for f in g.findings] == []
+    assert g.verdict == "unjudged"  # a blocked cell exists, so it never says "all reached"
+
+
+def test_a_column_with_exactly_three_judged_places_has_a_finding():
+    report = rep([ok("A"), ok("B"), ok("C")], [rr("ipv6", 0), rr("ipv6", 1, "blocked", "x"), rr("ipv6", 2)])
+    g = reach_grid(report)
+    assert [(f.column, f.judged, f.blocked) for f in g.findings] == [("ipv6", 3, 1)]
+    assert g.verdict == "some_blocked"
+
+
+@pytest.mark.parametrize("code", [99, 600, -1])
+def test_http_status_must_be_a_real_status_code(code):
+    with pytest.raises(ValueError):
+        ReachResult("http", 0, loc("A"), "measured", "", ms=1.0, http_status=code)
+
+
+@pytest.mark.parametrize("status", ["test_failed", "not_run"])
+def test_http_status_only_on_measured_or_blocked(status):
+    with pytest.raises(ValueError):
+        ReachResult("ipv6", 0, loc("A"), status, "x", http_status=500)
+    assert ReachResult("ipv6", 0, loc("A"), "blocked", "x", http_status=403).http_status == 403

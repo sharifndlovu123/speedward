@@ -258,6 +258,10 @@ class ReachResult:
             raise ValueError("loss is only for the port check")
         if self.http_status is not None and self.check not in (PLAIN_HTTP, IPV6):
             raise ValueError("an HTTP status goes with an http check only")
+        if self.http_status is not None and (isinstance(self.http_status, bool) or not 100 <= self.http_status <= 599):
+            raise ValueError("HTTP status is out of range")
+        if self.http_status is not None and self.status not in ("measured", "blocked"):
+            raise ValueError("only a measured or blocked result carries an HTTP status")
         _check_probe(self.probe, "probe")
         if self.status != "measured" and (self.ms is not None or self.loss_pct is not None
                                           or self.redirect is not None or self.probe is not None):

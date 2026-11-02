@@ -19,7 +19,7 @@ from speedward.core.models import LocationResult, ReachResult, ScanReport
 MAIN = "main"  # the main scan's own first request (cold http over IPv4)
 MIN_PLACES = 3
 STATES = ("reached", "blocked", "no_data")
-VERDICTS = ("too_few", "all_reached", "some_blocked")
+VERDICTS = ("too_few", "all_reached", "some_blocked", "unjudged")
 NO_RESULT = "this check did not run for this place"
 SITE_FREE = (RESOLVERS_CHECK,)  # checks that never contact the site itself
 
@@ -128,16 +128,29 @@ def reach_grid(report: ScanReport) -> Grid:
     for k, c in enumerate(columns):
         with_data = [g for g in rows if g.cells[k].state != "no_data"]
         blocked = [g.place for g in with_data if g.cells[k].state == "blocked"]
-        if blocked:
+        # Each column needs MIN_PLACES places with a result of its own before it says anything.
+        if blocked and len(with_data) >= MIN_PLACES:
             grid.findings.append(ColumnFinding(c, len(with_data), len(blocked), blocked))
-    # "Cannot reach it at all": blocked in a check that contacts the site and reached in none of them. A
-    # name that resolves (the dns check) does not mean the site can be reached.
-    site = [k for k, c in enumerate(columns) if c not in SITE_FREE]
-    grid.nowhere = [g.place for g in rows
-                    if any(g.cells[k].state == "blocked" for k in site)
-                    and all(g.cells[k].state != "reached" for k in site)]
-    grid.verdict = "some_blocked" if grid.findings else "all_reached"
+    grid.nowhere = [g.place for g in rows if _nowhere(g, columns)]
+    if grid.findings or grid.nowhere:
+        grid.verdict = "some_blocked"
+    elif any(g.worst == "blocked" for g in rows):
+        grid.verdict = "unjudged"  # blocked somewhere, but no column has enough places to say so
+    else:
+        grid.verdict = "all_reached"
     return grid
+
+
+def _nowhere(g: GridRow, columns: list[str]) -> bool:
+    """"Cannot reach it at all": no check that contacts the site reached it, and the blocks are solid:
+    the main test itself was blocked, or (the main test failed on Globalping's side) at least two such
+    checks have a result and every one is blocked. A name that resolves (dns) is not reaching the site,
+    and a Globalping-side failure is never evidence."""
+    site = [c for k, c in zip(range(len(columns)), g.cells) if columns[k] not in SITE_FREE]
+    with_data = [c for c in site if c.state != "no_data"]
+    if not with_data or any(c.state == "reached" for c in with_data):
+        return False
+    return site[0].state == "blocked" or len(with_data) >= 2
 
 
 def grid_from_dict(value, report: ScanReport) -> Grid:
