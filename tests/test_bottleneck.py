@@ -410,3 +410,9 @@ def test_readme_documents_every_rule_value():
     assert f"BIGGEST_SHARE = {b.BIGGEST_SHARE:.2f}" in readme and f"POSSIBLE_SHARE = {b.POSSIBLE_SHARE:.2f}" in readme
     assert f"MIN_PLACES = {b.MIN_PLACES}" in readme and f"NEAR_CONNECT_MS = {b.NEAR_CONNECT_MS:g}" in readme
     assert f"at least {b.DISTANCE_CORRELATION:g}" in readme and f"DISTANCE_SPREAD_MS = {b.DISTANCE_SPREAD_MS:g}" in readme
+
+
+def test_readme_says_first_byte_is_globalpings_post_handshake_wait():
+    from pathlib import Path
+    readme = (Path(__file__).parent.parent / "README.md").read_text()
+    assert "smaller than a conventional time to first byte" in readme and "`--max-ttfb`" in readme
