@@ -48,6 +48,7 @@ QUESTION = {
     # The approved mockup gives these two a note; the others show only their cost.
     COMPRESSION: "size on the wire is not available",
     DNS_TRACE: "where a slow lookup spends its time",
+    MTR: "a separate test from Network path below: ticking both runs two",
 }
 
 

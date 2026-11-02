@@ -313,6 +313,9 @@ measurement id), and nothing is ticked by default.
 
 The cost of each ticked check and the total are shown before every scan (for example
 `speedward scan URL --checks consistency,mtr --estimate`), and the over-allowance confirmation applies.
+A check the address cannot use (HTTP/2 on a plain `http://` address; IPv6, DNS resolvers and the DNS
+trace on an IP address) is skipped and counted as 0 in the estimate. Ticking both "Network path" (or
+`--traceroute`) and "Path loss and jitter" runs two separate mtr tests per place, and both are counted.
 TLS 1.2 seen in the main test adds "TLS 1.2 costs one more round trip" to the TLS block once any speed
 check ran. The notes sit under each block's own text and never change its mark (biggest / possible block).
 
@@ -332,6 +335,9 @@ The rules, with their named constants in `speedward/core/speed.py`:
   already asks for `gzip, deflate, br`, so the download difference is between two runs that could both be
   compressed: one run each, mostly noise.
 - DNS trace: the slowest step is the one that took the longest (1 ms or more); ties go to the earlier step.
+  The step labels are inferred, not reported: the first step is the probe's own resolver, a server named
+  `*.root-servers.net` is a root server, the last step is the name's own (authoritative) servers, the first
+  step after the root is the TLD and any further ones are "delegation".
 - Path: a **bad hop** is the first hop from which loss of at least `LOSS_PCT` (10%) carries through every
   later hop to the site. Loss that stops at a middle hop is a router limiting its own replies and is not
   flagged. A **long link** is the largest rise of at least `RISE_MS` (50 ms) at one hop that stays up to the
