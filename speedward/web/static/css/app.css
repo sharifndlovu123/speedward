@@ -251,3 +251,14 @@ tr.hl{background:var(--hl)}
 /* Short windows (200% zoom and up): the side column is too low for a sticky Start bar, so it scrolls
    with the form and nothing sits on top of the fields. */
 @media (max-height:520px){.form-foot{position:static}.left-col{scroll-padding-bottom:0}}
+
+/* More checks (approved mockup page-16): hairline rows, uppercase group labels, the total on an ink bar. */
+.more-checks .mc-row{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:4px 0;clear:both}
+.more-checks .mc-group{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);
+  border-top:1px solid var(--hair);padding-top:8px;margin:10px 0 0}
+.more-checks label.mc-check{align-items:flex-start;margin:6px 0}
+.more-checks label.mc-check input{margin-top:3px;flex:none}
+.more-checks label.mc-check>span{min-width:0;overflow-wrap:anywhere}
+.mc-total{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;background:var(--ink);color:var(--paper);
+  padding:8px 12px;margin:10px 0 4px;font-size:.9rem}
+.mc-total b{font-weight:600;overflow-wrap:anywhere;min-width:0}

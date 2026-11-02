@@ -114,7 +114,14 @@
     };
     if (form.elements.traceroute.checked) { v.traceroute = "on"; }
     if (form.elements.dns.checked) { v.dns = "on"; }
+    var checks = checkBoxes().filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+    if (checks.length) { v.checks = checks.join(","); }
     return v;
+  }
+
+  // The "More checks" boxes (name="check"); their cost comes from /estimate like everything else.
+  function checkBoxes() {
+    return Array.prototype.slice.call(form.querySelectorAll('input[name="check"]'));
   }
 
   function limitValues() {
@@ -134,6 +141,8 @@
              !f.locations);
     form.elements.traceroute.checked = !!f.traceroute;
     form.elements.dns.checked = !!f.dns;
+    var ticked = String(f.checks || "").split(",");
+    checkBoxes().forEach(function (b) { b.checked = ticked.indexOf(b.value) !== -1; });
     var l = saved.limits || {};
     ["max_ttfb", "max_load", "max_blocked"].forEach(function (name) {
       form.elements[name].value = (l[name] === null || l[name] === undefined) ? "" : String(l[name]);
@@ -254,6 +263,7 @@
   // Mirrored on the Start button (data-cost="ready" or "stale") so tests can wait for a fresh cost.
   function setStale(on) {
     costStale = on;
+    if (on) { show($("mc-total"), false); }
     $("start").setAttribute("data-cost", on ? "stale" : "ready");
   }
   setStale(true);
@@ -282,6 +292,9 @@
     renderSummary();
     runAgainLabels();
     setText($("estimate"), b.message || "");
+    setText($("mc-on"), b.checks_line || "");
+    setText($("mc-breakdown"), b.breakdown || "");
+    show($("mc-total"), !!b.breakdown);
     var over = $("over");
     if (b.refused) {
       setText(over, b.refused);
@@ -352,6 +365,14 @@
     }
     form.elements[name].addEventListener("input", changed);
     form.elements[name].addEventListener("change", changed);
+  });
+  checkBoxes().forEach(function (b) {
+    b.addEventListener("change", function () {
+      setStale(true);
+      estimateFailed = false;
+      renderSummary();
+      estimateSoon();
+    });
   });
 
   // --- location picker: map dots and chips share one selection ---------------------------------
@@ -849,6 +870,8 @@
       var panelNodes = take(".figures, .excluded-note, .verdict, .failed-list, #map-detail, .legend, .position-note");
       // "Where the time goes": the headline sits right under the figures; the diagram stays in the drawer.
       var head = take(".bn-head");
+      // "Who can reach it": its finding follows, the grid stays in the drawer above the diagram.
+      head = head.concat(take(".rc-head"));
       var at = panelNodes.findIndex(function (n) { return n.classList.contains("figures"); });
       Array.prototype.splice.apply(panelNodes, [at + 1, 0].concat(head));
       var rest = doc.querySelector(".fragment") || doc.body;
@@ -1135,6 +1158,14 @@
       row.classList.toggle("hl", row === tr);
     });
     showPlace(tr.getAttribute("data-row"));
+  });
+
+  $("results-summary").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-rc-open]") : null;
+    if (!b) { return; }
+    setDrawer(true, b);
+    var title = $("results-body").querySelector(".rc-title");
+    if (title) { title.scrollIntoView({ block: "start" }); title.focus(); }
   });
 
   $("results-summary").addEventListener("click", function (e) {
