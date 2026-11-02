@@ -6,6 +6,7 @@ checks (or from before they existed) renders nothing.
 """
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -13,6 +14,8 @@ from jinja2 import Environment, FileSystemLoader
 from speedward.core.checks import IPV6, PLAIN_HTTP, PORT, RESOLVER_IPS, RESOLVERS_CHECK
 from speedward.core.models import SAME_PROBE
 from speedward.core.reach import MAIN, Cell, Grid, reach_grid
+
+from ._md import md_fold, md_text
 
 SYMBOL = {"reached": "●", "blocked": "○", "no_data": "◌"}
 STATUS_TEXT = {"test_failed": "test failed", "not_run": "did not run"}
@@ -150,14 +153,27 @@ def render_reach(report, interactive: bool = False, heading: str = "h2") -> str:
                                                      h=heading, css=css)
 
 
-def _md(text: str) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+def _escaped(grid: Grid, esc) -> Grid:
+    """A copy with every untrusted name and reason passed through `esc` (the figures are untouched)."""
+    grid = copy.deepcopy(grid)
+    for g in grid.rows:
+        g.place = esc(g.place)
+        for c in g.cells:
+            for p in c.parts:
+                p.reason = esc(p.reason)
+    for f in grid.findings:
+        f.places = [esc(x) for x in f.places]
+    grid.nowhere = [esc(x) for x in grid.nowhere]
+    return grid
+
+
+_md = md_fold  # cells hold fixed words and names already escaped by md_text
 
 
 def markdown_lines(report) -> list[str]:
     if report.reach is None:
         return []
-    v = view(reach_grid(report))
+    v = view(_escaped(reach_grid(report), md_text))
     L = ["## Who can reach it", "", _md(v["finding"])]
     if v["check"]:
         L.append(_md(v["check"]))

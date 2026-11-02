@@ -182,7 +182,8 @@ def _run(st: state.ScanState, entry: state.Entry, url: str, plan: Plan, client: 
     Owns `client` and closes it before the outcome is recorded."""
     try:
         try:
-            report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo)
+            report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo,
+                              rules=settings.DIAGNOSIS_RULES, speed_rules=settings.SPEED_RULES)
         finally:
             client.close()
         st.finish(entry.id, report.to_dict())

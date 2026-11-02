@@ -34,7 +34,10 @@ def test_allowlist_covers_core_and_web_settings_only():
     assert set(DOTENV_ALLOWED) == {
         "GLOBALPING_TOKEN", "GEOIP_DB", "SERVER_LAT", "SERVER_LON", "FAST_MS", "SLOW_MS",
         "RESULT_TTL_SECONDS", "SECRET_KEY", "ALLOWED_HOSTS", "DEBUG", "CSRF_TRUSTED_ORIGINS",
-        "MAX_CONCURRENT_SCANS"}
+        "MAX_CONCURRENT_SCANS",
+        # Task 22: the analysis thresholds
+        "BIGGEST_SHARE", "POSSIBLE_SHARE", "MIN_PLACES", "NEAR_CONNECT_MS", "DISTANCE_CORRELATION",
+        "DISTANCE_SPREAD_MS", "DNS_SHARE", "VARIES_RATIO", "VARIES_MIN_MS", "BAD_HOP_LOSS_PCT", "LONG_LINK_MS"}
     assert "GLOBALPING_BASE_URL" not in DOTENV_ALLOWED
 
 

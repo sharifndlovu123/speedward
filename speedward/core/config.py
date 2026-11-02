@@ -13,7 +13,22 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from speedward.core.bottleneck import RULE_BOUNDS, Rules
 from speedward.core.globalping import DEFAULT_BASE_URL
+from speedward.core.rules import parse
+from speedward.core.speed import SPEED_RULE_BOUNDS, SpeedRules
+
+# The "where the time goes" and "Is it fast?" thresholds (README "Where the time goes", "Speed checks"):
+# setting -> [(rules, field)]. MIN_PLACES sets both panels' minimum.
+RULE_SETTINGS = {
+    "BIGGEST_SHARE": [(Rules, "biggest_share")], "POSSIBLE_SHARE": [(Rules, "possible_share")],
+    "MIN_PLACES": [(Rules, "min_places"), (SpeedRules, "min_places")],
+    "NEAR_CONNECT_MS": [(Rules, "near_connect_ms")], "DISTANCE_CORRELATION": [(Rules, "distance_correlation")],
+    "DISTANCE_SPREAD_MS": [(Rules, "distance_spread_ms")], "DNS_SHARE": [(Rules, "dns_share")],
+    "VARIES_RATIO": [(SpeedRules, "varies_ratio")], "VARIES_MIN_MS": [(SpeedRules, "varies_min_ms")],
+    "BAD_HOP_LOSS_PCT": [(SpeedRules, "loss_pct")], "LONG_LINK_MS": [(SpeedRules, "rise_ms")],
+}
+_BOUNDS = {Rules: RULE_BOUNDS, SpeedRules: SPEED_RULE_BOUNDS}
 
 DOTENV_ALLOWED = (
     # core / CLI
@@ -21,6 +36,8 @@ DOTENV_ALLOWED = (
     # web
     "RESULT_TTL_SECONDS", "SECRET_KEY", "ALLOWED_HOSTS", "DEBUG", "CSRF_TRUSTED_ORIGINS",
     "MAX_CONCURRENT_SCANS",
+    # analysis thresholds
+    *RULE_SETTINGS,
 )
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 # Line colours on the map: green up to FAST_MS first byte, red from SLOW_MS.
@@ -92,6 +109,26 @@ def speed_thresholds(env: Mapping[str, str]) -> tuple[float, float]:
     if out[1] <= out[0]:
         raise ValueError(BAD_THRESHOLDS)
     return out[0], out[1]
+
+
+def analysis_rules(env: Mapping[str, str]) -> tuple[Rules, SpeedRules]:
+    """(Rules, SpeedRules) from the environment, defaults for anything unset. A bad value raises
+    ValueError naming the setting and its bounds, never the value given (so nothing posted or secret
+    can reach a log through it)."""
+    values: dict[type, dict] = {Rules: {}, SpeedRules: {}}
+    for name, targets in RULE_SETTINGS.items():
+        raw = (env.get(name) or "").strip()
+        if not raw:
+            continue
+        kind, attr = targets[0]
+        value = parse(name, raw, _BOUNDS[kind][attr], kind.__dataclass_fields__[attr].default)
+        for kind, attr in targets:
+            values[kind][attr] = value
+    rules, speed = Rules(**values[Rules]), SpeedRules(**values[SpeedRules])
+    if rules.possible_share > rules.biggest_share:
+        raise ValueError("POSSIBLE_SHARE must not be above BIGGEST_SHARE "
+                         f"(defaults {Rules().possible_share:g} and {Rules().biggest_share:g}).")
+    return rules, speed
 
 
 def check_endpoint(base_url: str | None, token: str | None) -> str | None:

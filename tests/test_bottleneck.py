@@ -387,11 +387,12 @@ def test_diagnosis_from_dict_refuses_a_non_object():
         diagnosis_from_dict(["biggest"], server_heavy())
 
 
-@pytest.mark.parametrize("rules", [Rules(biggest_share=0.9), Rules(biggest_share=0.3), Rules(min_places=1),
-                                   Rules(near_connect_ms=1000), Rules(distance_spread_ms=0)])
-def test_saved_rules_other_than_the_defaults_are_refused(rules):
-    """Until the rules are settings, a saved copy cannot bring its own: a consistent diagnosis made with
-    other values (e.g. min_places=1 to get a conclusion from one place) is still refused."""
+@pytest.mark.parametrize("rules", [Rules(min_places=1), Rules(min_places=2), Rules(biggest_share=0),
+                                   Rules(near_connect_ms=-1), Rules(distance_correlation=1.5)])
+def test_saved_rules_below_or_outside_the_bounds_are_refused(rules):
+    """The rules are settings now (Task 22), so a saved copy may bring other values, but never ones the
+    settings refuse: a consistent diagnosis made with min_places=1 (a conclusion from one place) is still
+    refused. In-bounds values: tests/test_thresholds.py."""
     rep = server_heavy()
     d = diagnose(rep, rules)
     with pytest.raises(ValueError):

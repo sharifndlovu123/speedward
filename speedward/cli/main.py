@@ -127,6 +127,7 @@ def _run(url, locations, traceroute, dns, checks, browser, fmt, out, max_ttfb, m
     env = environment()
     try:  # checked before any test is spent
         fast_ms, slow_ms = config.speed_thresholds(env)
+        rules, speed_rules = config.analysis_rules(env)
     except ValueError as exc:
         _err(f"Error: {exc}")
         raise typer.Exit(2) from None
@@ -178,7 +179,7 @@ def _run(url, locations, traceroute, dns, checks, browser, fmt, out, max_ttfb, m
 
     try:
         report = run_scan(url, plan, client, on_progress=lambda line: _err(f"  {line}"),
-                          geo=geolocator_from_env(env))
+                          geo=geolocator_from_env(env), rules=rules, speed_rules=speed_rules)
     except ScanError as exc:
         _err(start_message(exc.kind))
         if verbose:

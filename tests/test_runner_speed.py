@@ -310,3 +310,70 @@ def test_a_model_error_in_a_reach_check_is_contained_too(fake, monkeypatch):
     monkeypatch.setattr(runner, "_port_fields", broken)
     report = scan(fake, checks=("port",))
     assert {(x.status, x.reason) for x in report.reach} == {("test_failed", "the answer could not be read")}
+
+
+# --- Task 22: one mtr per place when Network path and the mtr check are both ticked ---------------
+
+def test_network_path_and_mtr_check_share_one_measurement(fake):
+    report = scan(fake, checks=("mtr",), traceroute=True)
+    mtrs = fake.posts(type="mtr")
+    assert len(mtrs) == 1  # one test per place, not two
+    assert mtrs[0]["measurementOptions"] == {"packets": 5}  # the larger packet count (default 3 vs 5)
+    assert mtrs[0]["locations"] == "fake0001"
+    # Both outputs are filled from that one measurement.
+    assert [p.status for p in report.paths] == ["measured", "measured"]
+    paths = by(report, "mtr")
+    assert [x.status for x in paths] == ["measured", "measured"]
+    assert [h.host for h in report.paths[0].hops if h.host != "*"] == [h.host for h in paths[0].hops if h.host != "*"]
+    assert report.options["traceroute"] is True and report.options["checks"] == ["mtr"]
+
+
+def test_shared_mtr_cost_is_counted_once_and_matches_what_was_spent(fake):
+    plan = Plan([dict(x) for x in TWO], traceroute=True, checks=("mtr",))
+    assert estimate_cost(plan) == 2 * 4
+    scan(fake, checks=("mtr",), traceroute=True)
+    spent = sum(len(fake.measurements[f"fake{i:04d}"]["results"]) for i in range(1, len(fake.posts()) + 1))
+    assert spent == 8
+
+
+def test_network_path_alone_keeps_its_own_request(fake):
+    scan(fake, checks=(), traceroute=True)
+    mtrs = fake.posts(type="mtr")
+    assert len(mtrs) == 1 and not mtrs[0].get("measurementOptions")
+
+
+def test_shared_mtr_that_cannot_run_leaves_both_without_figures(fake):
+    fake.rate_limit_after = 3  # cold, warm and ping only; the shared mtr hits the limit
+    report = scan(fake, checks=("mtr",), traceroute=True)
+    assert all(p.status == "not_run" for p in report.paths)
+    assert all(x.status == "not_run" and x.stages is None and not x.hops for x in by(report, "mtr"))
+
+
+def test_the_report_keeps_the_rules_it_was_run_with(fake):
+    from speedward.core.bottleneck import Rules
+    from speedward.core.speed import SpeedRules
+    gp = GlobalpingClient(token="t", base_url=fake.base_url, poll_interval=0.01)
+    report = run_scan("https://example.com/", Plan([dict(x) for x in TWO], checks=("consistency",)), gp,
+                      rules=Rules(min_places=5), speed_rules=SpeedRules(min_places=5, loss_pct=30))
+    assert report.diagnosis.rules == Rules(min_places=5)
+    assert report.speed_rules == SpeedRules(min_places=5, loss_pct=30)
+    again = ScanReport.from_dict(report.to_dict())
+    assert again.speed_rules == report.speed_rules and again.diagnosis.rules == report.diagnosis.rules
+
+
+def test_a_rate_limited_shared_mtr_is_explained_for_both_the_routes_and_the_path_check(fake):
+    from speedward.reports import render
+    fake.rate_limit_after = 3
+    report = scan(fake, checks=("mtr",), traceroute=True)
+    assert report.options["not_run"] == ["network path: Globalping limit reached",
+                                         "path loss check: Globalping limit reached"]
+    md = render(ScanReport.from_dict(report.to_dict()), "md")
+    assert "Network path: Globalping limit reached, so the routes have no data." in md
+    assert "Path loss check: Globalping limit reached, so the Path column has no data." in md
+
+
+@pytest.mark.parametrize("what", ["consistency check", "HTTP/2 check", "compression check", "DNS trace check",
+                                  "path loss check"])
+def test_every_skipped_speed_check_has_an_explanation(fake, what):
+    from speedward.reports._view import SKIP_EFFECT
+    assert what in SKIP_EFFECT

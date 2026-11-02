@@ -4,7 +4,10 @@ the time goes" diagram. Pure functions over a ScanReport; no framework imports a
 
 Only measured results enter any figure. Blocked runs are counted and named, test failed / not run are
 left out. Every overall verdict needs MIN_PLACES places with a result of their own; with fewer it says
-"too_few" and concludes nothing. The thresholds are named below and documented in README "Speed checks".
+"too_few" and concludes nothing. The thresholds are named below (defaults), can be set from the
+environment within SPEED_RULE_BOUNDS (speedward/core/config.py analysis_rules) and are documented in README
+"Speed checks". A summary records the values it used (SpeedRules); a saved one is accepted only when they
+are within the same bounds and its figures are exactly what its own results give under them.
 
 - Consistency: the main test's repeat plus CONSISTENCY_EXTRA runs, each on the cold run's own probe
   (runs from another probe are counted but left out). Server wait (first byte) per run. A place "varies"
@@ -27,7 +30,8 @@ from collections import Counter
 from dataclasses import asdict, dataclass, field
 
 from speedward.core.checks import COMPRESSION, CONSISTENCY, CONSISTENCY_EXTRA, DNS_TRACE, HTTP2, MTR, SPEED_CHECKS
-from speedward.core.models import SAME_PROBE, LocationResult, ScanReport, SpeedResult
+from speedward.core.models import MAX_MS, SAME_PROBE, LocationResult, ScanReport, SpeedResult
+from speedward.core.rules import in_bounds
 
 MIN_PLACES = 3
 CONSISTENCY_RUNS = CONSISTENCY_EXTRA + 1  # with the main test's own repeat
@@ -36,6 +40,20 @@ VARIES_MIN_MS = 50.0
 LOSS_PCT = 10.0
 RISE_MS = 50.0
 NO_RESULT = "this check did not run for this place"
+
+
+@dataclass(frozen=True)
+class SpeedRules:
+    min_places: int = MIN_PLACES
+    varies_ratio: float = VARIES_RATIO
+    varies_min_ms: float = VARIES_MIN_MS
+    loss_pct: float = LOSS_PCT
+    rise_ms: float = RISE_MS
+
+
+# (lowest, highest, whole number): the settings and saved copies are held to the same bounds.
+SPEED_RULE_BOUNDS = {"min_places": (3, 1000, True), "varies_ratio": (1, 100, False),
+                     "varies_min_ms": (0, MAX_MS, False), "loss_pct": (1, 100, False), "rise_ms": (1, MAX_MS, False)}
 
 STATES = ("measured", "blocked", "no_data")
 VERDICTS = {
@@ -149,6 +167,7 @@ class SpeedSummary:
     places: list[PlaceSpeed]
     overall: list[Overall]
     tls12: list[str]  # measured places whose main test used TLS 1.2
+    rules: SpeedRules = field(default_factory=SpeedRules)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -179,7 +198,7 @@ def _gone(results: list[SpeedResult]) -> Gone:
     return Gone("not_run", NO_RESULT) if first is None else Gone(first.status, first.reason)
 
 
-def _consistency(r: LocationResult, runs: list[SpeedResult]) -> Consistency | None:
+def _consistency(r: LocationResult, runs: list[SpeedResult], rules: SpeedRules) -> Consistency | None:
     samples, other, blocked = [], 0, 0
     if r.status == "measured" and r.repeat_stages is not None and r.repeat_stages.first_byte is not None:
         if r.repeat_probe == SAME_PROBE:
@@ -199,7 +218,7 @@ def _consistency(r: LocationResult, runs: list[SpeedResult]) -> Consistency | No
     median, slowest = statistics.median(samples), max(samples)
     if len(samples) < CONSISTENCY_RUNS:
         verdict = "too_few_runs"
-    elif slowest - median >= VARIES_MIN_MS and slowest >= median * VARIES_RATIO:
+    elif slowest - median >= rules.varies_min_ms and slowest >= median * rules.varies_ratio:
         verdict = "varies"
     else:
         verdict = "steady"
@@ -232,7 +251,7 @@ def _dns_trace(x: SpeedResult) -> DnsTrace:
     return DnsTrace(steps, _r(sum(times)) if times else None, slowest)
 
 
-def _path(x: SpeedResult) -> PathLoss:
+def _path(x: SpeedResult, rules: SpeedRules) -> PathLoss:
     hops = x.hops
     answering = [h for h in hops if h.host != "*"]
     silent = len(hops) - len(answering)
@@ -242,8 +261,8 @@ def _path(x: SpeedResult) -> PathLoss:
     bad = long = None
     if site is not None:
         for k, h in enumerate(answering):
-            if h.loss_pct is not None and h.loss_pct >= LOSS_PCT and all(
-                    g.loss_pct is not None and g.loss_pct >= LOSS_PCT for g in answering[k:]):
+            if h.loss_pct is not None and h.loss_pct >= rules.loss_pct and all(
+                    g.loss_pct is not None and g.loss_pct >= rules.loss_pct for g in answering[k:]):
                 bad = Hop(h.n, h.host, loss_pct=h.loss_pct)
                 break
         prev = None
@@ -252,7 +271,7 @@ def _path(x: SpeedResult) -> PathLoss:
                 continue
             if prev is not None and site.avg_ms is not None:
                 rise = h.avg_ms - prev
-                if rise >= RISE_MS and site.avg_ms >= h.avg_ms - RISE_MS / 2 \
+                if rise >= rules.rise_ms and site.avg_ms >= h.avg_ms - rules.rise_ms / 2 \
                         and (long is None or rise > long.rise_ms):
                     long = Hop(h.n, h.host, avg_ms=_r(h.avg_ms), rise_ms=_r(rise))
             prev = h.avg_ms
@@ -266,13 +285,13 @@ def _median(values: list[float]) -> float | None:
     return _r(statistics.median(values)) if values else None
 
 
-def _overall(check: str, places: list[PlaceSpeed]) -> Overall:
+def _overall(check: str, places: list[PlaceSpeed], rules: SpeedRules) -> Overall:
     have = [p for p in places if getattr(p, _ATTR[check]) is not None]
     if check == CONSISTENCY:
         have = [p for p in have if p.consistency.verdict != "too_few_runs"]
     if check == MTR:
         have = [p for p in have if p.path.reached]  # loss to the site needs the site to answer
-    if len(have) < MIN_PLACES:
+    if len(have) < rules.min_places:
         return Overall(check, "too_few", len(have))
     if check == CONSISTENCY:
         varies = [p for p in have if p.consistency.verdict == "varies"]
@@ -285,7 +304,7 @@ def _overall(check: str, places: list[PlaceSpeed]) -> Overall:
         verdict = "all" if len(yes) == len(have) else "none" if not yes else "some"
         diffs = [p.http2.first_byte_diff_ms for p in yes if p.http2.first_byte_diff_ms is not None]
         return Overall(check, verdict, len(have), [p.place for p in have if not p.http2.offered],
-                       _median(diffs) if len(diffs) >= MIN_PLACES else None, count=len(yes))
+                       _median(diffs) if len(diffs) >= rules.min_places else None, count=len(yes))
     if check == COMPRESSION:
         yes = [p for p in have if p.compression.encoding != "none"]
         verdict = "all" if len(yes) == len(have) else "none" if not yes else "some"
@@ -310,15 +329,18 @@ _ATTR = {CONSISTENCY: "consistency", HTTP2: "http2", COMPRESSION: "compression",
          MTR: "path"}
 
 
-def _figure(check: str, r: LocationResult, x: SpeedResult):
+def _figure(check: str, r: LocationResult, x: SpeedResult, rules: SpeedRules):
     if check == HTTP2:
         return _http2(r, x)
     if check == COMPRESSION:
         return _compression(r, x)
-    return _dns_trace(x) if check == DNS_TRACE else _path(x)
+    return _dns_trace(x) if check == DNS_TRACE else _path(x, rules)
 
 
-def speed_summary(report: ScanReport) -> SpeedSummary:
+def speed_summary(report: ScanReport, rules: SpeedRules | None = None) -> SpeedSummary:
+    """rules: the values to judge by; by default the ones the report was made (or saved) with
+    (report.speed_rules), else the defaults."""
+    rules = rules or report.speed_rules or SpeedRules()
     results = report.speed or []
     checks = [c for c in SPEED_CHECKS if any(x.check == c for x in results)]
     grouped: dict[tuple[int, str], list[SpeedResult]] = {}  # one pass: work grows with rows + results only
@@ -332,23 +354,41 @@ def speed_summary(report: ScanReport) -> SpeedSummary:
             measured = next((x for x in mine if x.status == "measured"), None)
             figure = None
             if c == CONSISTENCY:
-                figure = p.consistency = _consistency(r, mine)
+                figure = p.consistency = _consistency(r, mine, rules)
             elif measured is not None:
-                figure = _figure(c, r, measured)
+                figure = _figure(c, r, measured, rules)
                 setattr(p, _ATTR[c], figure)
             if figure is None:
                 p.gone[c] = _gone(mine)
         places.append(p)
-    return SpeedSummary(checks, MIN_PLACES, places, [_overall(c, places) for c in checks],
-                        [p.place for p in places if p.tls12] if checks else [])
+    return SpeedSummary(checks, rules.min_places, places, [_overall(c, places, rules) for c in checks],
+                        [p.place for p in places if p.tls12] if checks else [], rules)
+
+
+def _rules(value) -> SpeedRules:
+    if not isinstance(value, dict) or set(value) != set(SpeedRules.__dataclass_fields__):
+        raise ValueError("speed rules must be an object with the known rules")
+    for key, bound in SPEED_RULE_BOUNDS.items():
+        if not in_bounds(value[key], bound):
+            raise ValueError(f"speed rule {key} is out of range")
+    return SpeedRules(**value)
 
 
 def summary_from_dict(value, report: ScanReport) -> SpeedSummary:
     """A saved summary, accepted only if it is exactly what speed_summary gives for the report's own
-    results. Anything else raises ValueError: a summary is never taken on trust."""
+    results under the rules it records (within SPEED_RULE_BOUNDS). A copy saved before summaries
+    recorded their rules is judged by the defaults. Anything else raises ValueError: a summary is never
+    taken on trust. On success the rules are kept on the report, so its exports use them too."""
     from speedward.core.bottleneck import _same
 
-    fresh = speed_summary(report)
-    if not isinstance(value, dict) or not _same(value, fresh.to_dict()):
+    if not isinstance(value, dict):
         raise ValueError("speed summary does not follow from the report's own results")
+    rules = _rules(value["rules"]) if "rules" in value else None
+    fresh = speed_summary(report, rules or SpeedRules())
+    expected = fresh.to_dict()
+    if rules is None:
+        del expected["rules"]
+    if not _same(value, expected):
+        raise ValueError("speed summary does not follow from the report's own results")
+    report.speed_rules = rules
     return fresh

@@ -6,14 +6,16 @@ renders nothing: no panel, no lines, never a diagnosis made up afterwards.
 """
 from __future__ import annotations
 
+import copy
 import math
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from speedward.core.bottleneck import STAGES, Diagnosis, PlaceFigure, StageFigure
+from speedward.core.bottleneck import STAGES, Diagnosis, PlaceFigure, Rules, StageFigure
 
-from .speed import md_text, notes_for
+from ._md import md_text
+from .speed import notes_for
 
 NAME = {"dns": "DNS", "connect": "Connect", "tls": "TLS", "server_wait": "Server wait", "download": "Download"}
 WORD = {"dns": "DNS", "connect": "connect", "tls": "TLS", "server_wait": "server wait", "download": "download"}
@@ -47,9 +49,12 @@ def ms(v: float | None) -> str:
     return "not available" if v is None else f"{v:.0f} ms"
 
 
-def pct(share: float, thresholds: tuple[float, ...] = (0.25, 0.40)) -> str:
+def pct(share: float, thresholds: tuple[float, ...] | None = None) -> str:
     """A share as a whole percent, rounded half up but never up across a threshold (39.96% is "39%",
-    so a block shown under 40% is never shown as 40%)."""
+    so a block shown under 40% is never shown as 40%). The thresholds default to the default Rules."""
+    if thresholds is None:
+        r = Rules()
+        thresholds = (r.possible_share, r.biggest_share, r.dns_share)
     value = math.floor(share * 100 + 0.5)
     for t in thresholds:
         if share < t and value >= round(t * 100):
@@ -61,8 +66,8 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def _thresholds(d: Diagnosis) -> tuple[float, float]:
-    return (d.rules.possible_share, d.rules.biggest_share)
+def _thresholds(d: Diagnosis) -> tuple[float, float, float]:
+    return (d.rules.possible_share, d.rules.biggest_share, d.rules.dns_share)
 
 
 def _p(d: Diagnosis, share: float) -> str:
@@ -310,11 +315,25 @@ def render_bottleneck(report, interactive: bool = False, heading: str = "h2") ->
                                                           interactive=interactive, h=heading, css=css)
 
 
+def _escaped(d: Diagnosis, esc) -> Diagnosis:
+    """A copy with every untrusted name and reason passed through `esc` (the figures are untouched)."""
+    d = copy.deepcopy(d)
+    x = d.distance
+    for spot in (d.near_server_wait, d.dns_example, x.quickest, x.slowest, x.nearest, x.farthest):
+        if spot is not None:
+            spot.place = esc(spot.place)
+    for p in d.places:
+        p.place, p.reason = esc(p.place), esc(p.reason)
+        p.cdn = esc(p.cdn) if p.cdn is not None else None
+        p.edge = esc(p.edge) if p.edge is not None else None
+    return d
+
+
 def markdown_lines(report) -> list[str]:
     if report.diagnosis is None:
         return []
-    d = report.diagnosis
-    v = view(d, notes_for(report, md_text))  # names in the speed notes are escaped for Markdown
+    d = _escaped(report.diagnosis, md_text)
+    v = view(d, notes_for(report, md_text))  # every name and reason is escaped for Markdown
     L = ["## Where the time goes", "", f"**{v['headline']}** {v['detail']}", ""]
     if v["overall"] is not None:
         g = v["overall"]

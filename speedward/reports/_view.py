@@ -33,7 +33,12 @@ SKIP_EFFECT = {"repeat test": "the Cache column and cache gain have no figures",
                "IPv6 check": "the IPv6 column has no data",
                "plain HTTP check": "the HTTP column has no data",
                "DNS resolver check": "the DNS column has no data for that resolver",
-               "port check": "the Port column has no data"}
+               "port check": "the Port column has no data",
+               "consistency check": "the Consistency column has fewer runs",
+               "HTTP/2 check": "the HTTP/2 column has no data",
+               "compression check": "the Compression column has no data",
+               "DNS trace check": "the DNS trace column has no data",
+               "path loss check": "the Path column has no data"}
 STAGE_LABELS = {"dns": "DNS", "connect": "Connect", "tls": "TLS", "first_byte": "First byte",
                 "download": "Download"}
 STATUS_TEXT = {"measured": "measured", "blocked": "blocked", "test_failed": "test failed",

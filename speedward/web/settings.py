@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
-from speedward.core.config import build_environment, speed_thresholds
+from speedward.core.config import analysis_rules, build_environment, speed_thresholds
 
 BASE_DIR = Path(__file__).resolve().parent
 _ENV = build_environment(Path(".env"), on_warning=lambda m: print(m, file=sys.stderr))
@@ -63,6 +63,10 @@ SERVER_LON = _ENV.get("SERVER_LON") or None
 try:  # the same rules as the CLI (speedward.core.config.speed_thresholds)
     FAST_MS, SLOW_MS = speed_thresholds(_ENV)
 except ValueError as _exc:
+    raise ImproperlyConfigured(str(_exc)) from None
+try:  # "where the time goes" and "Is it fast?" thresholds, checked at start (README lists each one)
+    DIAGNOSIS_RULES, SPEED_RULES = analysis_rules(_ENV)
+except ValueError as _exc:  # the message names the setting and its bounds, never the value
     raise ImproperlyConfigured(str(_exc)) from None
 RESULT_TTL_SECONDS = _int("RESULT_TTL_SECONDS", 900, minimum=60)
 MAX_CONCURRENT_SCANS = _int("MAX_CONCURRENT_SCANS", 2, minimum=1)

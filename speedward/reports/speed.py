@@ -8,7 +8,6 @@ without speed checks (or from before they existed) renders nothing.
 from __future__ import annotations
 
 import copy
-import re
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -16,13 +15,12 @@ from jinja2 import Environment, FileSystemLoader
 from speedward.core.checks import COMPRESSION, CONSISTENCY, DNS_TRACE, HTTP2, MTR
 from speedward.core.speed import (
     CONSISTENCY_RUNS,
-    VARIES_MIN_MS,
-    VARIES_RATIO,
     Overall,
     PlaceSpeed,
     SpeedSummary,
     speed_summary,
 )
+from speedward.reports._md import md_fold, md_text
 
 SYMBOL = {"measured": "●", "blocked": "○", "no_data": "◌"}
 STATUS_TEXT = {"test_failed": "test failed", "not_run": "did not run", "blocked": "blocked"}
@@ -171,8 +169,8 @@ def finding(o: Overall, s: SpeedSummary) -> dict:
         if o.verdict == "steady":
             return {"check": o.check, "prompt": "",
                     "text": (f"The timings indicate the server wait is steady: {CONSISTENCY_RUNS} runs each in {n}, "
-                             f"no slowest run at {VARIES_RATIO:g} times its place's median and {VARIES_MIN_MS:.0f} ms "
-                             "above it.")}
+                             f"no slowest run at {s.rules.varies_ratio:g} times its place's median and "
+                             f"{s.rules.varies_min_ms:.0f} ms above it.")}
         return {"check": o.check,
                 "text": (f"The timings indicate the server wait varies in {len(o.places)} of {n} "
                          f"({_names(o.places)}): from {_ms(o.low_ms)} to {_ms(o.high_ms)} over {CONSISTENCY_RUNS} runs."),
@@ -301,17 +299,6 @@ def render_speed(report, interactive: bool = False, heading: str = "h2") -> str:
                                                      h=heading, css=css)
 
 
-_MD_SPECIAL = re.compile(r"([\\`*_\[\]()<>|!])")
-_MD_LEADING = re.compile(r"^(\s*)([#+-])")
-
-
-def md_text(text: str) -> str:
-    """Untrusted text (a place name, a hop or server name) made inert in Markdown: link, image, emphasis,
-    code, HTML and table syntax are backslash-escaped, and so is a heading or list mark at the start."""
-    text = _MD_SPECIAL.sub(r"\\\1", str(text).replace("\n", " ").replace("\r", " "))
-    return _MD_LEADING.sub(r"\1\\\2", text)
-
-
 def _escaped(s: SpeedSummary, esc) -> SpeedSummary:
     """A copy with every untrusted name passed through `esc` (the figures are untouched)."""
     s = copy.deepcopy(s)
@@ -343,9 +330,7 @@ def notes_for(report, esc=None) -> dict | None:
     return diagram_notes(_escaped(s, esc) if esc is not None else s)
 
 
-def _md(text: str) -> str:
-    """For text already made safe (fixed words and md_text names): only line breaks are folded."""
-    return str(text).replace("\n", " ").replace("\r", " ")
+_md = md_fold
 
 
 def markdown_lines(report) -> list[str]:

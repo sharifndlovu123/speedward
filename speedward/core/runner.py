@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 
 from speedward import __version__
 from speedward.core.analysis import cdn_status
-from speedward.core.bottleneck import diagnose
+from speedward.core.bottleneck import Rules, diagnose
 from speedward.core.budget import Plan
 from speedward.core.checks import (
     COMPRESSION,
@@ -26,6 +26,7 @@ from speedward.core.checks import (
     IPV6,
     MTR,
     MTR_PACKETS,
+    PATH_PACKETS,
     PLAIN_HTTP,
     PORT,
     PORT_PACKETS,
@@ -64,6 +65,7 @@ from speedward.core.models import (
     TraceStep,
     clean,
 )
+from speedward.core.speed import SpeedRules
 from speedward.core.target import is_ip_host, normalise_target
 
 _HTTP_VERSION = re.compile(r"^HTTP/(\d(?:\.\d)?)\s")
@@ -276,7 +278,10 @@ def _cold_fields(probe: dict, item: dict) -> dict:
 
 def run_scan(url: str, plan: Plan, client: GlobalpingClient,
              on_progress: Callable[[str], None] | None = None,
-             geo: Geolocator | None = None) -> ScanReport:
+             geo: Geolocator | None = None, rules: Rules | None = None,
+             speed_rules: SpeedRules | None = None) -> ScanReport:
+    """rules / speed_rules: the configured thresholds (speedward.core.config.analysis_rules); the
+    defaults when omitted. The report keeps them, so its panels and exports are judged by them."""
     def progress(line: str) -> None:
         if on_progress is not None:
             on_progress(line)
@@ -312,7 +317,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         results = [LocationResult(Location("", _magic_label(s), None, None, None, None, None),
                                   "test_failed", reason) for s in plan.locations]
         return _report(target, started, plan, scan, None, results, [], [], [] if _reach_on(plan) else None,
-                       [] if _speed_on(plan) else None)
+                       [] if _speed_on(plan) else None, rules, speed_rules)
 
     cold = _items(cold_doc)
     fields = [_cold_fields(p, item) for p, item in cold]
@@ -347,11 +352,20 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
                 fields[i].update(ping_ms=avg, ping_probe=_probe_match(ping_reused, same))
 
     # 4. Optional path (mtr: gives per-hop ASN and loss, traceroute does not).
+    # With the mtr check ticked as well, this one measurement serves both (plan.shared): one test per
+    # place, with the larger of the two packet counts.
     paths: list[PathResult] = []
+    shared_mtr = None
     if plan.traceroute:
         progress("Tracing the network path")
-        doc, reused, why = scan.measure("network path", "mtr", cold_id, None, fallback_locations=plan.locations)
+        shared = plan.shared(MTR)
+        options = {"packets": max(PATH_PACKETS, MTR_PACKETS)} if shared else None
+        doc, reused, why = scan.measure("network path", "mtr", cold_id, options, fallback_locations=plan.locations)
         paths = _paths(cold, doc, why, reused)
+        if shared:
+            shared_mtr = (doc, reused, why)
+            if doc is None:  # the path check had its answer from this test too: say so for it as well
+                scan.skipped.append(f"path loss check: {why}")
 
     # 5. Optional DNS answers.
     dns: list[DnsResult] = []
@@ -363,7 +377,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
     # 6. The ticked "More checks", on the same probes.
     reach = _reach(scan, cold, cold_id, parts, http_opts, plan) if _reach_on(plan) else None
     # 6b. The ticked "Is it fast?" checks, on the same probes.
-    speed = _speed(scan, cold, cold_id, parts, http_opts, plan) if _speed_on(plan) else None
+    speed = _speed(scan, cold, cold_id, parts, http_opts, plan, shared_mtr) if _speed_on(plan) else None
 
     # 7. Where the server that answered each measured result is (offline: airport table, geo-IP).
     _place_servers(cold, fields, geo)
@@ -381,7 +395,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
 
     server = _server(geo, results)
     progress("Finished")
-    return _report(target, started, plan, scan, server, results, paths, dns, reach, speed)
+    return _report(target, started, plan, scan, server, results, paths, dns, reach, speed, rules, speed_rules)
 
 
 def _reach_on(plan: Plan) -> bool:
@@ -807,7 +821,8 @@ def _mtr_failed(res: dict, status: str, reason: str):
     return "test_failed", f"the path test failed: {reason}"
 
 
-def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) -> list[SpeedResult]:
+def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan,
+           shared_mtr: tuple | None = None) -> list[SpeedResult]:
     is_ip = is_ip_host(scan.host)
     out: list[SpeedResult] = []
 
@@ -835,14 +850,17 @@ def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) 
         else:
             scan.progress("Tracing the DNS lookup")
             run("DNS trace check", "dns", {"trace": True}, _trace_fields, _trace_failed, check=DNS_TRACE)
-    if MTR in plan.checks:
+    if MTR in plan.checks and shared_mtr is not None:  # the Network path measurement, read again
+        doc, reused, why = shared_mtr
+        out.extend(_speed_results(cold, doc, why, reused, _mtr_fields, _mtr_failed, check=MTR))
+    elif MTR in plan.checks:
         scan.progress("Measuring loss along the path")
         run("path loss check", "mtr", {"packets": MTR_PACKETS}, _mtr_fields, _mtr_failed, check=MTR)
     return out
 
 
 def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dns, reach=None,
-            speed=None) -> ScanReport:
+            speed=None, rules: Rules | None = None, speed_rules: SpeedRules | None = None) -> ScanReport:
     options = {"locations": [dict(s) for s in plan.locations], "traceroute": plan.traceroute,
                "dns": plan.dns, "browser": plan.browser}
     if plan.checks:
@@ -851,6 +869,6 @@ def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dn
         options["not_run"] = list(scan.skipped)
     report = ScanReport(target=target, started=started, finished=datetime.now(UTC),
                         version=__version__, options=options, server=server, locations=results,
-                        paths=paths, dns=dns, browser=None, reach=reach, speed=speed)
-    report.diagnosis = diagnose(report)
+                        paths=paths, dns=dns, browser=None, reach=reach, speed=speed, speed_rules=speed_rules)
+    report.diagnosis = diagnose(report, rules)
     return report
