@@ -11,7 +11,8 @@ import typer
 from speedward.core import config
 from speedward.core.allowance_view import describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
-from speedward.core.budget import Plan, check_budget, estimate_cost
+from speedward.core.budget import Plan, check_budget, describe_breakdown, estimate_cost
+from speedward.core.checks import parse_checks
 from speedward.core.geo import geolocator_from_env
 from speedward.core.globalping import DEFAULT_BASE_URL, GlobalpingClient, GlobalpingError
 from speedward.core.locations import parse_locations
@@ -21,6 +22,7 @@ from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
 from speedward.reports._view import skipped
 from speedward.reports.bottleneck import cli_lines
+from speedward.reports.reach import cli_lines as reach_cli_lines
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
                   help="Test a website's speed from locations around the world.")
@@ -69,6 +71,9 @@ def scan(
     locations: str | None = typer.Option(None, "--locations", help="Comma-separated places, e.g. Berlin,Tokyo,Brazil."),
     traceroute: bool = typer.Option(False, "--traceroute", help="Also trace the network path (more tests)."),
     dns: bool = typer.Option(False, "--dns", help="Also check DNS answers (more tests)."),
+    checks: str | None = typer.Option(None, "--checks", help=(
+        "More checks, comma-separated: ipv6 (+1 test per place), http (+1), dns (two public resolvers, +2), "
+        "port (TCP, +1). Run from Globalping's probes.")),
     browser: bool = typer.Option(False, "--browser", help="Also run the browser test."),
     fmt: str = typer.Option("md", "--format", help="Report format: json, md or html."),
     out: Path | None = typer.Option(None, "--out", help="Write the report to this file instead of stdout."),
@@ -92,7 +97,7 @@ def scan(
         raise typer.Exit(2) from None
 
 
-def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load, max_blocked, max_page_weight, yes, estimate, verbose):
+def _run(url, locations, traceroute, dns, checks, browser, fmt, out, max_ttfb, max_load, max_blocked, max_page_weight, yes, estimate, verbose):
     _err(NOTICE)
     if fmt not in FORMATS:
         _err(f"Error: --format must be one of {', '.join(FORMATS)}")
@@ -100,6 +105,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     try:
         normalise_target(url)
         specs = parse_locations(locations)
+        ticked = parse_checks(checks)
     except ValueError as exc:
         _err(f"Error: {clean(str(exc))}")
         raise typer.Exit(2) from None
@@ -112,7 +118,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         raise typer.Exit(2)
     if browser:
         _err("Note: the browser test is not available in this build yet; continuing without it.")
-    plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False)
+    plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False, checks=ticked)
 
     env = environment()
     try:  # checked before any test is spent
@@ -148,6 +154,8 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     left = "an unknown number of" if allowance.remaining is None else str(allowance.remaining)
     reset = describe_allowance(allowance, cost, time.time()).reset_phrase
     _err(f"This scan uses about {cost} tests. You have {left} left this hour ({reset}).")
+    if len(cost_lines := describe_breakdown(plan).split(" · ")) > 2:  # more than the default: show each part
+        _err("Cost: " + " · ".join(cost_lines))
     if allowance.credits is not None:
         _err(f"Globalping credits: {allowance.credits}.")
     if estimate:
@@ -191,7 +199,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         typer.echo(text)
 
     _scan_notes(report)
-    for line in cli_lines(report):  # the short "where the time goes"; the report has the full panel
+    for line in reach_cli_lines(report) + cli_lines(report):  # short versions; the report has the panels
         _err(line)
     limits = Limits(max_ttfb=max_ttfb, max_load=max_load, max_blocked=max_blocked,
                     max_page_weight=max_page_weight)

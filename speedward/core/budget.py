@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from speedward.core.checks import PER_PLACE
+from speedward.core.checks import LABEL, PER_PLACE
 from speedward.core.globalping import Allowance
 
 BASE_PER_LOCATION = 3  # cold http + warm http + ping
@@ -42,6 +42,18 @@ def cost_breakdown(plan: Plan) -> list[CostLine]:
         parts.append(("dns_answers", 1))
     parts += [(c, PER_PLACE[c]) for c in plan.checks]
     return [CostLine(key, per, per * n) for key, per in parts]
+
+
+PART_LABEL = {"base": "Default scan", "traceroute": "Network path", "dns_answers": "DNS answers", **LABEL}
+
+
+def describe_breakdown(plan: Plan) -> str:
+    """One line: what each part costs, then the total (shown before every scan, web and CLI)."""
+    lines = cost_breakdown(plan)
+    n = len(plan.locations)
+    parts = [f"{PART_LABEL[x.key]} {x.per_place} per place = {x.cost}" if x.key == "base"
+             else f"{PART_LABEL[x.key]} +{x.per_place} per place = {x.cost}" for x in lines]
+    return (" · ".join(parts) + f" · {n} place{'' if n == 1 else 's'}: about {sum(x.cost for x in lines)} tests")
 
 
 def estimate_cost(plan: Plan) -> int:

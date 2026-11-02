@@ -380,3 +380,33 @@ def test_scan_with_three_places_names_the_biggest_cost(fake):
     lines = [line for line in r.stderr.splitlines() if line.startswith(("Where the time goes", "Check "))]
     assert lines[0] == "Where the time goes: Waiting for the server is the biggest cost."
     assert any(line.startswith("Check first: ") for line in lines)
+
+
+def test_estimate_includes_ticked_checks_and_shows_each_part(fake):
+    r = scan("--estimate", "--checks", "ipv6,dns")
+    assert r.exit_code == 0
+    assert "about 12 tests" in r.stderr
+    assert "Over IPv4 and IPv6 +1 per place = 2" in r.stderr
+    assert "Through different DNS resolvers +2 per place = 4" in r.stderr
+    assert fake.posts() == []
+
+
+def test_unknown_check_is_refused_before_any_test(fake):
+    r = scan("--checks", "ipv6,nmap")
+    assert r.exit_code == 2 and "Unknown check" in r.stderr and "nmap" not in r.stderr
+    assert fake.posts() == []
+
+
+def test_checks_run_and_print_who_can_reach_it(fake):
+    r = scan("--checks", "port", "--yes")
+    assert r.exit_code == 0
+    assert [p["type"] for p in fake.posts()] == ["http", "http", "ping", "ping"]
+    assert "## Who can reach it" in r.stdout
+    assert "Who can reach it: Not enough places for a conclusion" in r.stderr
+
+
+def test_checks_over_allowance_are_refused_without_yes(fake):
+    fake.remaining = 7  # 6 for the default, 8 with the port check
+    r = scan("--checks", "port")
+    assert r.exit_code == 2 and "needs about 8 tests" in r.stderr
+    assert fake.posts() == []

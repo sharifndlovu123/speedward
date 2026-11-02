@@ -40,6 +40,13 @@ def test_cost_breakdown_lists_base_and_each_check():
     assert sum(r.cost for r in rows) == estimate_cost(Plan(LOCS, traceroute=True, checks=("ipv6", "dns")))
 
 
+def test_breakdown_text_names_each_part_and_the_total():
+    from speedward.core.budget import describe_breakdown
+    text = describe_breakdown(Plan(LOCS, checks=("ipv6", "dns")))
+    assert text == ("Default scan 3 per place = 30 · Over IPv4 and IPv6 +1 per place = 10 · "
+                    "Through different DNS resolvers +2 per place = 20 · 10 places: about 60 tests")
+
+
 def test_over_allowance_counts_the_checks():
     v = check_budget(Plan(LOCS, checks=("ipv6", "http")), allowance(remaining=45))
     assert not v.fits and v.cost == 50
