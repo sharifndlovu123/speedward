@@ -75,6 +75,10 @@
 .bn-tag{color:var(--mute);flex:0 1 auto;min-width:0;overflow-wrap:anywhere}
 .bn-out{font-style:italic}
 .bn-place details{margin:0;border:0;padding:0}
+.bn-place summary{cursor:pointer;list-style:none}
+.bn-place summary::-webkit-details-marker{display:none}
+.bn-place summary::before{content:"+";display:inline-block;width:1em;font-weight:400}
+.bn-place details[open]>summary::before{content:"\2212"}
 .bn-place details[open]{padding-bottom:12px}
 .bn-foot{color:var(--mute);font-size:.85rem;margin:10px 0 0}
 
