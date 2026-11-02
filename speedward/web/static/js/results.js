@@ -847,6 +847,10 @@
       }
       var mapNodes = take("section.map");
       var panelNodes = take(".figures, .excluded-note, .verdict, .failed-list, #map-detail, .legend, .position-note");
+      // "Where the time goes": the headline sits right under the figures; the diagram stays in the drawer.
+      var head = take(".bn-head");
+      var at = panelNodes.findIndex(function (n) { return n.classList.contains("figures"); });
+      Array.prototype.splice.apply(panelNodes, [at + 1, 0].concat(head));
       var rest = doc.querySelector(".fragment") || doc.body;
       var mapBox = $("results-map");
       mapBox.replaceChildren.apply(mapBox, mapNodes);
@@ -854,6 +858,7 @@
       summary.replaceChildren.apply(summary, panelNodes);
       var target = $("results-body");
       target.replaceChildren.apply(target, Array.prototype.slice.call(rest.childNodes));
+      averageLabel = null;
       setText($("results-title"), hostOf(saved.result.target));
       hasResults = true;
       picking = false;
@@ -1068,6 +1073,7 @@
     clearSelected();
     dot.classList.add("sw-sel");
     setDrawer(true, dot);
+    showPlace(dot.getAttribute("data-row"));
     var rows = $("results-body").querySelectorAll("tr[data-row]");
     Array.prototype.forEach.call(rows, function (tr) {
       var on = tr.getAttribute("data-row") === dot.getAttribute("data-row");
@@ -1092,6 +1098,52 @@
   resultsBody.addEventListener("mouseover", function (e) {
     var dot = dotOf(e.target) || squareOf(e.target);
     if (dot) { describe(dot); }
+  });
+
+  // --- "where the time goes": one view per place, all rendered (escaped) by the server -------------
+  // Selecting a place (map dot, table row or the place list) shows that place's diagram; blocked or
+  // failed places show only their reason. Nothing is built from data here: views are only shown or hidden.
+  var averageLabel = null;
+
+  function showPlace(key) {
+    var body = $("results-body");
+    var views = body.querySelectorAll(".bn-view");
+    if (!views.length) { return; }
+    if (!body.querySelector('.bn-view[data-bn-view="' + key + '"]')) { key = "all"; }
+    Array.prototype.forEach.call(views, function (v) { v.hidden = v.getAttribute("data-bn-view") !== key; });
+    var label = body.querySelector("[data-bn-showing]");
+    if (averageLabel === null && label) { averageLabel = label.textContent; }
+    var pick = body.querySelector('.bn-pick[data-bn-show="' + key + '"] .bn-pname');
+    setText(label, key === "all" || !pick ? averageLabel : pick.textContent);
+    Array.prototype.forEach.call(body.querySelectorAll(".bn-pick"), function (b) {
+      if (b.getAttribute("data-bn-show") === key) { b.setAttribute("aria-current", "true"); } else { b.removeAttribute("aria-current"); }
+    });
+    show(body.querySelector('.bn-showing [data-bn-show="all"]'), key !== "all");
+  }
+
+  $("results-body").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-bn-show]") : null;
+    if (b) {
+      showPlace(b.getAttribute("data-bn-show"));
+      var top = $("results-body").querySelector(".bn-showing");
+      if (top && b.classList.contains("bn-pick")) { top.scrollIntoView({ block: "nearest" }); }
+      return;
+    }
+    var tr = e.target.closest ? e.target.closest("tr[data-row]") : null;
+    if (!tr) { return; }
+    Array.prototype.forEach.call($("results-body").querySelectorAll("tr[data-row]"), function (row) {
+      row.classList.toggle("hl", row === tr);
+    });
+    showPlace(tr.getAttribute("data-row"));
+  });
+
+  $("results-summary").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-bn-open]") : null;
+    if (!b) { return; }
+    setDrawer(true, b);
+    showPlace("all");
+    var title = $("results-body").querySelector(".bn-title");
+    if (title) { title.scrollIntoView({ block: "start" }); title.focus(); }
   });
 
   // --- start -----------------------------------------------------------------------------------

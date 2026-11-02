@@ -1,4 +1,5 @@
 from ._view import context
+from .bottleneck import markdown_lines
 
 
 def _c(text) -> str:
@@ -17,6 +18,9 @@ def to_markdown(report) -> str:
         L.append(f"- Page weight: {c['browser']['weight']}")
     L += [f"- {c['excluded_line']}", f"- {c['cache_note']}"]
     L += [f"- {note}" for note in c["skipped"]]
+    where = markdown_lines(report)
+    if where:
+        L += [""] + [_c(line) if line.startswith("- ") else line for line in where]
     L += ["",
           "## Locations", "",
           "| Location | No cache | Cache | Delay | CDN | Answered by | Position source | Status |",

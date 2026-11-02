@@ -20,6 +20,7 @@ from speedward.core.runner import ScanError, run_scan, start_message
 from speedward.core.target import normalise_target
 from speedward.reports import FORMATS, render
 from speedward.reports._view import skipped
+from speedward.reports.bottleneck import cli_lines
 
 app = typer.Typer(add_completion=False, pretty_exceptions_enable=False, pretty_exceptions_show_locals=False,
                   help="Test a website's speed from locations around the world.")
@@ -190,6 +191,8 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
         typer.echo(text)
 
     _scan_notes(report)
+    for line in cli_lines(report):  # the short "where the time goes"; the report has the full panel
+        _err(line)
     limits = Limits(max_ttfb=max_ttfb, max_load=max_load, max_blocked=max_blocked,
                     max_page_weight=max_page_weight)
     outcome = evaluate_limits(report, limits)

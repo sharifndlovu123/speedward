@@ -1,0 +1,103 @@
+/* "Where the time goes": one stylesheet for the web UI and the HTML export (inlined by the panel).
+   Uses the page tokens (--paper, --ink, --hair, --mute); no red (that is for the server and Start only).
+   Flat hairlines, no shadow, no radius.
+   Marks are never colour alone: biggest = thick frame + filled + label, possible = hatched + label,
+   fine = plain outline, edge / CDN = dashed (seen, not timed). Contrast: tests/test_contrast.py. */
+.bottleneck{margin:8px 0 0}
+.bn-kicker,.bn-k,.bn-cap,.bn-scale{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--mute);margin:0 0 4px}
+.bn-k strong{color:var(--ink);font-weight:800}
+.bn-headline{font-size:clamp(1.5rem,3.4vw,2.6rem);font-weight:800;letter-spacing:-.03em;line-height:1.05;
+  margin:4px 0 6px;color:var(--ink)}
+.left-col .bn-headline{font-size:1.5rem}
+.bn-detail{color:var(--mute);margin:0 0 8px}
+.bn-head button{margin:2px 0 8px}
+.bn-body .bn-title{margin-top:8px;scroll-margin-top:64px}
+.bn-showing{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 6px}
+.bn-showing p{margin:0;font-weight:600}
+.bn-reason{font-weight:600;margin:6px 0}
+
+/* the path: blocks left to right, joined by hairlines */
+.bn-path{list-style:none;margin:10px 0 0;padding:0;display:flex;align-items:stretch;gap:14px}
+.bn-block{position:relative;flex:1 1 0;min-width:0;border:1px solid var(--hair);padding:10px 8px;
+  display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere;color:var(--ink)}
+.bn-block+.bn-block::before{content:"";position:absolute;left:-15px;top:50%;width:14px;
+  border-top:1px solid var(--hair)}
+.bn-block b{font-size:1.25rem;font-weight:700;line-height:1.1}
+.bn-block .bn-k{margin:0}
+.bn-n{font-size:.85rem;color:var(--mute)}
+.bn-block.bn-visitor,.bn-block.bn-edge{flex:0 1 8rem}
+.bn-block.bn-visitor b,.bn-block.bn-edge b{font-size:1rem}
+.bn-block.bn-edge{border-style:dashed}
+.bn-block.bn-not_available{border-style:dotted}
+.bn-block.bn-possible{flex-grow:1.4;
+  background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--ink) 12%,transparent) 6px 7px)}
+/* the thick frame sits just outside the filled block, so it shows against the fill and the paper */
+.bn-block.bn-biggest{flex-grow:2;outline:3px solid var(--ink);outline-offset:2px;background:var(--ink);
+  color:var(--paper)}
+.bn-block.bn-biggest .bn-k,.bn-block.bn-biggest .bn-k strong,.bn-block.bn-biggest .bn-n{color:var(--paper)}
+.bn-block.bn-biggest b{font-size:1.6rem}
+
+/* the to-scale bar (hidden from screen readers: the list above says the same) */
+.bn-bar,.bn-mini{display:flex;border:1px solid var(--hair);overflow:hidden}
+.bn-bar{height:10px;margin-top:10px}
+.bn-mini{height:10px;flex:1 1 6rem;min-width:4rem}
+.bn-seg{display:block;height:100%;box-sizing:border-box;border-right:1px solid var(--hair)}
+.bn-seg:last-child{border-right:0}
+.bn-seg.bn-biggest{background:var(--ink)}
+.bn-seg.bn-possible{background:repeating-linear-gradient(135deg,var(--ink) 0 1px,transparent 1px 4px)}
+.bn-scale{margin-top:4px;text-transform:none;letter-spacing:0;font-weight:400;font-size:.8rem}
+
+.bn-key{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem}
+.bn-swatch{display:inline-block;width:18px;height:12px;border:1px solid var(--hair);vertical-align:middle;
+  margin-right:6px;box-sizing:border-box}
+.bn-swatch.bn-biggest{outline:2px solid var(--ink);outline-offset:1px;background:var(--ink)}
+.bn-swatch.bn-possible{background:repeating-linear-gradient(135deg,transparent 0 3px,var(--ink) 3px 4px)}
+.bn-swatch.bn-edge{border-style:dashed}
+
+/* what to check, and the three cards */
+.bn-checks,.bn-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  border-top:1px solid var(--hair);margin-top:16px}
+.bn-cards{border-bottom:1px solid var(--hair);margin:18px 0 14px}
+.bn-checks>div,.bn-card{padding:10px 14px 10px 0;min-width:0}
+.bn-checks>div+div,.bn-card+.bn-card{border-left:1px solid var(--hair);padding-left:14px}
+.bn-checks p,.bn-card p{margin:0 0 4px}
+.bn-card-title{font-weight:700}
+.bn-check{color:var(--mute);font-size:.9rem}
+
+/* each place */
+.bn-places{list-style:none;padding:0;margin:6px 0 0}
+.bn-place{border-bottom:1px solid var(--hair)}
+.bn-pick,.bn-place>p,.bn-place summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;width:100%;
+  padding:6px 0;margin:0}
+.bn-pick{font:inherit;color:var(--ink);background:transparent;border:0;border-radius:0;text-align:left;
+  min-height:32px;cursor:pointer}
+.bn-pick:hover,.bn-pick[aria-current="true"]{background:var(--hl,transparent);color:var(--ink)}
+.bn-pick[aria-current="true"] .bn-pname{font-weight:800}
+.bn-pname{flex:0 1 10rem;min-width:0;overflow-wrap:anywhere}
+.bn-tag{color:var(--mute);flex:0 1 auto;min-width:0;overflow-wrap:anywhere}
+.bn-out{font-style:italic}
+.bn-place details{margin:0;border:0;padding:0}
+.bn-place summary{cursor:pointer;list-style:none}
+.bn-place summary::-webkit-details-marker{display:none}
+.bn-place summary::before{content:"+";display:inline-block;width:1em;font-weight:400}
+.bn-place details[open]>summary::before{content:"\2212"}
+.bn-place details[open]{padding-bottom:12px}
+.bn-foot{color:var(--mute);font-size:.85rem;margin:10px 0 0}
+
+/* motion: the bar wipes in once; off when reduced motion is asked for */
+.bn-bar{animation:bn-wipe .6s cubic-bezier(.19,1,.22,1) backwards}
+@keyframes bn-wipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@media (prefers-reduced-motion:reduce){.bn-bar{animation:none}}
+
+/* narrow screens: the path runs top to bottom */
+@media (max-width:700px){
+  .bn-path{flex-direction:column;gap:12px}
+  .bn-block,.bn-block.bn-visitor,.bn-block.bn-edge{flex:none}
+  .bn-block+.bn-block::before{left:50%;top:-13px;width:0;height:12px;border-top:0;border-left:1px solid var(--hair)}
+  .bn-checks>div+div,.bn-card+.bn-card{border-left:0;padding-left:0;border-top:1px solid var(--hair)}
+}
+@media (forced-colors:active){
+  .bn-block.bn-biggest{border:4px double CanvasText}
+  .bn-block.bn-possible{border:2px dashed CanvasText}
+}

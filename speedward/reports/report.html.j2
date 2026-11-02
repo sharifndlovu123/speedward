@@ -57,6 +57,8 @@ footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:v
 {% if skipped %}<ul class="skipped" aria-label="Measurements that did not run">{% for n in skipped %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
 <p class="mute">{{ cache_note }}</p>
 
+{{ bottleneck }}
+
 <section>
 <h2>Locations</h2>
 <div class="scroll" tabindex="0" role="region" aria-label="Locations table"><table>

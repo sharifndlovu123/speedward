@@ -231,6 +231,41 @@ The Cache column is an immediate repeat request. It is **not a browser cache tes
 
 The probe's network type (ISP or data centre) is recorded in JSON exports as `network_type` but is not shown in the web UI or the other reports yet.
 
+## Where the time goes (the bottleneck)
+
+After a scan, speedward names the stage of a request that costs the most time and what to look at first. It is worked out only from numbers it already measures, and only from **measured** places: blocked, failed and not-run places are counted in a footnote and left out of every figure, average and mark.
+
+In the web UI the headline sits under the summary figures; "See the request path" opens the block diagram in the Details drawer. Select a place (a map dot, a table row or a name in "Each place") to redraw the diagram for that place alone; a blocked or failed place shows only its reason. The HTML and Markdown exports carry the same panel, the JSON export a `diagnosis` field, and the command line prints a short version after the report.
+
+**The stages.** A request is drawn left to right: the visitor (the test place), DNS lookup, connect, TLS handshake, the edge or CDN (drawn dashed: we see whether it was a cache HIT or MISS and which edge answered, but not how long it took), server wait, download. Server wait is Globalping's `firstByte` timing as returned: it already starts after DNS, connect and TLS (in the recorded results the five stages add up to Globalping's total), so nothing is subtracted. A stage that Globalping did not return (TLS on plain HTTP, for example) is "not available", never zero. The summary's "Average first byte" and the `--max-ttfb` limit use the same Globalping `firstByte` field: it starts after the handshake, so it is smaller than a conventional time to first byte (which also counts DNS, connect and TLS), and the panel calls that same field "server wait". Averages are per stage over the measured places that returned it; the total is the sum of those averages, and each share is a stage's average over that total.
+
+**The marks** (outline, pattern and a text label, never colour alone):
+
+| Mark | Rule | Constant |
+| --- | --- | --- |
+| biggest block | the largest share, and at least 40% of the total. Below that the headline says "no single stage dominates" | `BIGGEST_SHARE = 0.40` |
+| possible block | any other stage with at least 25% of the total, or connect / TLS when they grow with distance (below) | `POSSIBLE_SHARE = 0.25` |
+| fine | everything else that was measured | |
+| (none) | fewer than 3 measured places: the timings are shown but nothing is marked, and it says "not enough places for a conclusion" | `MIN_PLACES = 3` |
+
+**Server wait or distance or DNS.**
+
+- *Server wait:* the card says close places wait too when server wait is at least 40% of the time in a place whose connect time is under 40 ms (`NEAR_CONNECT_MS = 40`).
+- *Distance:* connect or TLS "grows with distance" when, across at least 3 places with a known server position, its time correlates with the distance to the server that answered (correlation of at least 0.7, `DISTANCE_CORRELATION`) and the slowest place takes at least 50 ms longer than the quickest (`DISTANCE_SPREAD_MS = 50`). The distance is from the test place to the server that answered it (see "lines to the server that answered" above), or to the one configured or pinned server. Without any position it only reports the plain spread of connect times.
+- *DNS* is called out when the lookup is at least 25% of the time in at least one place.
+- *Caching:* HIT and MISS counts come from the CDN headers. The repeat gain uses only places repeated on the same test machine, as the Cache gain figure does; otherwise it says why there is none.
+
+The rule values live in `speedward/core/bottleneck.py`. They are not settings yet. Each saved diagnosis records the values it was made with, and a saved copy is only accepted if those are exactly these default values and the diagnosis is exactly what they give for the report's own timings. A report from before this feature loads without a panel.
+
+**What it cannot tell you.**
+
+- *Why* a stage is slow. Server wait covers everything the server does before the first byte (application code, database, a cache MISS at the CDN, a cold start); speedward cannot see inside it. Every sentence says "the timings indicate", and each "what to check" line is a prompt, not a diagnosis.
+- How long the edge or CDN itself took: Globalping does not time it separately, so it is drawn but not measured.
+- Anything about the browser: one HTML request per place, no images, scripts, rendering or the visitor's own network. A real visitor's page load can be dominated by things this never sees.
+- A steady picture: it is one cold request per place (and one repeat). A single slow answer can move an average; run it again before acting on a close call.
+- Distance without a server position: with no geo-IP database, pin or `SERVER_LAT`/`SERVER_LON`, it cannot say whether connect time grows with distance.
+- Anything from blocked or failed places: they are left out, so a scan where most places failed describes only the few that answered.
+
 ## Test cost and the allowance
 
 Every location costs tests: about 3 per place for the default scan (36 for 12 places), more with `--traceroute` and `--dns`. Speedward shows the estimate and your remaining hourly allowance before every scan, and refuses a scan that does not fit unless you confirm (`--yes` on the command line, a checkbox in the web UI). Beyond the hourly allowance, tests use Globalping credits; with none, they will not run. To stay under: use `--estimate`, pick fewer places with `--locations`, skip the extra checks, and wait for the hour to roll over.

@@ -36,6 +36,7 @@ from speedward.core.runner import ScanError, run_scan, start_message
 from speedward.core.target import normalise_target
 from speedward.reports import render as render_report
 from speedward.reports._view import context
+from speedward.reports.bottleneck import render_bottleneck
 from speedward.reports.map import render_map, render_picker_map
 
 from . import state
@@ -341,7 +342,9 @@ def render_result(request):
     verdict, failed = _pass_fail(report, limits)
     # render_map escapes every dynamic string itself (see speedward/reports/map.py).
     svg = render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS, pin_hint=True)
-    ctx.update(map_svg=mark_safe(svg),  # noqa: S308
+    # The panel comes from our own autoescaping template; "" for a report from before diagnoses.
+    panel = render_bottleneck(report, interactive=True, heading="h3")
+    ctx.update(map_svg=mark_safe(svg), bottleneck=mark_safe(panel),  # noqa: S308
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
     return render(request, "_results.html", ctx)
