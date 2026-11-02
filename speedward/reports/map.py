@@ -23,20 +23,29 @@ SLOW_MS = 800
 
 _STATUS_TEXT = {"blocked": "blocked", "test_failed": "test failed", "not_run": "did not run"}
 
+_DARK = ("--bg:#141414;--land:#2A2723;--ink:#EDE8DF;--fast:#4CC38A;--mid:#E0A43A;--slow:#FF6B5A;"
+         "--off:#8C877F;--pin:#E8553D;--sq:#E8553D")
 _STYLE = (
-    ".sw-map{--land:#d9dee5;--fast:#1a9850;--mid:#e0a100;--slow:#d73027;--off:#8a8f98;--ink:#1f2933;"
-    "--bg:#f6f8fa;--pin:#2b5fd9;--sq:#3d4652}"
-    "@media (prefers-color-scheme:dark){.sw-map{--land:#2e3640;--fast:#4cc38a;--mid:#f0b429;"
-    "--slow:#ff6b61;--off:#7b838d;--ink:#e6e9ee;--bg:#161b22;--pin:#7aa2ff;--sq:#e6e9ee}}"
-    ".sw-map text{fill:var(--ink);font-family:system-ui,sans-serif}"
+    # Paper and ink, matching the page tokens. Speed colours reach 3:1 on land and paper; the red accent
+    # (--pin, --sq) marks servers only. Checked in tests/test_contrast.py.
+    ".sw-map{--bg:#F0EAE0;--land:#E1D9CB;--ink:#1C1C1C;--fast:#1A7F37;--mid:#8F5400;--slow:#B3261E;"
+    "--off:#76716A;--pin:#C62F17;--sq:#C62F17}"
+    f'@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]) .sw-map{{{_DARK}}}}}'
+    f':root[data-theme="dark"] .sw-map{{{_DARK}}}'
+    ".sw-map text{fill:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,"
+    "sans-serif;font-weight:500;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}"
+    # A paper halo keeps each dot clear of the lines under it.
+    ".sw-dot{stroke:var(--bg);stroke-width:1.5}"
+    # No data: a hollow ring, so the state is not told by colour alone (the label says why).
+    ".sw-dot.sw-none{fill:var(--bg);stroke:var(--off);stroke-width:2}"
     # Keyboard focus ring: a stroke, because SVG outlines do not draw in Firefox. Ink on the map
-    # background is well above 3:1 in light and dark. The selected dot keeps a --pin stroke.
+    # background is well above 3:1 in light and dark. The selected dot keeps an ink stroke.
     ".sw-dot:focus,.sw-pick:focus,.sw-sq:focus{outline:none}"
-    # Squares: the server that answered (small), or the one Server (larger, blue).
+    # Squares: the server that answered (small), or the one Server (larger), both in the accent red.
     ".sw-sq{fill:var(--sq);stroke:var(--bg);stroke-width:1}.sw-server{fill:var(--pin);stroke-width:2}"
     ".sw-here{fill:none;stroke:var(--sq);stroke-width:1.5}"
     ".sw-sq:focus-visible{stroke:var(--ink);stroke-width:3}"
-    ".sw-dot.sw-sel{stroke:var(--pin);stroke-width:3}"
+    ".sw-dot.sw-sel{stroke:var(--ink);stroke-width:3}"
     ".sw-dot:focus-visible,.sw-pick:focus-visible{outline:none;stroke:var(--ink);stroke-width:4;"
     "filter:drop-shadow(0 0 2px var(--bg))}"
 )
@@ -161,6 +170,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             col = _colour(fb, fast_ms, slow_ms)
             line = f'stroke="{col}" stroke-width="{_num(1.6 * k)}" fill="none" opacity="0.85"'
             dot = f'fill="{col}"'
+            none = ""
             text = f"{name} {fb:.0f}ms"
         else:
             if r.status == "measured":
@@ -168,7 +178,8 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             else:
                 text = f"{name} {_STATUS_TEXT[r.status]}: {r.reason or 'no reason given'}"
             line = dashed
-            dot = 'fill="var(--off)" opacity="0.6"'
+            dot = 'fill="var(--off)"'
+            none = " sw-none"
         title = text
         if r.status == "measured" and r.edge_note and not manual:
             title += f"; {r.edge_note} ({r.edge_reason}), no square drawn"
@@ -183,7 +194,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
             qx, qy = proj(r.server_position.lat, r.server_position.lon)
             arcs.append(arc(x, y, qx, qy, line))
         # data-row ties the dot to its row in the results table (the web UI highlights it on click).
-        dots.append(f'<circle class="sw-dot" data-row="{row}" tabindex="0" cx="{_num(x)}" cy="{_num(y)}" '
+        dots.append(f'<circle class="sw-dot{none}" data-row="{row}" tabindex="0" cx="{_num(x)}" cy="{_num(y)}" '
                     f'r="{_num(4 * k)}" {dot}>'
                     f"<title>{escape(title)}</title></circle>")
         dim = "" if fb is not None else ' opacity="0.7"'
@@ -230,13 +241,15 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
 
 
 _PICK_STYLE = (
-    ".sw-pick{fill:var(--bg);stroke:var(--off);stroke-width:2;cursor:pointer}"
-    '.sw-pick[aria-checked="true"]{fill:var(--pin);stroke:var(--bg)}'
+    # Not chosen: a paper dot with an ink ring. Chosen: a filled ink dot. Shape, not colour, tells them apart.
+    ".sw-pick{fill:var(--bg);stroke:var(--ink);stroke-width:1.5;cursor:pointer}"
+    '.sw-pick[aria-checked="true"]{fill:var(--ink);stroke:var(--bg);stroke-width:2}'
     # After the checked rule and more specific, so the ring shows on checked and unchecked picks.
     '.sw-pick:focus-visible,.sw-pick[aria-checked="true"]:focus-visible{stroke:var(--ink);stroke-width:4}'
     "@keyframes sw-pulse{50%{opacity:.35}}"
     ".sw-scanning .sw-pick[aria-checked=\"true\"]{animation:sw-pulse 1.2s ease-in-out infinite}"
     ".sw-locked .sw-pick{cursor:default}"
+    "@media (prefers-reduced-motion:reduce){.sw-scanning .sw-pick{animation:none}}"
     # The server pin: drag it, or focus it and use the arrow keys. The ring only shows on keyboard focus.
     ".sw-pin{cursor:grab;touch-action:none}.sw-pin:focus{outline:none}"
     ".sw-pin .sw-body{fill:var(--pin);stroke:var(--bg);stroke-width:2}"
@@ -245,7 +258,7 @@ _PICK_STYLE = (
     ".sw-pin.sw-unset .sw-body{fill:var(--bg);stroke:var(--pin);stroke-dasharray:4 3}"
     ".sw-pin:focus-visible .sw-ring{stroke:var(--ink);stroke-width:3}"
     ".sw-pin.sw-drag{cursor:grabbing}.sw-locked .sw-pin{cursor:default}"
-    ".sw-pin text{fill:var(--ink);font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3px;"
+    ".sw-pin text{fill:var(--ink);font-weight:600;text-transform:uppercase;letter-spacing:.1em;"
     "pointer-events:none}"
     ".sw-preview path{fill:none;stroke:var(--pin);stroke-width:1.4;opacity:.4;pointer-events:none}"
 )
