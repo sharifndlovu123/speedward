@@ -266,9 +266,40 @@ The rule values live in `speedward/core/bottleneck.py`. They are not settings ye
 - Distance without a server position: with no geo-IP database, pin or `SERVER_LAT`/`SERVER_LON`, it cannot say whether connect time grows with distance.
 - Anything from blocked or failed places: they are left out, so a scan where most places failed describes only the few that answered.
 
+## More checks: who can reach it
+
+Under the address, "More checks" adds opt-in reachability checks. Nothing is ticked by default, so the
+default scan stays at 3 tests per place. Every check runs from Globalping's probes, reusing the main
+test's machines by measurement id (new machines in the same places only if those are gone); nothing runs
+from this server, and no local traceroute, mtr, dig or ping is ever used.
+
+| Check | Cost | What it does | Cell |
+| --- | --- | --- | --- |
+| Over IPv4 and IPv6 | +1 test per place | The same HTTPS request with `ipVersion: 6` | reached (time) or blocked (for example "no IPv6 address (AAAA record) for the name") |
+| Over HTTP and HTTPS | +1 | A plain `http://` request (port 80); the redirect is read, not followed | "→ HTTPS", "redirects, not to HTTPS", "served over HTTP", or blocked |
+| Through different DNS resolvers | +2 | A DNS lookup through 1.1.1.1 and 8.8.8.8 | resolves (time per resolver), or blocked when the name has no A record or is not found |
+| Port reachable (TCP 443) | +1 | 3 TCP connection attempts to 443 (or the port in the address) | open (round trip), or closed when no attempt is answered |
+
+The cost of each ticked check and the total are shown before every scan (web and `--checks` on the CLI,
+for example `speedward scan URL --checks ipv6,http,dns,port --estimate`), and a scan over the allowance
+still needs your confirmation.
+
+The "Who can reach it" grid has a row per place and a column per check, beside the main test's own
+HTTPS-over-IPv4 result. Each cell is a symbol and a word: ● reached, ○ blocked / closed (the site side
+refused, timed out, has no address or no open port), ◌ no data (the Globalping side failed or the check
+did not run; never counted). The finding counts only reached and blocked cells, for example "The timings
+indicate: 2 of 4 places cannot reach the site over IPv6 (Tokyo, Seoul)", and ends with what to check.
+With fewer than 3 places that have a result it says there are not enough places. On the map, each dot
+shows the worst result for its place: an open ink ring means a check was blocked there.
+
+What it cannot tell you: why a place is blocked (a firewall, a regional block and a broken route look the
+same from outside); whether real visitors in that place see the same (one test machine per place); whether
+a resolver answer of SERVFAIL or REFUSED is the site's fault (shown as "no data"); and whether HTTP/3 or
+a specific edge is used. A resolving name does not count as reaching the site.
+
 ## Test cost and the allowance
 
-Every location costs tests: about 3 per place for the default scan (36 for 12 places), more with `--traceroute` and `--dns`. Speedward shows the estimate and your remaining hourly allowance before every scan, and refuses a scan that does not fit unless you confirm (`--yes` on the command line, a checkbox in the web UI). Beyond the hourly allowance, tests use Globalping credits; with none, they will not run. To stay under: use `--estimate`, pick fewer places with `--locations`, skip the extra checks, and wait for the hour to roll over.
+Every location costs tests: about 3 per place for the default scan (36 for 12 places), more with `--traceroute`, `--dns` and `--checks`. Speedward shows the estimate and your remaining hourly allowance before every scan, and refuses a scan that does not fit unless you confirm (`--yes` on the command line, a checkbox in the web UI). Beyond the hourly allowance, tests use Globalping credits; with none, they will not run. To stay under: use `--estimate`, pick fewer places with `--locations`, skip the extra checks, and wait for the hour to roll over.
 
 ## Privacy
 
