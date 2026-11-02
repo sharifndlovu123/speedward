@@ -27,7 +27,7 @@ def _valid_override(override):
     try:
         lat, lon = float(override[0]), float(override[1])
     except (TypeError, ValueError, IndexError):
-        raise ValueError("server position override must be (lat, lon) numbers")
+        raise ValueError("server position override must be (lat, lon) numbers") from None
     if not (-90 <= lat <= 90):
         raise ValueError(f"latitude {lat} out of range -90..90")
     if not (-180 <= lon <= 180):
@@ -113,5 +113,5 @@ def geolocator_from_env(environ: Mapping[str, str]) -> Geolocator:
         try:
             override = (float(lat), float(lon))
         except ValueError:
-            raise ValueError("SERVER_LAT and SERVER_LON must be numbers")
+            raise ValueError("SERVER_LAT and SERVER_LON must be numbers") from None
     return Geolocator(db, override)

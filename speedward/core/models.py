@@ -212,7 +212,7 @@ class ScanReport:
         }
 
     @classmethod
-    def from_dict(cls, data) -> "ScanReport":
+    def from_dict(cls, data) -> ScanReport:
         """Rebuild a report from `to_dict` output (for example a copy the browser saved).
 
         The input is untrusted: anything missing, of the wrong type or of another schema version

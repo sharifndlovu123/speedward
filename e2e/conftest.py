@@ -85,7 +85,7 @@ def live_site(fake_globalping, tmp_path_factory):
                 break
             except OSError:
                 if proc.poll() is not None:
-                    raise RuntimeError(proc.stderr.read().decode())
+                    raise RuntimeError(proc.stderr.read().decode()) from None
                 time.sleep(0.1)
         else:
             raise RuntimeError("gunicorn did not start")

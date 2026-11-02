@@ -126,7 +126,7 @@ def index(request):
          "on": "true" if p.name in defaults else "false"} for p in CATALOG if p.continent == c]}
         for c in CONTINENTS]
     return render(request, "index.html", {
-        "groups": groups, "picker_svg": mark_safe(render_picker_map(defaults)),
+        "groups": groups, "picker_svg": mark_safe(render_picker_map(defaults)),  # noqa: S308  static SVG built by our own code
         "strip_text": strip, "strip_link": strip_link,
         "notice": NOTICE,
         "ttl_seconds": settings.RESULT_TTL_SECONDS, "ttl_minutes": max(1, settings.RESULT_TTL_SECONDS // 60),
@@ -328,7 +328,7 @@ def render_result(request):
         row["index"] = i
     verdict, failed = _pass_fail(report, limits)
     # render_map escapes every dynamic string itself (see speedward/reports/map.py).
-    ctx.update(map_svg=mark_safe(render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)),
+    ctx.update(map_svg=mark_safe(render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)),  # noqa: S308
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
     return render(request, "_results.html", ctx)
