@@ -82,3 +82,29 @@ def test_unknown_remaining_fits_and_credits_noted():
     assert check_budget(Plan(LOCS, False, False, False), allowance(remaining=None)).fits
     v = check_budget(Plan(LOCS, False, False, False), allowance(remaining=20, credits=100))
     assert not v.fits and "credits" in v.reason
+
+
+# --- checks an address cannot use are not charged (README: "uses no tests") -----------------------
+
+def test_skipped_checks_cost_nothing_and_say_so():
+    from speedward.core.budget import describe_breakdown
+
+    two = [{"magic": "Berlin"}, {"magic": "Tokyo"}]
+    every = ("ipv6", "http", "dns", "port", "consistency", "http2", "compression", "dnstrace", "mtr")
+    full = Plan(two, checks=every)
+    assert estimate_cost(full) == 2 * (3 + 5 + 4 + 4)
+    plain = Plan(two, checks=every, plain_http=True)
+    assert estimate_cost(plain) == estimate_cost(full) - 2  # no HTTP/2 on http://
+    assert "HTTP/2 against HTTP/1.1: not run for this address = 0" in describe_breakdown(plain)
+    ip = Plan(two, checks=every, ip_target=True)
+    assert estimate_cost(ip) == estimate_cost(full) - 2 * (1 + 2 + 1)  # IPv6, two resolvers, DNS trace
+    assert "DNS delegation trace: not run for this address = 0" in describe_breakdown(ip)
+
+
+def test_target_traits():
+    from speedward.core.target import target_traits
+
+    assert target_traits("example.com") == (False, False)
+    assert target_traits("http://example.com/") == (True, False)
+    assert target_traits("https://192.0.2.10/") == (False, True)
+    assert target_traits("http://[2001:db8::1]:8080/") == (True, True)

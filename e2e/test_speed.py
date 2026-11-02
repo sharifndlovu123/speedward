@@ -180,3 +180,17 @@ def test_an_old_saved_result_loads_with_no_speed_panel(page, live_site, watch):
     expect(page.locator("#saved-banner")).to_be_visible()
     expect(page.locator("#results-map svg.sw-map")).to_be_visible()
     expect(page.locator(".sp-head, .speedchecks, .bn-extra")).to_have_count(0)
+
+
+def test_the_estimate_leaves_out_checks_a_plain_or_ip_address_cannot_use(page, live_site, fake_globalping, watch):
+    page.goto(live_site + "/")
+    pick(page, "Berlin", "Tokyo")
+    tick(page, "http2", "dnstrace")
+    expect(page.locator("#estimate")).to_contain_text("about 10 tests")
+    page.fill("#url", "http://example.com/")
+    expect(page.locator("#estimate")).to_contain_text("about 8 tests")
+    expect(page.locator("#mc-total")).to_contain_text("HTTP/2 against HTTP/1.1: not run for this address = 0")
+    page.fill("#url", "http://192.0.2.10/")
+    expect(page.locator("#estimate")).to_contain_text("about 6 tests")
+    page.fill("#url", "https://example.com/")
+    expect(page.locator("#estimate")).to_contain_text("about 10 tests")

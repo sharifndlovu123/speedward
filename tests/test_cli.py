@@ -433,3 +433,12 @@ def test_speed_checks_run_and_print_is_it_fast(fake):
 def test_help_names_the_speed_checks():
     r = runner.invoke(app, ["scan", "--help"], terminal_width=200)
     assert "consistency" in r.stdout and "dnstrace" in r.stdout
+
+
+def test_estimate_leaves_out_checks_the_address_cannot_use(fake):
+    r = runner.invoke(app, ["scan", "http://192.0.2.10/", "--locations", "Berlin,Tokyo", "--estimate",
+                            "--checks", "http2,dnstrace,ipv6,dns,mtr"])
+    assert r.exit_code == 0
+    assert "about 8 tests" in r.stderr  # 6 default + mtr 2; the rest cannot run on this address
+    assert "HTTP/2 against HTTP/1.1: not run for this address = 0" in r.stderr
+    assert fake.posts() == []

@@ -34,7 +34,7 @@ from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingErr
 from speedward.core.locations import CATALOG, CONTINENTS, DEFAULT_LOCATIONS, parse_locations, per_continent
 from speedward.core.models import ScanReport
 from speedward.core.runner import ScanError, run_scan, start_message
-from speedward.core.target import normalise_target
+from speedward.core.target import normalise_target, target_traits
 from speedward.reports import render as render_report
 from speedward.reports._view import context
 from speedward.reports.bottleneck import render_bottleneck
@@ -85,10 +85,17 @@ def _error(message: str, status: int, **extra) -> JsonResponse:
 
 
 def _plan(request) -> Plan:
-    """ValueError (with a fixed, target-free message) on a bad locations list."""
+    """ValueError (with a fixed, target-free message) on a bad locations list. A scan posts the address,
+    and what it is decides which checks are skipped (and not charged). The estimate never sends the
+    address, only two flags the page works out from it: `plain` (http://) and `ip` (an IP address)."""
+    url = request.POST.get("url", "")
+    if url.strip():
+        plain, ip = target_traits(url)
+    else:
+        plain, ip = request.POST.get("plain") == "1", request.POST.get("ip") == "1"
     return Plan(locations=parse_locations(request.POST.get("locations")),
                 traceroute=bool(request.POST.get("traceroute")), dns=bool(request.POST.get("dns")),
-                checks=parse_checks(request.POST.get("checks")))
+                checks=parse_checks(request.POST.get("checks")), plain_http=plain, ip_target=ip)
 
 
 def _budget(plan: Plan, allowance: Allowance) -> dict:

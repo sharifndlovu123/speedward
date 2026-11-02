@@ -63,7 +63,7 @@ from speedward.core.models import (
     Stages,
     TraceStep,
 )
-from speedward.core.target import normalise_target
+from speedward.core.target import is_ip_host, normalise_target
 
 _HTTP_VERSION = re.compile(r"^HTTP/(\d(?:\.\d)?)\s")
 
@@ -474,7 +474,6 @@ def _dns(cold, doc, why: str, reused: bool = False) -> list[DnsResult]:
 
 # --- "More checks" (speedward/core/checks.py) ---------------------------------------------------------
 
-_IP_ADDRESS = re.compile(r"^[\d.]+$|:")
 _DNS_CODE = re.compile(r"[A-Z]{2,12}")
 NOT_A_NAME = "the address is an IP address, so there is no name to try this with"
 NO_CHECK_RESULT = "no result for this probe"
@@ -563,7 +562,7 @@ def _port_fields(port: int):
 
 def _reach(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) -> list[ReachResult]:
     host = scan.host
-    is_ip = bool(_IP_ADDRESS.search(host))
+    is_ip = is_ip_host(host)
     out: list[ReachResult] = []
 
     def run(what: str, type: str, options: dict, build, **fixed):
@@ -754,7 +753,7 @@ def _mtr_failed(res: dict, status: str, reason: str):
 
 
 def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) -> list[SpeedResult]:
-    is_ip = bool(_IP_ADDRESS.search(scan.host))
+    is_ip = is_ip_host(scan.host)
     out: list[SpeedResult] = []
 
     def run(what: str, type: str, options: dict, build, failed=None, **fixed):

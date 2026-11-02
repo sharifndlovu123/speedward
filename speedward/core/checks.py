@@ -25,6 +25,10 @@ PER_PLACE = {IPV6: 1, PLAIN_HTTP: 1, RESOLVERS_CHECK: len(RESOLVERS), PORT: 1,
              CONSISTENCY: CONSISTENCY_EXTRA, HTTP2: 1, COMPRESSION: 1, DNS_TRACE: 1, MTR: 1}
 PORT_PACKETS = 3  # TCP connection attempts per place (the API allows 1 to 16)
 
+# Checks that cannot run on some addresses: skipped (shown as "did not run") and never charged.
+SKIPPED_ON_IP = (IPV6, RESOLVERS_CHECK, DNS_TRACE)  # no name to look up or to ask for over IPv6
+SKIPPED_ON_PLAIN_HTTP = (HTTP2,)  # HTTP/2 is tried over HTTPS only
+
 LABEL = {
     IPV6: "Over IPv4 and IPv6",
     PLAIN_HTTP: "Over HTTP and HTTPS",

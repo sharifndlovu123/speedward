@@ -18,7 +18,7 @@ from speedward.core.globalping import DEFAULT_BASE_URL, GlobalpingClient, Global
 from speedward.core.locations import parse_locations
 from speedward.core.models import clean
 from speedward.core.runner import ScanError, run_scan, start_message
-from speedward.core.target import normalise_target
+from speedward.core.target import normalise_target, target_traits
 from speedward.reports import FORMATS, render
 from speedward.reports._view import skipped
 from speedward.reports.bottleneck import cli_lines
@@ -120,7 +120,9 @@ def _run(url, locations, traceroute, dns, checks, browser, fmt, out, max_ttfb, m
         raise typer.Exit(2)
     if browser:
         _err("Note: the browser test is not available in this build yet; continuing without it.")
-    plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False, checks=ticked)
+    plain, ip = target_traits(url)  # checks this address cannot use are skipped and not charged
+    plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False, checks=ticked,
+                plain_http=plain, ip_target=ip)
 
     env = environment()
     try:  # checked before any test is spent

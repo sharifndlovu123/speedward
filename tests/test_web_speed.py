@@ -81,3 +81,26 @@ def test_exports_carry_the_speed_checks(client, fake):  # noqa: F811
     assert js["speed_summary"]["checks"] == ["compression"]
     html = client.post(reverse("export", args=["html"]), body, content_type="application/json").content.decode()
     assert "Is it fast? Speed checks" in html
+
+
+def test_estimate_leaves_out_checks_the_address_cannot_use(client):
+    # The page never sends the address to /estimate, only what it is.
+    full = client.post(reverse("estimate"), form(url="", checks="http2,dnstrace,ipv6")).json()
+    assert full["cost"] == 2 * (3 + 3)
+    plain = client.post(reverse("estimate"), form(url="", checks="http2,dnstrace,ipv6", plain="1")).json()
+    assert plain["cost"] == 2 * (3 + 2)
+    assert "HTTP/2 against HTTP/1.1: not run for this address = 0" in plain["breakdown"]
+    ip = client.post(reverse("estimate"), form(url="", checks="http2,dnstrace,ipv6", ip="1")).json()
+    assert ip["cost"] == 2 * (3 + 1)
+
+
+def test_scan_cost_follows_the_posted_address_and_matches_what_is_spent(client, fake):  # noqa: F811
+    fake.remaining = 7  # the default scan costs 6; HTTP/2 would make it 8, but http:// skips it
+    result = run_full_scan(client, url="http://example.com/", checks="http2")
+    assert {x["status"] for x in result["speed"]} == {"not_run"}
+    assert [p["type"] for p in fake.posts()] == ["http", "http", "ping"]
+
+
+def test_a_posted_address_wins_over_the_flags(client):
+    body = client.post(reverse("estimate"), form(url="https://example.com/", checks="http2", plain="1")).json()
+    assert body["cost"] == 2 * (3 + 1)

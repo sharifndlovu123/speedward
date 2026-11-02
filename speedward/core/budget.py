@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from speedward.core.checks import LABEL, PER_PLACE
+from speedward.core.checks import LABEL, PER_PLACE, SKIPPED_ON_IP, SKIPPED_ON_PLAIN_HTTP
 from speedward.core.globalping import Allowance
 
 BASE_PER_LOCATION = 3  # cold http + warm http + ping
@@ -15,7 +15,13 @@ class Plan:
     traceroute: bool = False
     dns: bool = False
     browser: bool = False  # runs locally, costs no Globalping tests
-    checks: tuple[str, ...] = ()  # ticked "More checks" (speedward.core.checks.REACH_CHECKS)
+    checks: tuple[str, ...] = ()  # ticked "More checks" (speedward.core.checks.ALL_CHECKS)
+    # What the address is, so checks it cannot use are not charged (speedward.core.target.target_traits).
+    plain_http: bool = False
+    ip_target: bool = False
+
+    def skipped(self, check: str) -> bool:
+        return (self.ip_target and check in SKIPPED_ON_IP) or (self.plain_http and check in SKIPPED_ON_PLAIN_HTTP)
 
 
 @dataclass
@@ -40,7 +46,7 @@ def cost_breakdown(plan: Plan) -> list[CostLine]:
         parts.append(("traceroute", 1))
     if plan.dns:
         parts.append(("dns_answers", 1))
-    parts += [(c, PER_PLACE[c]) for c in plan.checks]
+    parts += [(c, 0 if plan.skipped(c) else PER_PLACE[c]) for c in plan.checks]
     return [CostLine(key, per, per * n) for key, per in parts]
 
 
@@ -52,6 +58,7 @@ def describe_breakdown(plan: Plan) -> str:
     lines = cost_breakdown(plan)
     n = len(plan.locations)
     parts = [f"{PART_LABEL[x.key]} {x.per_place} per place = {x.cost}" if x.key == "base"
+             else f"{PART_LABEL[x.key]}: not run for this address = 0" if plan.skipped(x.key)
              else f"{PART_LABEL[x.key]} +{x.per_place} per place = {x.cost}" for x in lines]
     return (" · ".join(parts) + f" · {n} place{'' if n == 1 else 's'}: about {sum(x.cost for x in lines)} tests")
 
