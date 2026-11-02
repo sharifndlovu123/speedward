@@ -428,3 +428,13 @@ def test_report_without_a_diagnosis_has_no_diagnosis_key():
     r = _diagnosed()
     r.diagnosis = None
     assert "diagnosis" not in r.to_dict()
+
+
+@pytest.mark.parametrize("rule", ["biggest_share", "min_places", "near_connect_ms"])
+def test_from_dict_refuses_a_huge_rule_number_with_valueerror(rule):
+    text = json.dumps(_diagnosed().to_dict()).replace(f'"{rule}": ', f'"{rule}": 1{"0" * 400}, "_x": ', 1)
+    d = json.loads(text)
+    del d["diagnosis"]["rules"]["_x"]
+    assert d["diagnosis"]["rules"][rule] == 10**400
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)

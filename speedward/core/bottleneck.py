@@ -338,7 +338,15 @@ def _rule(d: dict, key: str, lo: float, hi: float, whole: bool = False):
     value = d.get(key)
     if isinstance(value, bool) or not isinstance(value, int if whole else (int, float)):
         raise ValueError(f"diagnosis rule {key} must be a number")
-    if not (math.isfinite(value) and lo <= value <= hi):
+    # The range check comes first: it compares a huge JSON integer (10**400) exactly, where
+    # math.isfinite would raise OverflowError converting it to float. NaN fails the comparison too.
+    if not lo <= value <= hi:
+        raise ValueError(f"diagnosis rule {key} is out of range")
+    try:
+        finite = math.isfinite(value)
+    except ArithmeticError:
+        finite = False
+    if not finite:
         raise ValueError(f"diagnosis rule {key} is out of range")
     return value
 
