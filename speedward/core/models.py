@@ -12,10 +12,14 @@ SCHEMA_VERSION = 1
 # C0/C1 control characters except tab and newline: target-controlled text must never be able to
 # carry terminal escape sequences into a report.
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+# Bidi overrides/isolates/marks and invisible format characters (they can make a report read as
+# something else) are removed; Unicode line and paragraph separators become spaces.
+_INVISIBLE = re.compile("[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+_SEPARATORS = re.compile("[\u2028\u2029]")
 
 
 def clean(text: str) -> str:
-    return _CONTROL.sub("�", text)
+    return _SEPARATORS.sub(" ", _INVISIBLE.sub("", _CONTROL.sub("�", text)))
 
 
 STATUSES = ("measured", "blocked", "test_failed", "not_run")
@@ -239,6 +243,9 @@ class ScanReport:
     dns: list[DnsResult]
     browser: BrowserResult | None
 
+    def __post_init__(self):
+        self.target, self.version = clean(self.target), clean(self.version)
+
     def to_dict(self) -> dict:
         return {
             "schema_version": SCHEMA_VERSION,
@@ -325,6 +332,11 @@ def _int_or_none(d: dict, key: str) -> int | None:
     return value
 
 
+# No real timing comes near this (about 11.6 days in ms); anything above it is refused, so summaries
+# such as statistics.fmean can never overflow.
+MAX_MS = 1e9
+
+
 def _num_or_none(d: dict, key: str, lo: float = -math.inf, hi: float = math.inf) -> float | None:
     value = d.get(key)
     if value is None:
@@ -369,7 +381,7 @@ def _stages(d: dict, key: str) -> Stages | None:
     if value is None:
         return None
     value = _obj(value, key)
-    return Stages(**{name: _num_or_none(value, name, 0) for name in
+    return Stages(**{name: _num_or_none(value, name, 0, MAX_MS) for name in
                      ("dns", "connect", "tls", "first_byte", "download", "total")})
 
 
@@ -380,7 +392,7 @@ def _location_result(d: dict) -> LocationResult:
     return LocationResult(
         location=_location(d.get("location")), status=_s(d, "status"), reason=_s(d, "reason"),
         stages=_stages(d, "stages"), repeat_stages=_stages(d, "repeat_stages"),
-        ping_ms=_num_or_none(d, "ping_ms", 0), http_status=_int_or_none(d, "http_status"),
+        ping_ms=_num_or_none(d, "ping_ms", 0, MAX_MS), http_status=_int_or_none(d, "http_status"),
         cdn=_s_or_none(d, "cdn"), server_ip=_s_or_none(d, "server_ip"),
         tls_version=_s_or_none(d, "tls_version"), http_version=_s_or_none(d, "http_version"),
         redirects=_str_list(d, "redirects"), repeat_same_probe=same,
@@ -411,7 +423,7 @@ def _hop(d) -> Hop:
     n = d.get("n")
     if not isinstance(n, int) or isinstance(n, bool):
         raise ValueError("hop number must be a whole number")
-    return Hop(n, _s(d, "host"), _int_or_none(d, "asn"), _num_or_none(d, "rtt_ms", 0),
+    return Hop(n, _s(d, "host"), _int_or_none(d, "asn"), _num_or_none(d, "rtt_ms", 0, MAX_MS),
                _num_or_none(d, "loss_pct", 0, 100))
 
 
@@ -422,7 +434,7 @@ def _path(d: dict) -> PathResult:
 
 def _dns(d: dict) -> DnsResult:
     return DnsResult(_location(d.get("location")), _s(d, "status"), _s(d, "reason"),
-                     _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0), _s_or_none(d, "probe"))
+                     _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0, MAX_MS), _s_or_none(d, "probe"))
 
 
 # What Geolocator emits: a configured position, a geo-IP database, or the web form's pin.
@@ -447,4 +459,4 @@ def _browser(d: dict) -> BrowserResult:
             raise ValueError("biggest must be a list of [url, bytes] pairs")
         biggest.append((item[0], item[1]))
     return BrowserResult(_int_or_none(d, "page_weight_bytes"), _int_or_none(d, "requests"),
-                         _num_or_none(d, "load_ms", 0), biggest)
+                         _num_or_none(d, "load_ms", 0, MAX_MS), biggest)

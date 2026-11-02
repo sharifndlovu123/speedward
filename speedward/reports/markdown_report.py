@@ -36,7 +36,7 @@ def to_markdown(report) -> str:
         L += [f"- {_c(d['location'])}: {_c(d['answers'])} ({d['lookup']})" for d in c["dns"]]
     for p in c["paths"]:
         L += ["", f"## Route from {_c(p['location'])}", ""]
-        L += [f"- {p['note']}"] if p["note"] else [
+        L += [f"- {_c(p['note'])}"] if p["note"] else [
             f"{h['n']}. {_c(h['host'])} {h['rtt']}, loss {h['loss']}" for h in p["hops"]]
     if c["browser"]:
         b = c["browser"]

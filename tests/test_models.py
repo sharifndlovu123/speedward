@@ -345,3 +345,35 @@ def test_known_not_run_texts_load():
     d = json.loads(json.dumps(_full_report().to_dict()))
     d["options"]["not_run"] = ["repeat test: Globalping limit reached", "DNS check: the test failed on the Globalping side"]
     assert ScanReport.from_dict(d).options["not_run"] == d["options"]["not_run"]
+
+
+# --- final review: bidi controls, cleaned target/version, bounded timings -----------------------
+
+@pytest.mark.parametrize("ch", ["‮", "‪", "⁦", "⁩", "‎", "‏", "؜", "﻿", "​"])
+def test_clean_strips_bidi_and_invisible_format_characters(ch):
+    assert clean(f"a{ch}b") == "ab"
+
+
+@pytest.mark.parametrize("ch", [" ", " "])
+def test_clean_turns_line_separators_into_spaces(ch):
+    assert clean(f"a{ch}b") == "a b"
+
+
+def test_from_dict_cleans_target_and_version():
+    d = _broken(lambda d: d.update(target="https://exa‮mple.com/\x1b[31m", version="0.1 x"))
+    r = ScanReport.from_dict(d)
+    assert "‮" not in r.target and "\x1b" not in r.target
+    assert r.version == "0.1 x"
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda d: d["locations"][0]["stages"].update(first_byte=1e308),
+    lambda d: d["locations"][0]["stages"].update(total=1e10),
+    lambda d: d["locations"][0].update(ping_ms=1e308),
+    lambda d: d["dns"][0].update(lookup_ms=1e308),
+    lambda d: d["paths"][0]["hops"][0].update(rtt_ms=1e308),
+    lambda d: d["browser"].update(load_ms=1e308),
+])
+def test_from_dict_rejects_absurd_timings(mutate):
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(_broken(mutate))

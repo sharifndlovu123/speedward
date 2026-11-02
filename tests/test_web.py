@@ -821,3 +821,12 @@ def test_html_export_uses_configured_speed_thresholds(client, settings):
     settings.FAST_MS, settings.SLOW_MS = 50, 100
     html = post_json(client, reverse("export", args=["html"]), {"result": report_dict()}).content.decode()
     assert "green up to 50 ms first byte, red from 100 ms" in html
+
+
+@pytest.mark.parametrize("name", ["render", "export"])
+def test_huge_timings_are_a_400_not_a_500(client, name):
+    result = report_dict()
+    result["locations"][0]["stages"]["first_byte"] = 1e308
+    url = reverse(name) if name == "render" else reverse("export", args=["html"])
+    r = post_json(client, url, {"result": result, "limits": {}})
+    assert r.status_code == 400
