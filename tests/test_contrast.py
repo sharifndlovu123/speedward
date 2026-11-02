@@ -152,24 +152,32 @@ def test_speed_lines_pass_3_to_1_as_drawn(theme):
 BOTTLENECK_CSS = (Path(__file__).parent.parent / "speedward/reports/bottleneck.css").read_text()
 
 
+def test_diagram_has_no_red():
+    """CLAUDE.md: the red accent is only for the server marker and Start. The diagram is ink on paper."""
+    css = re.sub(r"/\*.*?\*/", "", BOTTLENECK_CSS, flags=re.S)
+    assert "--accent" not in css and "rgba(198" not in css.replace(" ", "")
+    assert "--accent" not in REPORT  # the export has no red at all
+
+
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("tokens", [PAGE, EXPORT], ids=["page", "export"])
 def test_biggest_block_outline_and_text(tokens, theme):
+    rule = re.search(r"\.bn-block\.bn-biggest\{([^}]*)\}", BOTTLENECK_CSS).group(1)
+    assert "outline:3px solid var(--ink)" in rule and "background:var(--ink)" in rule
     t = tokens[theme]
-    assert ratio(t["accent"], t["paper"]) >= UI, "the biggest block's red outline on the page"
-    assert ratio(t["accent"], t["ink"]) >= UI, "the red outline against the block's ink fill"
+    assert ratio(t["ink"], t["paper"]) >= UI, "the biggest block's thick ink frame on the page"
     assert ratio(t["paper"], t["ink"]) >= TEXT, "paper text inside the filled block"
 
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("tokens", [PAGE, EXPORT], ids=["page", "export"])
 def test_text_on_the_hatched_possible_block(tokens, theme):
-    """The hatch lines sit behind ink and muted text: the text must still pass on the hatch colour."""
-    m = re.search(r"\.bn-block\.bn-possible\{[^}]*rgba\((\d+),(\d+),(\d+),([\d.]+)\)", BOTTLENECK_CSS)
-    assert m, "possible block hatch not found"
-    hatch = "#" + "".join(f"{int(c):02x}" for c in m.groups()[:3])
+    """The ink hatch lines sit behind ink and muted text: the text must still pass on the hatch colour."""
+    m = re.search(r"\.bn-block\.bn-possible\{[^}]*color-mix\(in srgb,var\(--ink\) (\d+)%,transparent\)",
+                  BOTTLENECK_CSS)
+    assert m, "possible block ink hatch not found"
     t = tokens[theme]
-    line = _blend(hatch, t["paper"], float(m.group(4)))
+    line = _blend(t["ink"], t["paper"], int(m.group(1)) / 100)
     for fg in ("ink", "mute"):
         assert ratio(t[fg], line) >= TEXT, f"{theme} --{fg} on the hatch: {ratio(t[fg], line):.2f}"
 

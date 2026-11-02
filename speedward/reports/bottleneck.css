@@ -1,6 +1,7 @@
 /* "Where the time goes": one stylesheet for the web UI and the HTML export (inlined by the panel).
-   Uses the page tokens (--paper, --ink, --hair, --mute, --accent). Flat hairlines, no shadow, no radius.
-   Marks are never colour alone: biggest = thick outline + filled + label, possible = hatched + label,
+   Uses the page tokens (--paper, --ink, --hair, --mute); no red (that is for the server and Start only).
+   Flat hairlines, no shadow, no radius.
+   Marks are never colour alone: biggest = thick frame + filled + label, possible = hatched + label,
    fine = plain outline, edge / CDN = dashed (seen, not timed). Contrast: tests/test_contrast.py. */
 .bottleneck{margin:8px 0 0}
 .bn-kicker,.bn-k,.bn-cap,.bn-scale{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
@@ -30,8 +31,10 @@
 .bn-block.bn-edge{border-style:dashed}
 .bn-block.bn-not_available{border-style:dotted}
 .bn-block.bn-possible{flex-grow:1.4;
-  background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(198,47,23,.14) 6px 7px)}
-.bn-block.bn-biggest{flex-grow:2;border:3px solid var(--accent);background:var(--ink);color:var(--paper)}
+  background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--ink) 12%,transparent) 6px 7px)}
+/* the thick frame sits just outside the filled block, so it shows against the fill and the paper */
+.bn-block.bn-biggest{flex-grow:2;outline:3px solid var(--ink);outline-offset:2px;background:var(--ink);
+  color:var(--paper)}
 .bn-block.bn-biggest .bn-k,.bn-block.bn-biggest .bn-k strong,.bn-block.bn-biggest .bn-n{color:var(--paper)}
 .bn-block.bn-biggest b{font-size:1.6rem}
 
@@ -48,8 +51,8 @@
 .bn-key{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem}
 .bn-swatch{display:inline-block;width:18px;height:12px;border:1px solid var(--hair);vertical-align:middle;
   margin-right:6px;box-sizing:border-box}
-.bn-swatch.bn-biggest{border:3px solid var(--accent);background:var(--ink)}
-.bn-swatch.bn-possible{background:repeating-linear-gradient(135deg,transparent 0 3px,rgba(198,47,23,.45) 3px 4px)}
+.bn-swatch.bn-biggest{outline:2px solid var(--ink);outline-offset:1px;background:var(--ink)}
+.bn-swatch.bn-possible{background:repeating-linear-gradient(135deg,transparent 0 3px,var(--ink) 3px 4px)}
 .bn-swatch.bn-edge{border-style:dashed}
 
 /* what to check, and the three cards */
