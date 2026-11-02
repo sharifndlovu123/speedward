@@ -16,6 +16,7 @@ from speedward import __version__
 from speedward.core.analysis import cdn_status
 from speedward.core.bottleneck import diagnose
 from speedward.core.budget import Plan
+from speedward.core.checks import IPV6, PLAIN_HTTP, PORT, PORT_PACKETS, RESOLVER_IPS, RESOLVERS_CHECK
 from speedward.core.edge import Answer, cf_ray_code, place
 from speedward.core.geo import Geolocator
 from speedward.core.globalping import (
@@ -37,6 +38,7 @@ from speedward.core.models import (
     Location,
     LocationResult,
     PathResult,
+    ReachResult,
     ScanReport,
     ServerPosition,
     Stages,
@@ -288,7 +290,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         reason = "the test results could not be fetched from Globalping"
         results = [LocationResult(Location("", _magic_label(s), None, None, None, None, None),
                                   "test_failed", reason) for s in plan.locations]
-        return _report(target, started, plan, scan, None, results, [], [])
+        return _report(target, started, plan, scan, None, results, [], [], [] if plan.checks else None)
 
     cold = _items(cold_doc)
     fields = [_cold_fields(p, item) for p, item in cold]
@@ -336,7 +338,10 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         doc, reused, why = scan.measure("DNS check", "dns", cold_id, None, fallback_locations=plan.locations)
         dns = _dns(cold, doc, why, reused)
 
-    # 6. Where the server that answered each measured result is (offline: airport table, geo-IP).
+    # 6. The ticked "More checks", on the same probes.
+    reach = _reach(scan, cold, cold_id, parts, http_opts, plan) if plan.checks else None
+
+    # 7. Where the server that answered each measured result is (offline: airport table, geo-IP).
     _place_servers(cold, fields, geo)
     results = [LocationResult(**f) for f in fields]
 
@@ -352,7 +357,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
 
     server = _server(geo, results)
     progress("Finished")
-    return _report(target, started, plan, scan, server, results, paths, dns)
+    return _report(target, started, plan, scan, server, results, paths, dns, reach)
 
 
 def _place_servers(cold, fields: list[dict], geo: Geolocator | None) -> None:
@@ -436,13 +441,133 @@ def _dns(cold, doc, why: str, reused: bool = False) -> list[DnsResult]:
     return out
 
 
-def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dns) -> ScanReport:
+# --- "More checks" (speedward/core/checks.py) ---------------------------------------------------------
+
+_IP_ADDRESS = re.compile(r"^[\d.]+$|:")
+_DNS_CODE = re.compile(r"[A-Z]{2,12}")
+NOT_A_NAME = "the address is an IP address, so there is no name to try this with"
+NO_CHECK_RESULT = "no result for this probe"
+
+
+def _check_results(cold, doc, why: str, reused: bool, build, **fixed) -> list[ReachResult]:
+    """One ReachResult per cold probe. `build(result_dict) -> dict` adds the check's own fields to a
+    result `classify` called measured; it may also turn it into "blocked" by returning a status."""
+    out = []
+    matcher = _Matcher(_items(doc))
+    for row, (probe, _) in enumerate(cold):
+        loc = _location(probe)
+        if doc is None:
+            out.append(ReachResult(row=row, location=loc, status="not_run" if why == LIMIT_REACHED else "test_failed",
+                                   reason=why, **fixed))
+            continue
+        item, same = matcher.take(probe)
+        if item is None:
+            out.append(ReachResult(row=row, location=loc, status="not_run", reason=NO_CHECK_RESULT, **fixed))
+            continue
+        status, reason = classify(item)
+        res = _result(item)
+        if status != "measured":
+            code = res.get("statusCode") if status == "blocked" and isinstance(res.get("statusCode"), int) else None
+            extra = {"http_status": code} if code is not None and fixed.get("check") in (IPV6, PLAIN_HTTP) else {}
+            out.append(ReachResult(row=row, location=loc, status=status, reason=reason, **fixed, **extra))
+            continue
+        fields = build(res)
+        if fields.get("status", "measured") != "measured":
+            out.append(ReachResult(row=row, location=loc, **fields, **fixed))
+            continue
+        out.append(ReachResult(row=row, location=loc, status="measured", reason="", **fields,
+                               probe=_probe_match(reused, same), **fixed))
+    return out
+
+
+def _not_a_name(cold, **fixed) -> list[ReachResult]:
+    return [ReachResult(row=row, location=_location(p), status="not_run", reason=NOT_A_NAME, **fixed)
+            for row, (p, _) in enumerate(cold)]
+
+
+def _http_fields(res: dict) -> dict:
+    code = res.get("statusCode") if isinstance(res.get("statusCode"), int) else None
+    return {"ms": _stages(res).total, "http_status": code}
+
+
+def _plain_http_fields(res: dict) -> dict:
+    fields = _http_fields(res)
+    code = fields["http_status"]
+    if code is not None and 300 <= code < 400:
+        where = _location_header(_headers(res)) or ""
+        fields["redirect"] = "https" if where.lower().startswith("https://") else "other"
+    return fields
+
+
+def _dns_fields(res: dict) -> dict:
+    code = res.get("statusCodeName")
+    answers = [a for a in res.get("answers") or [] if isinstance(a, dict)]
+    timings = res.get("timings") if isinstance(res.get("timings"), dict) else {}
+    if code == "NOERROR":
+        if any(a.get("type") == "A" and isinstance(a.get("value"), str) for a in answers):
+            return {"ms": _num(timings.get("total"))}
+        return {"status": "blocked", "reason": "the name has no IPv4 address (A record) on this resolver"}
+    if code == "NXDOMAIN":
+        return {"status": "blocked", "reason": "the name was not found (NXDOMAIN)"}
+    # SERVFAIL, REFUSED and the rest can be the resolver's own trouble: never counted against the site.
+    shown = f" ({code})" if isinstance(code, str) and _DNS_CODE.fullmatch(code) else ""
+    return {"status": "test_failed", "reason": f"the resolver could not answer{shown}"}
+
+
+def _port_fields(port: int):
+    def build(res: dict) -> dict:
+        stats = res.get("stats") if isinstance(res.get("stats"), dict) else {}
+        rcv, avg, loss = _num(stats.get("rcv")), _num(stats.get("avg")), _num(stats.get("loss"))
+        if not rcv or avg is None:  # observed: a closed port still "finishes", with no reply at all
+            return {"status": "blocked", "reason": f"no answer on port {port} (closed or filtered)"}
+        return {"ms": avg, "loss_pct": loss if loss is not None and 0 <= loss <= 100 else None}
+    return build
+
+
+def _reach(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan) -> list[ReachResult]:
+    host = scan.host
+    is_ip = bool(_IP_ADDRESS.search(host))
+    out: list[ReachResult] = []
+
+    def run(what: str, type: str, options: dict, build, **fixed):
+        doc, reused, why = scan.measure(what, type, cold_id, options, fallback_locations=plan.locations)
+        out.extend(_check_results(cold, doc, why, reused, build, **fixed))
+
+    if IPV6 in plan.checks:
+        if is_ip:
+            out.extend(_not_a_name(cold, check=IPV6))
+        else:
+            scan.progress("Checking IPv6")
+            run("IPv6 check", "http", {**http_opts, "ipVersion": 6}, _http_fields, check=IPV6)
+    if PLAIN_HTTP in plan.checks:
+        scan.progress("Checking plain HTTP")
+        run("plain HTTP check", "http", {"request": dict(http_opts["request"]), "protocol": "HTTP"},
+            _plain_http_fields, check=PLAIN_HTTP)
+    if RESOLVERS_CHECK in plan.checks:
+        if is_ip:
+            for ip in RESOLVER_IPS:
+                out.extend(_not_a_name(cold, check=RESOLVERS_CHECK, resolver=ip))
+        else:
+            scan.progress("Checking public DNS resolvers")
+            for ip in RESOLVER_IPS:
+                run("DNS resolver check", "dns", {"resolver": ip}, _dns_fields, check=RESOLVERS_CHECK, resolver=ip)
+    if PORT in plan.checks:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        scan.progress("Checking the port")
+        run("port check", "ping", {"protocol": "TCP", "port": port, "packets": PORT_PACKETS},
+            _port_fields(port), check=PORT, port=port)
+    return out
+
+
+def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dns, reach=None) -> ScanReport:
     options = {"locations": [dict(s) for s in plan.locations], "traceroute": plan.traceroute,
                "dns": plan.dns, "browser": plan.browser}
+    if plan.checks:
+        options["checks"] = list(plan.checks)
     if scan.skipped:
         options["not_run"] = list(scan.skipped)
     report = ScanReport(target=target, started=started, finished=datetime.now(UTC),
                         version=__version__, options=options, server=server, locations=results,
-                        paths=paths, dns=dns, browser=None)
+                        paths=paths, dns=dns, browser=None, reach=reach)
     report.diagnosis = diagnose(report)
     return report

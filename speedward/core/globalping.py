@@ -206,6 +206,8 @@ _PROBE_CAUSES = (
     ("the test machine's DNS resolver failed", (r"eai_again",)),
 )
 _TARGET_CAUSES = (
+    # Observed on an ipVersion 6 test of a name with no AAAA record (docs/globalping-api-notes.md).
+    ("no IPv6 address (AAAA record) for the name", (r"queryaaaa\s+enodata",)),
     ("DNS lookup failed", (r"enodata", r"enotfound", r"nxdomain", r"query(?:a|aaaa)")),
     ("connection timed out", (r"timed out", r"etimedout", r"timeout")),
     ("connection refused", (r"econnrefused", r"refused")),

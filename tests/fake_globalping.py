@@ -30,6 +30,39 @@ def three_places() -> dict:
     return doc
 
 
+def recorded(name: str) -> dict:
+    """One real result from tests/fixtures/globalping/reach_recorded.json (docs/globalping-api-notes.md,
+    "Reachability checks")."""
+    return copy.deepcopy(fixture("reach_recorded")["results"][name])
+
+
+def on_probes(results, base: str = "http_ok", type: str = "http") -> dict:
+    """The probes of a recorded measurement (http_ok by default) answering with `results`: one result
+    dict for every probe, or a list with one per probe."""
+    doc = fixture(base)
+    doc["type"] = type
+    for i, item in enumerate(doc["results"]):
+        item["result"] = copy.deepcopy(results[i] if isinstance(results, list) else results)
+    return doc
+
+
+def check_kind(body: dict) -> str:
+    """Which measurement a POST is: "cold"/"repeat" http, "ipv6", "plain_http", "dns_<resolver>",
+    "port", or the plain type (ping, mtr, dns) for the main scan's own measurements."""
+    t, opts = body.get("type"), body.get("measurementOptions") or {}
+    if t == "http":
+        if opts.get("ipVersion") == 6:
+            return "ipv6"
+        if opts.get("protocol") == "HTTP":  # also the main scan of an http:// address
+            return "plain_http"
+        return "http"
+    if t == "dns" and opts.get("resolver"):
+        return f"dns_{opts['resolver']}"
+    if t == "ping" and opts.get("protocol") == "TCP":
+        return "port"
+    return t
+
+
 class FakeGlobalping:
     def __init__(self, valid_token: str | None = None):
         self.valid_token = valid_token  # when set, any other bearer token gets 401
@@ -49,6 +82,8 @@ class FakeGlobalping:
         self.rate_limit_after: int | None = None  # accept this many POSTs, then answer 429
         self.reuse_expired = False  # every POST with a measurement id as locations gets 422
         self.create_error: tuple[int, dict] | None = None  # (status, body) for every POST
+        self.by_kind: dict[str, dict] = {}  # per check_kind(body) template, before by_type
+        self.fail_kind: set[str] = set()  # POSTs of these kinds answer 500 (a Globalping-side failure)
         self._accepted = 0
         self._polls: dict[str, int] = {}
         self._counter = 0
@@ -169,7 +204,11 @@ class FakeGlobalping:
                     if outer.reuse_expired or locations not in outer.measurements:
                         return self._send(422, {"error": {"type": "no_probes_found",
                                                           "message": "No matching IPv4 probes available."}})
-                doc = outer._doc_for(body.get("type"))
+                kind = check_kind(body)
+                if kind in outer.fail_kind:
+                    return self._send(500, {"error": {"type": "api_error", "message": "boom"}})
+                doc = (copy.deepcopy(outer.by_kind[kind]) if kind in outer.by_kind
+                       else outer._doc_for(body.get("type")))
                 outer._accepted += 1
                 outer._counter += 1
                 mid = f"fake{outer._counter:04d}"
