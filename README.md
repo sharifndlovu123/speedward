@@ -269,6 +269,8 @@ For Docker Compose, `git pull` then `docker compose up -d --build`. Settings in 
 
 ## Development
 
+Common tasks live in the `justfile` ([just](https://github.com/casey/just), a small task runner; `pip install -e ".[dev]"` puts it in the venv). Run `just` to list them (or `.venv/bin/just`; `sudo apt install just` also works): `just check` (lint and unit tests), `just e2e`, `just serve`, `just estimate URL`, `just up` and `just down` for Docker, `just geoip`. They only wrap the commands below, so you can also run those directly.
+
 ```bash
 pip install -e ".[dev]"
 .venv/bin/pytest -q
