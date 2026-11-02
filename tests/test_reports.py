@@ -244,7 +244,7 @@ def test_markdown_says_where_the_server_square_came_from():
 def test_new_columns_are_escaped_in_markdown_and_html():
     hostile = [ok("Tokyo", 38, server_ip="1.2.3.4|<b>x</b>")]
     md = render(rep(locations=hostile, server=None), "md")
-    assert "1.2.3.4\\|<b>x</b>" in md_row(md, "Tokyo")
+    assert "1.2.3.4\\|\\<b\\>x\\</b\\>" in md_row(md, "Tokyo")  # Task 22: full Markdown escaping
     html = render(rep(locations=hostile, server=None), "html")
     assert "<b>x</b>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html
 

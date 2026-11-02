@@ -8,7 +8,6 @@ without speed checks (or from before they existed) renders nothing.
 from __future__ import annotations
 
 import copy
-import re
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -23,6 +22,7 @@ from speedward.core.speed import (
     SpeedSummary,
     speed_summary,
 )
+from speedward.reports._md import md_fold, md_text
 
 SYMBOL = {"measured": "●", "blocked": "○", "no_data": "◌"}
 STATUS_TEXT = {"test_failed": "test failed", "not_run": "did not run", "blocked": "blocked"}
@@ -301,17 +301,6 @@ def render_speed(report, interactive: bool = False, heading: str = "h2") -> str:
                                                      h=heading, css=css)
 
 
-_MD_SPECIAL = re.compile(r"([\\`*_\[\]()<>|!])")
-_MD_LEADING = re.compile(r"^(\s*)([#+-])")
-
-
-def md_text(text: str) -> str:
-    """Untrusted text (a place name, a hop or server name) made inert in Markdown: link, image, emphasis,
-    code, HTML and table syntax are backslash-escaped, and so is a heading or list mark at the start."""
-    text = _MD_SPECIAL.sub(r"\\\1", str(text).replace("\n", " ").replace("\r", " "))
-    return _MD_LEADING.sub(r"\1\\\2", text)
-
-
 def _escaped(s: SpeedSummary, esc) -> SpeedSummary:
     """A copy with every untrusted name passed through `esc` (the figures are untouched)."""
     s = copy.deepcopy(s)
@@ -343,9 +332,7 @@ def notes_for(report, esc=None) -> dict | None:
     return diagram_notes(_escaped(s, esc) if esc is not None else s)
 
 
-def _md(text: str) -> str:
-    """For text already made safe (fixed words and md_text names): only line breaks are folded."""
-    return str(text).replace("\n", " ").replace("\r", " ")
+_md = md_fold
 
 
 def markdown_lines(report) -> list[str]:
