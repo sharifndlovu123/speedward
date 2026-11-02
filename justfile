@@ -36,6 +36,10 @@ estimate url:
 scan url *args:
     {{venv}}/speedward scan {{url}} {{args}}
 
+# Build the Docker image only (tagged speedward)
+build:
+    docker build -t speedward .
+
 # Start the Docker stack: speedward plus the location-file updater
 up:
     docker compose up -d --build
