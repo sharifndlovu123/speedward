@@ -297,6 +297,64 @@ same from outside); whether real visitors in that place see the same (one test m
 a resolver answer of SERVFAIL or REFUSED is the site's fault (shown as "no data"); and whether HTTP/3 or
 a specific edge is used. A resolving name does not count as reaching the site. The DNS check asks for an IPv4 address (A record): a name with none is shown as blocked, so an IPv6-only site shows blocked there. For an IP-address target the IPv6 and DNS checks are skipped (shown as not run, no tests used). "Cannot reach it at all" needs the main test itself blocked, or at least two site checks with a result and all of them blocked; each check needs results from at least 3 places before the finding counts it.
 
+## More checks: is it fast?
+
+The "Is it fast?" group in "More checks" adds opt-in speed checks that explain where the time goes. Like
+the reachability checks they run only from Globalping's probes, on the main test's machines (reused by
+measurement id), and nothing is ticked by default.
+
+| Check | CLI name | Cost | What it does | Feeds the diagram's block |
+| --- | --- | --- | --- | --- |
+| Repeat 5 times (consistency) | `consistency` | +4 tests per place | 4 more runs of the main request; with the main test's own repeat that is 5 server waits per place, all from the same machine | Server wait: "steady over 5 runs" or "varies 140 to 900 ms" |
+| HTTP/2 against HTTP/1.1 | `http2` | +1 | The main request with `protocol: HTTP2` (HTTPS addresses only; a plain `http://` address shows "did not run" and uses no tests) | (the panel only) |
+| Compression (gzip, brotli) | `compression` | +1 | The main request sending `Accept-Encoding: br, gzip`; reads `Content-Encoding` | Download: "not compressed" or "compressed (br)" |
+| DNS delegation trace | `dnstrace` | +1 | A `dns` lookup with `trace: true`: local resolver, root, TLD, the name's own servers | DNS: "slowest step: TLD" |
+| Path loss and jitter (mtr) | `mtr` | +1 | An `mtr` path test with 5 packets per hop | Connect: "bad hop 7" or "no bad hop; +82 ms at hop 9 (long link)" |
+
+The cost of each ticked check and the total are shown before every scan (for example
+`speedward scan URL --checks consistency,mtr --estimate`), and the over-allowance confirmation applies.
+A check the address cannot use (HTTP/2 on a plain `http://` address; IPv6, DNS resolvers and the DNS
+trace on an IP address) is skipped and counted as 0 in the estimate. Ticking both "Network path" (or
+`--traceroute`) and "Path loss and jitter" runs two separate mtr tests per place, and both are counted.
+TLS 1.2 seen in the main test adds "TLS 1.2 costs one more round trip" to the TLS block once any speed
+check ran. The notes sit under each block's own text and never change its mark (biggest / possible block).
+
+The rules, with their named constants in `speedward/core/speed.py`:
+
+- Consistency: a place **varies** when its slowest run is at least `VARIES_RATIO` (2) times its median
+  **and** at least `VARIES_MIN_MS` (50 ms) above it, otherwise it is **steady**. With fewer than 5 runs on
+  the same machine (a run failed, was blocked or came from another machine) only the count is shown
+  ("3 of 5 runs") and nothing is judged.
+- HTTP/2: Globalping fails the request when the server does not offer HTTP/2 (there is no fallback); that
+  is shown as "not offered", never as blocked. The time difference is against the main test's repeat on
+  the same machine, and only where both ran.
+- Compression: judged only on a 2xx answer with a body of a text type (HTML, CSS, JavaScript, JSON, XML,
+  SVG). A redirect or error, an empty answer (204) or anything else (an image, no content type) shows
+  "no data" with the reason, and never counts as "not compressed". Otherwise "not compressed" when no
+  `Content-Encoding` came back. Globalping's own default request
+  already asks for `gzip, deflate, br`, so the download difference is between two runs that could both be
+  compressed: one run each, mostly noise.
+- DNS trace: the slowest step is the one that took the longest (1 ms or more); ties go to the earlier step.
+  The step labels are inferred, not reported: the first step is the probe's own resolver, a server named
+  `*.root-servers.net` is a root server, the last step is the name's own (authoritative) servers, the first
+  step after the root is the TLD and any further ones are "delegation".
+- Path: a **bad hop** is the first hop from which loss of at least `LOSS_PCT` (10%) carries through every
+  later hop to the site. Loss that stops at a middle hop is a router limiting its own replies and is not
+  flagged. A **long link** is the largest rise of at least `RISE_MS` (50 ms) at one hop that stays up to the
+  site; the timings indicate distance (for example an ocean crossing). Jitter is the site's own, the mean
+  change between consecutive packets (Globalping's `jAvg` was not usable, see the API notes).
+
+Every overall finding needs at least 3 places with a result of their own; with fewer it says there are
+not enough places. Blocked runs are counted and named; failed or not-run ones are "no data". None of them
+enter a figure or a finding. A failed DNS trace or path test is never counted against the site.
+
+What it cannot tell you: **page size on the wire is not available** (Globalping's answer is chunked, has no
+`Content-Length` and its body is cut at 10 KB), so it is never estimated; whether HTTP/3 would help (not
+offered by Globalping); why a server wait varies (load, a cold cache and a slow page look the same from
+outside); who runs a bad hop or whether real visitors take the same path (one machine per place, one run);
+and whether a site that does not answer the path test drops ICMP or is unreachable (shown as "no end point",
+never as blocked).
+
 ## Test cost and the allowance
 
 Every location costs tests: about 3 per place for the default scan (36 for 12 places), more with `--traceroute`, `--dns` and `--checks`. Speedward shows the estimate and your remaining hourly allowance before every scan, and refuses a scan that does not fit unless you confirm (`--yes` on the command line, a checkbox in the web UI). Beyond the hourly allowance, tests use Globalping credits; with none, they will not run. To stay under: use `--estimate`, pick fewer places with `--locations`, skip the extra checks, and wait for the hour to roll over.
@@ -329,7 +387,6 @@ For Docker Compose, `git pull` then `docker compose up -d --build`. Settings in 
 ## Not included yet
 
 - The real-browser page test (page weight, request count, biggest files). `--browser` is accepted but prints "not available in this build yet" and does nothing; `--max-page-weight` is refused with a message until the test exists. The `browser` extra in `pyproject.toml` is reserved for it. There is no `ENABLE_BROWSER_TEST` setting.
-- Repeat runs for a consistency check.
 - Comparison with an earlier run.
 - Following redirect chains beyond the first response (Globalping does not follow redirects; only the first response's `Location` is shown).
 

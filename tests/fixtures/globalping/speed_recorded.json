@@ -1,0 +1,1278 @@
+{
+ "_note": "Trimmed real single-probe answers, 2026-11-02 (docs/globalping-api-notes.md, 'Speed checks'). Bodies, long raw output, certificate details, cf-ray and probe-identifying tags removed; nothing else changed.",
+ "results": {
+  "http2_ok": {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Frankfurt",
+    "asn": 31898,
+    "longitude": 8.63,
+    "latitude": 50.1,
+    "network": "Oracle",
+    "tags": [
+     "oci-eu-frankfurt-1",
+     "oci",
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "resolvedAddress": "172.66.147.243",
+    "headers": {
+     "date": "Mon, 02 Nov 2026 21:03:33 GMT",
+     "content-type": "text/html; charset=utf-8",
+     "server": "cloudflare",
+     "last-modified": "Sun, 01 Nov 2026 22:43:12 GMT",
+     "allow": "GET, HEAD",
+     "age": "8",
+     "cf-cache-status": "HIT",
+     "content-encoding": "br",
+     "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "rawOutput": "HTTP/2.0 200\ndate: Mon, 02 Nov 2026 21:03:33 GMT\ncontent-type: text/html; charset=utf-8\n...",
+    "truncated": false,
+    "statusCode": 200,
+    "statusCodeName": "",
+    "timings": {
+     "total": 22,
+     "dns": 0,
+     "tcp": 2,
+     "tls": 8,
+     "firstByte": 12,
+     "download": 0
+    },
+    "tls": {
+     "authorized": true,
+     "protocol": "TLSv1.3",
+     "cipherName": "TLS_AES_256_GCM_SHA384"
+    }
+   }
+  },
+  "http2_alpn_refused": {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Frankfurt",
+    "asn": 31898,
+    "longitude": 8.63,
+    "latitude": 50.1,
+    "network": "Oracle",
+    "tags": [
+     "oci-eu-frankfurt-1",
+     "oci",
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "failed",
+    "failureSource": "target",
+    "resolvedAddress": "209.51.188.116",
+    "headers": {},
+    "rawOutput": "802862F7267F0000:error:0A00006E:SSL routines:tls_parse_stoc_alpn:bad extension:../deps/openssl/openssl/ssl/statem/extensions_clnt.c:1713:\n\n...",
+    "truncated": false,
+    "statusCode": null,
+    "statusCodeName": null,
+    "timings": {
+     "total": 276,
+     "dns": 105,
+     "tcp": 84,
+     "tls": null,
+     "firstByte": null,
+     "download": null
+    },
+    "tls": null
+   }
+  },
+  "compress_br": {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Frankfurt",
+    "asn": 31898,
+    "longitude": 8.63,
+    "latitude": 50.1,
+    "network": "Oracle",
+    "tags": [
+     "oci-eu-frankfurt-1",
+     "oci",
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "resolvedAddress": "104.20.23.154",
+    "headers": {
+     "date": "Mon, 02 Nov 2026 21:03:30 GMT",
+     "content-type": "text/html; charset=utf-8",
+     "transfer-encoding": "chunked",
+     "connection": "close",
+     "server": "cloudflare",
+     "last-modified": "Sun, 01 Nov 2026 22:43:12 GMT",
+     "allow": "GET, HEAD",
+     "age": "5",
+     "cf-cache-status": "HIT",
+     "content-encoding": "br",
+     "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "rawOutput": "HTTP/1.1 200\nDate: Mon, 02 Nov 2026 21:03:30 GMT\nContent-Type: text/html; charset=utf-8\n...",
+    "truncated": false,
+    "statusCode": 200,
+    "statusCodeName": "OK",
+    "timings": {
+     "total": 24,
+     "dns": 1,
+     "tcp": 1,
+     "tls": 9,
+     "firstByte": 9,
+     "download": 4
+    },
+    "tls": {
+     "authorized": true,
+     "protocol": "TLSv1.3",
+     "cipherName": "TLS_AES_256_GCM_SHA384"
+    }
+   }
+  },
+  "dns_trace_ok": {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Frankfurt",
+    "asn": 31898,
+    "longitude": 8.63,
+    "latitude": 50.1,
+    "network": "Oracle",
+    "tags": [
+     "oci-eu-frankfurt-1",
+     "oci",
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "; <<>> DiG 9.16.37-Debian <<>> -t A example.com ... +trace\n...",
+    "hops": [
+     {
+      "answers": [
+       {
+        "name": ".",
+        "type": "NS",
+        "ttl": 518400,
+        "class": "IN",
+        "value": "j.root-servers.net."
+       },
+       {
+        "name": ".",
+        "type": "NS",
+        "ttl": 518400,
+        "class": "IN",
+        "value": "k.root-servers.net."
+       },
+       {
+        "name": ".",
+        "type": "NS",
+        "ttl": 518400,
+        "class": "IN",
+        "value": "l.root-servers.net."
+       },
+       {
+        "name": ".",
+        "type": "NS",
+        "ttl": 518400,
+        "class": "IN",
+        "value": "m.root-servers.net."
+       }
+      ],
+      "timings": {
+       "total": 0
+      },
+      "resolver": "127.0.0.53"
+     },
+     {
+      "answers": [
+       {
+        "name": "com.",
+        "type": "NS",
+        "ttl": 172800,
+        "class": "IN",
+        "value": "a.gtld-servers.net."
+       },
+       {
+        "name": "com.",
+        "type": "NS",
+        "ttl": 172800,
+        "class": "IN",
+        "value": "b.gtld-servers.net."
+       },
+       {
+        "name": "com.",
+        "type": "NS",
+        "ttl": 172800,
+        "class": "IN",
+        "value": "c.gtld-servers.net."
+       },
+       {
+        "name": "com.",
+        "type": "NS",
+        "ttl": 172800,
+        "class": "IN",
+        "value": "d.gtld-servers.net."
+       }
+      ],
+      "timings": {
+       "total": 0
+      },
+      "resolver": "d.root-servers.net"
+     },
+     {
+      "answers": [
+       {
+        "name": "example.com.",
+        "type": "NS",
+        "ttl": 172800,
+        "class": "IN",
+        "value": "hera.ns.cloudflare.com."
+       },
+       {
+        "name": "example.com.",
+        "type": "NS",
+        "ttl": 172800,
+        "class": "IN",
+        "value": "elliott.ns.cloudflare.com."
+       },
+       {
+        "name": "example.com.",
+        "type": "DS",
+        "ttl": 86400,
+        "class": "IN",
+        "value": "2371 13 2 C988EC423E3880..."
+       },
+       {
+        "name": "example.com.",
+        "type": "RRSIG",
+        "ttl": 86400,
+        "class": "IN",
+        "value": "DS 13 2 86400 2026110901..."
+       }
+      ],
+      "timings": {
+       "total": 100
+      },
+      "resolver": "a.gtld-servers.net"
+     },
+     {
+      "answers": [
+       {
+        "name": "example.com.",
+        "type": "A",
+        "ttl": 300,
+        "class": "IN",
+        "value": "104.20.23.154"
+       },
+       {
+        "name": "example.com.",
+        "type": "A",
+        "ttl": 300,
+        "class": "IN",
+        "value": "172.66.147.243"
+       },
+       {
+        "name": "example.com.",
+        "type": "RRSIG",
+        "ttl": 300,
+        "class": "IN",
+        "value": "A 13 2 300 2026110322033..."
+       }
+      ],
+      "timings": {
+       "total": 0
+      },
+      "resolver": "elliott.ns.cloudflare.com"
+     }
+    ]
+   }
+  },
+  "mtr_icmp_far": {
+   "probe": {
+    "continent": "AS",
+    "region": "Eastern Asia",
+    "country": "JP",
+    "state": null,
+    "city": "Tokyo",
+    "asn": 3258,
+    "longitude": 139.69,
+    "latitude": 35.69,
+    "network": "xTom",
+    "tags": [
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "Host  Loss% Drop Rcv  Avg  StDev  Javg\n...",
+    "resolvedAddress": "209.51.188.116",
+    "resolvedHostname": "www.gnu.org",
+    "hops": [
+     {
+      "asn": [
+       3258
+      ],
+      "resolvedAddress": "43.239.249.1",
+      "resolvedHostname": "_gateway",
+      "stats": {
+       "min": 16.819,
+       "max": 31.829,
+       "avg": 21.8,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 5.7,
+       "jMin": 6.7,
+       "jMax": 16.8,
+       "jAvg": 12.5
+      },
+      "timings": [
+       {
+        "rtt": 24.62
+       },
+       {
+        "rtt": 17.901
+       },
+       {
+        "rtt": 17.869
+       },
+       {
+        "rtt": 31.829
+       },
+       {
+        "rtt": 16.819
+       }
+      ]
+     },
+     {
+      "asn": [
+       3258
+      ],
+      "resolvedAddress": "91.200.240.126",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 1.121,
+       "max": 5.763,
+       "avg": 2.1,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 1.8,
+       "jMin": 0,
+       "jMax": 4.5,
+       "jAvg": 1.9
+      },
+      "timings": [
+       {
+        "rtt": 1.135
+       },
+       {
+        "rtt": 1.121
+       },
+       {
+        "rtt": 1.215
+       },
+       {
+        "rtt": 5.763
+       },
+       {
+        "rtt": 1.134
+       }
+      ]
+     },
+     {
+      "asn": [
+       3258
+      ],
+      "resolvedAddress": "91.200.240.64",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 1.016,
+       "max": 1.342,
+       "avg": 1.1,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0.1,
+       "jMax": 1.1,
+       "jAvg": 0.5
+      },
+      "timings": [
+       {
+        "rtt": 1.142
+       },
+       {
+        "rtt": 1.016
+       },
+       {
+        "rtt": 1.039
+       },
+       {
+        "rtt": 1.342
+       },
+       {
+        "rtt": 1.098
+       }
+      ]
+     },
+     {
+      "asn": [],
+      "resolvedAddress": null,
+      "resolvedHostname": null,
+      "stats": {
+       "min": null,
+       "max": null,
+       "avg": null,
+       "total": 5,
+       "loss": 100,
+       "rcv": 0,
+       "drop": 5,
+       "stDev": null,
+       "jMin": null,
+       "jMax": null,
+       "jAvg": null
+      },
+      "timings": []
+     },
+     {
+      "asn": [
+       3258
+      ],
+      "resolvedAddress": "91.200.240.100",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 1.355,
+       "max": 9.04,
+       "avg": 3.1,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 3,
+       "jMin": 0.2,
+       "jMax": 7.2,
+       "jAvg": 3
+      },
+      "timings": [
+       {
+        "rtt": 1.836
+       },
+       {
+        "rtt": 9.04
+       },
+       {
+        "rtt": 1.355
+       },
+       {
+        "rtt": 1.543
+       },
+       {
+        "rtt": 1.51
+       }
+      ]
+     },
+     {
+      "asn": [],
+      "resolvedAddress": "101.203.89.164",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 0.701,
+       "max": 0.938,
+       "avg": 0.9,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0.1,
+       "jMax": 0.9,
+       "jAvg": 0.4
+      },
+      "timings": [
+       {
+        "rtt": 0.772
+       },
+       {
+        "rtt": 0.921
+       },
+       {
+        "rtt": 0.919
+       },
+       {
+        "rtt": 0.701
+       },
+       {
+        "rtt": 0.938
+       }
+      ]
+     },
+     {
+      "asn": [],
+      "resolvedAddress": "101.203.88.74",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 2.898,
+       "max": 4.244,
+       "avg": 3.6,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.5,
+       "jMin": 0,
+       "jMax": 3.2,
+       "jAvg": 1.3
+      },
+      "timings": [
+       {
+        "rtt": 4.219
+       },
+       {
+        "rtt": 4.244
+       },
+       {
+        "rtt": 2.898
+       },
+       {
+        "rtt": 3.646
+       },
+       {
+        "rtt": 3.242
+       }
+      ]
+     },
+     {
+      "asn": [],
+      "resolvedAddress": null,
+      "resolvedHostname": null,
+      "stats": {
+       "min": null,
+       "max": null,
+       "avg": null,
+       "total": 5,
+       "loss": 100,
+       "rcv": 0,
+       "drop": 5,
+       "stDev": null,
+       "jMin": null,
+       "jMax": null,
+       "jAvg": null
+      },
+      "timings": []
+     },
+     {
+      "asn": [
+       6939
+      ],
+      "resolvedAddress": "184.105.213.117",
+      "resolvedHostname": "be1.core1.sea1.he.net",
+      "stats": {
+       "min": 84.78,
+       "max": 87.553,
+       "avg": 85.8,
+       "total": 5,
+       "loss": 20,
+       "rcv": 4,
+       "drop": 1,
+       "stDev": 1.1,
+       "jMin": 1.2,
+       "jMax": 2.8,
+       "jAvg": 2
+      },
+      "timings": [
+       {
+        "rtt": 87.553
+       },
+       {
+        "rtt": 84.78
+       },
+       {
+        "rtt": 84.855
+       },
+       {
+        "rtt": 86.024
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.181.197",
+      "resolvedHostname": "sea-b1-link.ip.twelve99.net",
+      "stats": {
+       "min": 100.192,
+       "max": 101.294,
+       "avg": 100.5,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.4,
+       "jMin": 0,
+       "jMax": 100.4,
+       "jAvg": 33.8
+      },
+      "timings": [
+       {
+        "rtt": 100.393
+       },
+       {
+        "rtt": 100.438
+       },
+       {
+        "rtt": 101.294
+       },
+       {
+        "rtt": 100.192
+       },
+       {
+        "rtt": 100.391
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.132.156",
+      "resolvedHostname": "sea-b4-link.ip.twelve99.net",
+      "stats": {
+       "min": 173.527,
+       "max": 178.071,
+       "avg": 175.7,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 1.6,
+       "jMin": 1.2,
+       "jMax": 175.3,
+       "jAvg": 59.3
+      },
+      "timings": [
+       {
+        "rtt": 174.836
+       },
+       {
+        "rtt": 173.527
+       },
+       {
+        "rtt": 178.071
+       },
+       {
+        "rtt": 176.841
+       },
+       {
+        "rtt": 175.335
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.136.118",
+      "resolvedHostname": "chi-bb2-link.ip.twelve99.net",
+      "stats": {
+       "min": 160.598,
+       "max": 162.873,
+       "avg": 161.2,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.8,
+       "jMin": 0.4,
+       "jMax": 160.8,
+       "jAvg": 54.4
+      },
+      "timings": [
+       {
+        "rtt": 160.909
+       },
+       {
+        "rtt": 162.873
+       },
+       {
+        "rtt": 160.959
+       },
+       {
+        "rtt": 160.598
+       },
+       {
+        "rtt": 160.843
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.132.134",
+      "resolvedHostname": "ewr-bb2-link.ip.twelve99.net",
+      "stats": {
+       "min": 165.415,
+       "max": 165.692,
+       "avg": 165.5,
+       "total": 5,
+       "loss": 20,
+       "rcv": 4,
+       "drop": 1,
+       "stDev": 0.1,
+       "jMin": 0.2,
+       "jMax": 0.2,
+       "jAvg": 0.2
+      },
+      "timings": [
+       {
+        "rtt": 165.415
+       },
+       {
+        "rtt": 165.627
+       },
+       {
+        "rtt": 165.457
+       },
+       {
+        "rtt": 165.692
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.138.59",
+      "resolvedHostname": "bost-b6-link.ip.twelve99.net",
+      "stats": {
+       "min": 164.688,
+       "max": 166.885,
+       "avg": 165.4,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.8,
+       "jMin": 0.6,
+       "jMax": 165,
+       "jAvg": 55.8
+      },
+      "timings": [
+       {
+        "rtt": 164.688
+       },
+       {
+        "rtt": 165.302
+       },
+       {
+        "rtt": 165.117
+       },
+       {
+        "rtt": 166.885
+       },
+       {
+        "rtt": 164.979
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.142.70",
+      "resolvedHostname": "bost-b4-link.ip.twelve99.net",
+      "stats": {
+       "min": 162.341,
+       "max": 162.635,
+       "avg": 162.5,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0,
+       "jMax": 162.4,
+       "jAvg": 54.1
+      },
+      "timings": [
+       {
+        "rtt": 162.341
+       },
+       {
+        "rtt": 162.361
+       },
+       {
+        "rtt": 162.621
+       },
+       {
+        "rtt": 162.635
+       },
+       {
+        "rtt": 162.351
+       }
+      ]
+     },
+     {
+      "asn": [
+       1299
+      ],
+      "resolvedAddress": "62.115.51.213",
+      "resolvedHostname": "towardex-ic-372977.ip.twelve99-cust.net",
+      "stats": {
+       "min": 148.362,
+       "max": 152.219,
+       "avg": 149.5,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 1.4,
+       "jMin": 0.5,
+       "jMax": 148.4,
+       "jAvg": 50.8
+      },
+      "timings": [
+       {
+        "rtt": 148.817
+       },
+       {
+        "rtt": 149.275
+       },
+       {
+        "rtt": 148.696
+       },
+       {
+        "rtt": 152.219
+       },
+       {
+        "rtt": 148.362
+       }
+      ]
+     },
+     {
+      "asn": [
+       27552
+      ],
+      "resolvedAddress": "198.160.62.8",
+      "resolvedHostname": "bbr01-fh-0-1-0-2.bsn04.twdx.net",
+      "stats": {
+       "min": 148.247,
+       "max": 150.27,
+       "avg": 149.3,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.7,
+       "jMin": 0.8,
+       "jMax": 149.6,
+       "jAvg": 50.8
+      },
+      "timings": [
+       {
+        "rtt": 150.27
+       },
+       {
+        "rtt": 148.247
+       },
+       {
+        "rtt": 149.535
+       },
+       {
+        "rtt": 148.742
+       },
+       {
+        "rtt": 149.57
+       }
+      ]
+     },
+     {
+      "asn": [
+       27552
+      ],
+      "resolvedAddress": "198.160.62.205",
+      "resolvedHostname": "dcr03-fh-0-10-0-19.bsn04.twdx.net",
+      "stats": {
+       "min": 154.147,
+       "max": 154.642,
+       "avg": 154.4,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.2,
+       "jMin": 0.3,
+       "jMax": 154.4,
+       "jAvg": 51.7
+      },
+      "timings": [
+       {
+        "rtt": 154.147
+       },
+       {
+        "rtt": 154.404
+       },
+       {
+        "rtt": 154.229
+       },
+       {
+        "rtt": 154.642
+       },
+       {
+        "rtt": 154.434
+       }
+      ]
+     },
+     {
+      "asn": [],
+      "resolvedAddress": "206.53.143.61",
+      "resolvedHostname": "mass-ix.fsf.org",
+      "stats": {
+       "min": 143.163,
+       "max": 143.727,
+       "avg": 143.4,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.2,
+       "jMin": 0.3,
+       "jMax": 143.4,
+       "jAvg": 48
+      },
+      "timings": [
+       {
+        "rtt": 143.459
+       },
+       {
+        "rtt": 143.163
+       },
+       {
+        "rtt": 143.387
+       },
+       {
+        "rtt": 143.727
+       },
+       {
+        "rtt": 143.397
+       }
+      ]
+     },
+     {
+      "asn": [
+       22989
+      ],
+      "resolvedAddress": "209.51.188.116",
+      "resolvedHostname": "www.gnu.org",
+      "stats": {
+       "min": 143.642,
+       "max": 145.311,
+       "avg": 144.2,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.6,
+       "jMin": 0.6,
+       "jMax": 143.9,
+       "jAvg": 48.7
+      },
+      "timings": [
+       {
+        "rtt": 143.664
+       },
+       {
+        "rtt": 144.29
+       },
+       {
+        "rtt": 145.311
+       },
+       {
+        "rtt": 143.642
+       },
+       {
+        "rtt": 143.876
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "mtr_tcp_cdn": {
+   "probe": {
+    "continent": "EU",
+    "region": "Western Europe",
+    "country": "DE",
+    "state": null,
+    "city": "Frankfurt",
+    "asn": 31898,
+    "longitude": 8.63,
+    "latitude": 50.1,
+    "network": "Oracle",
+    "tags": [
+     "oci-eu-frankfurt-1",
+     "oci",
+     "datacenter-network"
+    ],
+    "resolvers": [
+     "private"
+    ]
+   },
+   "result": {
+    "status": "finished",
+    "rawOutput": "Host  Loss% Drop Rcv  Avg  StDev  Javg\n...",
+    "resolvedAddress": "172.66.147.243",
+    "resolvedHostname": "example.com",
+    "hops": [
+     {
+      "asn": [
+       31898
+      ],
+      "resolvedAddress": "140.91.198.73",
+      "resolvedHostname": "_gateway",
+      "stats": {
+       "min": 0.273,
+       "max": 0.406,
+       "avg": 0.3,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0.1,
+       "jMax": 0.3,
+       "jAvg": 0.2
+      },
+      "timings": [
+       {
+        "rtt": 0.273
+       },
+       {
+        "rtt": 0.406
+       },
+       {
+        "rtt": 0.309
+       },
+       {
+        "rtt": 0.379
+       },
+       {
+        "rtt": 0.338
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "162.158.84.83",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 0.704,
+       "max": 4.441,
+       "avg": 1.6,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 1.4,
+       "jMin": 0.6,
+       "jMax": 3.7,
+       "jAvg": 1.7
+      },
+      "timings": [
+       {
+        "rtt": 0.729
+       },
+       {
+        "rtt": 4.441
+       },
+       {
+        "rtt": 0.765
+       },
+       {
+        "rtt": 1.411
+       },
+       {
+        "rtt": 0.704
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "162.158.84.82",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 1.449,
+       "max": 1029.365,
+       "avg": 344.1,
+       "total": 5,
+       "loss": 40,
+       "rcv": 3,
+       "drop": 2,
+       "stDev": 484.5,
+       "jMin": 1.4,
+       "jMax": 1027.8,
+       "jAvg": 514.6
+      },
+      "timings": [
+       {
+        "rtt": 1029.365
+       },
+       {
+        "rtt": 1.547
+       },
+       {
+        "rtt": 1.449
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "162.158.84.78",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 0.665,
+       "max": 0.82,
+       "avg": 0.7,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 0.1,
+       "jMin": 0,
+       "jMax": 0.7,
+       "jAvg": 0.3
+      },
+      "timings": [
+       {
+        "rtt": 0.665
+       },
+       {
+        "rtt": 0.698
+       },
+       {
+        "rtt": 0.713
+       },
+       {
+        "rtt": 0.82
+       },
+       {
+        "rtt": 0.746
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "162.158.84.233",
+      "resolvedHostname": null,
+      "stats": {
+       "min": 0.93,
+       "max": 9.171,
+       "avg": 2.9,
+       "total": 5,
+       "loss": 0,
+       "rcv": 5,
+       "drop": 0,
+       "stDev": 3.2,
+       "jMin": 0.3,
+       "jMax": 7.6,
+       "jAvg": 2.9
+      },
+      "timings": [
+       {
+        "rtt": 9.171
+       },
+       {
+        "rtt": 1.616
+       },
+       {
+        "rtt": 1.457
+       },
+       {
+        "rtt": 1.168
+       },
+       {
+        "rtt": 0.93
+       }
+      ]
+     },
+     {
+      "asn": [
+       13335
+      ],
+      "resolvedAddress": "172.66.147.243",
+      "resolvedHostname": "example.com",
+      "stats": {
+       "min": 0.962,
+       "max": 1.188,
+       "avg": 1.1,
+       "total": 5,
+       "loss": 20,
+       "rcv": 4,
+       "drop": 1,
+       "stDev": 0.1,
+       "jMin": 0.1,
+       "jMax": 0.2,
+       "jAvg": 0.1
+      },
+      "timings": [
+       {
+        "rtt": 1.133
+       },
+       {
+        "rtt": 0.962
+       },
+       {
+        "rtt": 1.188
+       },
+       {
+        "rtt": 1.084
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

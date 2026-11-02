@@ -8,7 +8,22 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from speedward.core.checks import IPV6, PLAIN_HTTP, PORT, REACH_CHECKS, RESOLVER_IPS, RESOLVERS_CHECK
+from speedward.core.checks import (
+    ALL_CHECKS,
+    COMPRESSION,
+    CONSISTENCY,
+    CONSISTENCY_EXTRA,
+    DNS_TRACE,
+    HTTP2,
+    IPV6,
+    MTR,
+    PLAIN_HTTP,
+    PORT,
+    REACH_CHECKS,
+    RESOLVER_IPS,
+    RESOLVERS_CHECK,
+    SPEED_CHECKS,
+)
 
 if TYPE_CHECKING:  # bottleneck imports this module; at run time it is imported where it is used
     from speedward.core.bottleneck import Diagnosis
@@ -35,7 +50,8 @@ STATUSES = ("measured", "blocked", "test_failed", "not_run")
 LIMIT_REACHED = "Globalping limit reached"
 GLOBALPING_FAILED = "the test failed on the Globalping side"
 NOT_RUN_WHAT = ("repeat test", "ping", "network path", "DNS check",
-                "IPv6 check", "plain HTTP check", "DNS resolver check", "port check")
+                "IPv6 check", "plain HTTP check", "DNS resolver check", "port check",
+                "consistency check", "HTTP/2 check", "compression check", "DNS trace check", "path loss check")
 NOT_RUN_WHY = (LIMIT_REACHED, GLOBALPING_FAILED)
 NOT_RUN_TEXTS = tuple(f"{what}: {why}" for what in NOT_RUN_WHAT for why in NOT_RUN_WHY)
 
@@ -269,6 +285,115 @@ class ReachResult:
         self.reason = clean(self.reason)
 
 
+# --- "Is it fast?" checks (speedward/core/speed.py sums them up) ----------------------------------
+
+# Which server a DNS trace step asked: the probe's own resolver, a root server, the top-level domain's
+# servers, any further delegation, and the name's own (authoritative) servers.
+TRACE_KINDS = ("local", "root", "tld", "delegation", "authoritative")
+HTTP_CHECKS = (CONSISTENCY, HTTP2, COMPRESSION)
+_HTTP_VERSION_TEXT = re.compile(r"HTTP/\d(?:\.\d)?")
+# A Content-Encoding value as stored: "none" when the header was absent, "unrecognised" for anything odd.
+_ENCODING = re.compile(r"[a-z0-9][a-z0-9 ,.-]{0,39}")
+MAX_TRACE_STEPS = 16  # a real trace has 4 or 5 steps
+MAX_PATH_HOPS = 64  # mtr stops at 30 hops by default
+
+
+@dataclass
+class TraceStep:
+    kind: str  # TRACE_KINDS
+    server: str  # the server asked, as Globalping names it
+    ms: float | None
+
+    def __post_init__(self):
+        if self.kind not in TRACE_KINDS:
+            raise ValueError("unknown DNS trace step")
+        self.server = clean(self.server)
+
+
+@dataclass
+class PathHop:
+    """One hop of the path test. A silent hop (no reply at all) has host "*" and no times."""
+    n: int
+    host: str
+    asn: int | None
+    avg_ms: float | None
+    loss_pct: float | None
+    jitter_ms: float | None  # mean change between consecutive packets; Globalping's jAvg is not used
+
+    def __post_init__(self):
+        if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
+            raise ValueError("hop number must be a whole number, 1 or more")
+        self.host = clean(self.host)
+        if self.host == "*" and (self.asn is not None or self.avg_ms is not None or self.jitter_ms is not None
+                                 or self.loss_pct not in (None, 100)):
+            raise ValueError("a silent hop has no network, no times and no partial loss")
+
+
+@dataclass
+class SpeedResult:
+    """One "Is it fast?" result for one place (speedward/core/checks.py SPEED_CHECKS). `row` is the place's
+    index in ScanReport.locations. Only a measured result carries figures; blocked (the site side refused
+    or timed out) and test_failed / not_run carry only a reason and never enter any figure."""
+    check: str
+    row: int
+    location: Location
+    status: str
+    reason: str
+    run: int | None = None  # consistency: which extra run (1 to CONSISTENCY_EXTRA)
+    stages: Stages | None = None  # consistency, http2, compression
+    http_version: str | None = None  # http2: the first line of the answer, when readable
+    h2_offered: bool | None = None  # http2, measured: False when the server refused HTTP/2 (ALPN)
+    encoding: str | None = None  # compression, measured: Content-Encoding, "none" when absent
+    trace: list[TraceStep] = field(default_factory=list)  # dnstrace, measured
+    hops: list[PathHop] = field(default_factory=list)  # mtr, measured
+    reached: bool | None = None  # mtr, measured: the last hop answered from the site's own address
+    probe: str | None = None  # PROBE_MATCHES against the cold run's probe; only on a measured result
+
+    def __post_init__(self):
+        _check_status(self.status)
+        if self.check not in SPEED_CHECKS:
+            raise ValueError("unknown check")
+        if isinstance(self.row, bool) or not isinstance(self.row, int) or self.row < 0:
+            raise ValueError("row must be a whole number, 0 or more")
+        if (self.check == CONSISTENCY) != (self.run is not None):
+            raise ValueError("a run number goes with the consistency check only")
+        if self.run is not None and (isinstance(self.run, bool) or not isinstance(self.run, int)
+                                     or not 1 <= self.run <= CONSISTENCY_EXTRA):
+            raise ValueError("run number is out of range")
+        _check_probe(self.probe, "probe")
+        figures = (self.stages, self.http_version, self.h2_offered, self.encoding, self.reached, self.probe)
+        if self.status != "measured":
+            if any(x is not None for x in figures) or self.trace or self.hops:
+                raise ValueError("only a measured check result may carry figures")
+        if self.stages is not None and self.check not in HTTP_CHECKS:
+            raise ValueError("stage timings go with an http check only")
+        if (self.http_version is not None or self.h2_offered is not None) and self.check != HTTP2:
+            raise ValueError("an HTTP version goes with the http2 check only")
+        if self.http_version is not None and not _HTTP_VERSION_TEXT.fullmatch(self.http_version):
+            raise ValueError("HTTP version is not readable")
+        if self.h2_offered is False and (self.stages is not None or (self.http_version or "").startswith("HTTP/2")):
+            raise ValueError("HTTP/2 not offered leaves no timings and no HTTP/2 version")
+        if self.h2_offered is True and (self.stages is None or not (self.http_version or "").startswith("HTTP/2")):
+            raise ValueError("an HTTP/2 answer has its timings and version")
+        if self.encoding is not None and (self.check != COMPRESSION or not _ENCODING.fullmatch(self.encoding)):
+            raise ValueError("encoding is only for the compression check and must be a plain token")
+        if self.trace and self.check != DNS_TRACE:
+            raise ValueError("trace steps go with the dnstrace check only")
+        if (self.hops or self.reached is not None) and self.check != MTR:
+            raise ValueError("path hops go with the mtr check only")
+        if self.reached and (not self.hops or self.hops[-1].host == "*"):
+            raise ValueError("a path that reached the site ends on a hop that answered")
+        if len(self.trace) > MAX_TRACE_STEPS or len(self.hops) > MAX_PATH_HOPS:
+            raise ValueError("too many steps or hops")
+        if self.status == "measured":
+            needed = {HTTP2: self.h2_offered is not None, COMPRESSION: self.encoding is not None,
+                      DNS_TRACE: bool(self.trace), MTR: self.reached is not None,
+                      CONSISTENCY: self.stages is not None}
+            if not needed[self.check]:
+                raise ValueError("a measured check result is missing its figures")
+        self.reason = clean(self.reason)
+
+
 @dataclass
 class ServerPosition:
     lat: float
@@ -308,6 +433,9 @@ class ScanReport:
     # "More checks" results (speedward/core/reach.py builds the "Who can reach it" grid from them). None
     # when no check was ticked, and for a report from before they existed: no grid is shown then.
     reach: list[ReachResult] | None = None
+    # "Is it fast?" results (speedward/core/speed.py sums them up and adds notes to the diagram). None
+    # when no speed check was ticked, and for a report from before they existed: nothing is shown then.
+    speed: list[SpeedResult] | None = None
 
     def __post_init__(self):
         self.target, self.version = clean(self.target), clean(self.version)
@@ -332,6 +460,10 @@ class ScanReport:
             from speedward.core.reach import reach_grid
             out["reach"] = [asdict(x) for x in self.reach]
             out["reach_grid"] = reach_grid(self).to_dict()
+        if self.speed is not None:
+            from speedward.core.speed import speed_summary
+            out["speed"] = [asdict(x) for x in self.speed]
+            out["speed_summary"] = speed_summary(self).to_dict()
         return out
 
     @classmethod
@@ -344,6 +476,7 @@ class ScanReport:
         """
         from speedward.core.bottleneck import diagnosis_from_dict
         from speedward.core.reach import grid_from_dict
+        from speedward.core.speed import summary_from_dict
 
         d = _obj(data, "report")
         if d.get("schema_version") != SCHEMA_VERSION:
@@ -372,6 +505,11 @@ class ScanReport:
             grid_from_dict(d.get("reach_grid"), report)  # must be exactly what the results give
         elif d.get("reach_grid") is not None:
             raise ValueError("a reach grid needs its results")
+        if d.get("speed") is not None:
+            report.speed = _speed_list(d["speed"], len(report.locations))
+            summary_from_dict(d.get("speed_summary"), report)  # must be exactly what the results give
+        elif d.get("speed_summary") is not None:
+            raise ValueError("a speed summary needs its results")
         return report
 
 
@@ -381,7 +519,7 @@ def _options(value) -> dict:
     options = copy.deepcopy(_obj(value, "options"))
     if "checks" in options:
         checks = options["checks"]
-        if (not isinstance(checks, list) or not all(isinstance(x, str) and x in REACH_CHECKS for x in checks)
+        if (not isinstance(checks, list) or not all(isinstance(x, str) and x in ALL_CHECKS for x in checks)
                 or len(set(checks)) != len(checks)):
             raise ValueError("checks must list known checks, each once")
     if "not_run" in options:
@@ -555,6 +693,64 @@ def _reach_list(value, rows: int) -> list[ReachResult]:
         key = (r.check, r.row, r.resolver)
         if key in seen:
             raise ValueError("one result per check, place and resolver")
+        seen.add(key)
+        out.append(r)
+    return out
+
+
+# Results per place for the speed checks: CONSISTENCY_EXTRA runs, one for each other check.
+SPEED_PER_PLACE = CONSISTENCY_EXTRA + len(SPEED_CHECKS) - 1
+
+
+def _bool_or_none(d: dict, key: str) -> bool | None:
+    value = d.get(key)
+    if value is not None and not isinstance(value, bool):
+        raise ValueError(f"{key} must be true, false or null")
+    return value
+
+
+def _trace_step(x) -> TraceStep:
+    d = _obj(x, "trace step")
+    return TraceStep(_s(d, "kind"), _s(d, "server"), _num_or_none(d, "ms", 0, MAX_MS))
+
+
+def _path_hop(x) -> PathHop:
+    d = _obj(x, "path hop")
+    n = d.get("n")
+    if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= MAX_PATH_HOPS:
+        raise ValueError("hop number is out of range")
+    return PathHop(n, _s(d, "host"), _int_or_none(d, "asn"), _num_or_none(d, "avg_ms", 0, MAX_MS),
+                   _num_or_none(d, "loss_pct", 0, 100), _num_or_none(d, "jitter_ms", 0, MAX_MS))
+
+
+def _capped(d: dict, key: str, cap: int) -> list:
+    items = _list(d, key)
+    if len(items) > cap:  # checked before any item is read
+        raise ValueError(f"too many {key}")
+    return items
+
+
+def _speed_list(value, rows: int) -> list[SpeedResult]:
+    if not isinstance(value, list):
+        raise ValueError("speed must be a list")
+    if len(value) > rows * SPEED_PER_PLACE:  # checked before any item is read
+        raise ValueError("more speed results than places and checks allow")
+    out, seen = [], set()
+    for x in value:
+        d = _obj(x, "speed result")
+        row = d.get("row")
+        if isinstance(row, bool) or not isinstance(row, int) or not 0 <= row < rows:
+            raise ValueError("speed row must name a location")
+        r = SpeedResult(check=_s(d, "check"), row=row, location=_location(d.get("location")),
+                        status=_s(d, "status"), reason=_s(d, "reason"), run=_int_or_none(d, "run"),
+                        stages=_stages(d, "stages"), http_version=_s_or_none(d, "http_version"),
+                        h2_offered=_bool_or_none(d, "h2_offered"), encoding=_s_or_none(d, "encoding"),
+                        trace=[_trace_step(t) for t in _capped(d, "trace", MAX_TRACE_STEPS)],
+                        hops=[_path_hop(h) for h in _capped(d, "hops", MAX_PATH_HOPS)],
+                        reached=_bool_or_none(d, "reached"), probe=_s_or_none(d, "probe"))
+        key = (r.check, r.row, r.run)
+        if key in seen:
+            raise ValueError("one result per check, place and run")
         seen.add(key)
         out.append(r)
     return out

@@ -268,3 +268,26 @@ Nine authenticated single-probe calls (8 tests used, one refused before running)
 | http `protocol: "HTTP"` (plain) to a site that redirects (`github.com`), reused probes | `statusCode: 301`, `headers.location: "https://github.com/"`, `tls: null`, timings present. The redirect is not followed. |
 
 Not observed: a dns result with `status: failed` (the spec lists `failureSource: "resolver"` for resolver trouble), `SERVFAIL` or `REFUSED` codes, a TCP ping that loses only some packets, and an IPv6 test on a probe without IPv6 (the spec says reuse returns `offline` for a probe that cannot run the test). The app treats each of these as described in README "More checks".
+
+## Speed checks (observed 2026-11-02)
+
+Seven authenticated single-probe tests (7 tests used), a Frankfurt probe (`oci-eu-frankfurt-1`) for six of
+them, each reusing the first test's probe by passing its id as `locations`, and one Tokyo probe for a long
+path. Trimmed answers are in `tests/fixtures/globalping/speed_recorded.json` (bodies, certificate details,
+cf-ray and probe-identifying tags removed). The key is never recorded.
+
+| Request | Observed result |
+| --- | --- |
+| http `request.headers: {"Accept-Encoding": "br, gzip"}` | `finished`, `headers["content-encoding"]: "br"`, `transfer-encoding: chunked`, no `content-length`. |
+| http to `httpbin.org/headers` with default options (reused probe) | The echoed request headers show what Globalping sends by default: `Accept-Encoding: gzip, deflate, br`, `User-Agent: globalping probe (...)`. **So the main test already asks for compression**: the compression check confirms the encoding chosen for `br, gzip`; its download time against the main test's is one run each and mostly noise. |
+| http `protocol: "HTTP2"`, reused probe (a site that offers HTTP/2) | `finished`, `rawOutput` first line `HTTP/2.0 200`, `statusCodeName: ""` (empty), `tls.protocol: "TLSv1.3"`, all six timings. |
+| http `protocol: "HTTP2"` to a site that offers only HTTP/1.1 (`www.gnu.org`) | **`status: "failed"`, `failureSource: "target"`**, `rawOutput: "...SSL routines:tls_parse_stoc_alpn:bad extension..."`, `timings: {"total":276,"dns":105,"tcp":84,"tls":null,...}`. There is no fallback to HTTP/1.1. The generic classifier would call this a TLS failure (blocked); the HTTP/2 check reads an `alpn` failure as "HTTP/2 not offered", a measured answer with no timings, never as blocked. |
+| dns `trace: true`, reused probe | `finished`, keys `status, rawOutput, hops` only. Each hop: `resolver` (the server **asked**), `answers` (what it returned: the referral or the final answer), `timings.total`. Observed order: `127.0.0.53` (the probe's local resolver, 0 ms, returned the root NS list), `d.root-servers.net` (0 ms, returned the `com.` NS list), `a.gtld-servers.net` (100 ms, returned the site's NS), `elliott.ns.cloudflare.com` (0 ms, returned the A records). Times are whole milliseconds and often 0. |
+| mtr `protocol: "TCP"`, `port: 443`, `packets: 5`, reused probe (CDN target) | `finished`, 6 hops, all answering. The destination showed `loss: 20` and a middle hop `loss: 40` with `max: 1029` ms, though the http tests to the same site were clean: TCP mtr against a CDN is noisy. |
+| mtr `protocol: "ICMP"`, `packets: 5`, Tokyo probe to `www.gnu.org` | `finished`, 20 hops. **Silent hops are in `hops[]`** as `{"resolvedAddress": null, "resolvedHostname": null, "asn": [], "stats": {"total":5,"loss":100,"rcv":0,"drop":5,"min":null,"avg":null,"max":null,"stDev":null,"jMin":null,"jAvg":null,"jMax":null}, "timings": []}`. Loss at middle hops (20%) did not continue to the destination (0%). The average rose by 82 ms at hop 9 (`be1.core1.sea1.he.net`, a Pacific crossing) and stayed up to the end. |
+
+More facts from the same answers:
+
+- MTR `jAvg` and `jMax` look unusable: on most hops `jMax` is about the hop's average round trip (destination: `avg 144.2`, `jMax 143.9`, `jAvg 48.7`, while `min 143.6`, `max 145.3`), as if the first packet's jitter were counted against zero. Speedward works jitter out from the per-packet `timings[].rtt` (mean change between consecutive packets) and never shows `jAvg`.
+- Loss at a middle hop that does not continue to later hops is usually a router limiting its own replies, not lost traffic. Only loss that carries through to the destination says something about the path.
+- `www.gnu.org` answered ICMP; whether every site does is not observed. A destination that does not answer leaves the path test with no end point (shown as "the site did not answer this path test", not blocked).

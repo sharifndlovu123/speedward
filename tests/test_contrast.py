@@ -237,3 +237,36 @@ def test_blocked_in_a_check_ring_is_ink_and_differs_from_no_data_by_shape(theme)
     assert "stroke-dasharray" in none  # dashed single ring vs solid double ring
     t = MAP[theme]
     assert ratio(t["ink"], t["land"]) >= UI and ratio(t["ink"], t["bg"]) >= UI
+
+
+# --- "Is it fast?" (speedward/reports/speed.css, shared by page and export) ------------------------------
+
+SPEED_CSS = (Path(__file__).parent.parent / "speedward/reports/speed.css").read_text()
+
+
+def test_speed_panel_has_no_red_and_is_flat_and_self_contained():
+    css = re.sub(r"/\*.*?\*/", "", SPEED_CSS, flags=re.S)
+    assert "--accent" not in css and "#c62f17" not in css.lower()
+    assert "box-shadow" not in css and "url(" not in css and "@import" not in css and "border-radius" not in css
+    assert re.search(r"@media \(prefers-reduced-motion:\s*reduce\)\{\.sp-findings\{animation:none\}\}", css)
+    used = set(re.findall(r"var\(--([\w-]+)\)", css))
+    for name, tokens in (("page", PAGE), ("export", EXPORT)):
+        for theme in ("light", "dark"):
+            assert not used - set(tokens[theme]), f"{name} {theme} lacks {used - set(tokens[theme])}"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("tokens", [PAGE, EXPORT], ids=["page", "export"])
+def test_speed_findings_text_on_its_tinted_box(tokens, theme):
+    m = re.search(r"\.sp-findings\{[^}]*color-mix\(in srgb,var\(--ink\) (\d+)%,transparent\)", SPEED_CSS)
+    assert m, "findings tint not found"
+    t = tokens[theme]
+    box = _blend(t["ink"], t["paper"], int(m.group(1)) / 100)
+    assert ratio(t["ink"], box) >= TEXT
+    assert ratio(t["mute"], t["paper"]) >= TEXT  # the detail lines and the key
+
+
+def test_diagram_note_rule_follows_the_text_colour():
+    css = (Path(__file__).parent.parent / "speedward/reports/bottleneck.css").read_text()
+    rule = re.search(r"\.bn-extra\{([^}]*)\}", css).group(1)
+    assert "currentColor" in rule and "#" not in rule  # ink on paper, paper on the dark "biggest" block

@@ -7,6 +7,21 @@ from urllib.parse import urlsplit, urlunsplit
 _BAD_CHARS = re.compile(r"[\x00-\x20\x7f-\x9f\\]")
 
 
+_IP_HOST = re.compile(r"[\d.]+")
+
+
+def is_ip_host(host: str) -> bool:
+    """An IPv4 or IPv6 literal (as Globalping takes it: bare, without brackets)."""
+    return bool(_IP_HOST.fullmatch(host)) or ":" in host
+
+
+def target_traits(url: str) -> tuple[bool, bool]:
+    """(plain HTTP, IP address) for an address; ValueError like normalise_target. The checks that cannot
+    run on such an address are skipped and cost nothing (speedward/core/checks.py SKIPPED_*)."""
+    parts = urlsplit(normalise_target(url))
+    return parts.scheme == "http", is_ip_host((parts.hostname or "").strip("[]"))
+
+
 def normalise_target(url: str) -> str:
     if not isinstance(url, str) or not url.strip():
         raise ValueError("Enter a website address.")

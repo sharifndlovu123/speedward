@@ -314,9 +314,27 @@
     }
   }
 
+  // What the address is, never the address itself: the estimate leaves out the checks it cannot use
+  // (HTTP/2 on a plain http:// address; IPv6, DNS resolvers and the DNS trace on an IP address).
+  function addressFlags() {
+    var text = form.elements.url.value.trim();
+    var out = { plain: false, ip: false };
+    if (!text) { return out; }
+    try {
+      var u = new URL(text.indexOf("://") === -1 ? "https://" + text : text);
+      var host = u.hostname;
+      out.plain = u.protocol === "http:";
+      out.ip = /^[\d.]+$/.test(host) || host.indexOf(":") !== -1 || host.charAt(0) === "[";
+    } catch (e) { /* not an address yet: charge every check */ }
+    return out;
+  }
+
   function estimate() {
     var v = formValues();
     delete v.url;
+    var flags = addressFlags();
+    if (flags.plain) { v.plain = "1"; }
+    if (flags.ip) { v.ip = "1"; }
     if (!v.locations) {  // never ask for "no places": the server would read that as the default spread
       setText($("estimate"), "");
       refetching = false;
@@ -366,6 +384,18 @@
     form.elements[name].addEventListener("input", changed);
     form.elements[name].addEventListener("change", changed);
   });
+  // Only a change in what the address is (plain http, IP address) can change the cost.
+  var lastFlags = "";
+  form.elements.url.addEventListener("input", function () {
+    var f = addressFlags(), key = (f.plain ? "p" : "") + (f.ip ? "i" : "");
+    if (key === lastFlags) { return; }
+    lastFlags = key;
+    setStale(true);
+    estimateFailed = false;
+    renderSummary();
+    estimateSoon();
+  });
+
   checkBoxes().forEach(function (b) {
     b.addEventListener("change", function () {
       setStale(true);
@@ -872,6 +902,8 @@
       var head = take(".bn-head");
       // "Who can reach it": its finding follows, the grid stays in the drawer above the diagram.
       head = head.concat(take(".rc-head"));
+      // "Is it fast?": its findings follow too; the table stays in the drawer.
+      head = head.concat(take(".sp-head"));
       var at = panelNodes.findIndex(function (n) { return n.classList.contains("figures"); });
       Array.prototype.splice.apply(panelNodes, [at + 1, 0].concat(head));
       var rest = doc.querySelector(".fragment") || doc.body;
@@ -1165,6 +1197,14 @@
     if (!b) { return; }
     setDrawer(true, b);
     var title = $("results-body").querySelector(".rc-title");
+    if (title) { title.scrollIntoView({ block: "start" }); title.focus(); }
+  });
+
+  $("results-summary").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest("[data-sp-open]") : null;
+    if (!b) { return; }
+    setDrawer(true, b);
+    var title = $("results-body").querySelector(".sp-title");
     if (title) { title.scrollIntoView({ block: "start" }); title.focus(); }
   });
 

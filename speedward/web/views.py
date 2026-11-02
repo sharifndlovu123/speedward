@@ -27,19 +27,20 @@ from django.views.decorators.http import require_GET, require_POST
 from speedward.core.allowance_view import KEY_PROMPT, describe_allowance
 from speedward.core.analysis import Limits, evaluate_limits, plain_number
 from speedward.core.budget import Plan, check_budget, cost_breakdown, describe_breakdown, estimate_cost
-from speedward.core.checks import LABEL, PER_PLACE, QUESTION, REACH_CHECKS, parse_checks
+from speedward.core.checks import LABEL, PER_PLACE, QUESTION, REACH_CHECKS, SPEED_CHECKS, parse_checks
 from speedward.core.config import EndpointRefused, check_endpoint
 from speedward.core.geo import geolocator_from_env, parse_pin
 from speedward.core.globalping import Allowance, GlobalpingClient, GlobalpingError
 from speedward.core.locations import CATALOG, CONTINENTS, DEFAULT_LOCATIONS, parse_locations, per_continent
 from speedward.core.models import ScanReport
 from speedward.core.runner import ScanError, run_scan, start_message
-from speedward.core.target import normalise_target
+from speedward.core.target import normalise_target, target_traits
 from speedward.reports import render as render_report
 from speedward.reports._view import context
 from speedward.reports.bottleneck import render_bottleneck
 from speedward.reports.map import render_map, render_picker_map
 from speedward.reports.reach import MAP_LEGEND, render_reach
+from speedward.reports.speed import render_speed
 
 from . import state
 
@@ -84,10 +85,17 @@ def _error(message: str, status: int, **extra) -> JsonResponse:
 
 
 def _plan(request) -> Plan:
-    """ValueError (with a fixed, target-free message) on a bad locations list."""
+    """ValueError (with a fixed, target-free message) on a bad locations list. A scan posts the address,
+    and what it is decides which checks are skipped (and not charged). The estimate never sends the
+    address, only two flags the page works out from it: `plain` (http://) and `ip` (an IP address)."""
+    url = request.POST.get("url", "")
+    if url.strip():
+        plain, ip = target_traits(url)
+    else:
+        plain, ip = request.POST.get("plain") == "1", request.POST.get("ip") == "1"
     return Plan(locations=parse_locations(request.POST.get("locations")),
                 traceroute=bool(request.POST.get("traceroute")), dns=bool(request.POST.get("dns")),
-                checks=parse_checks(request.POST.get("checks")))
+                checks=parse_checks(request.POST.get("checks")), plain_http=plain, ip_target=ip)
 
 
 def _budget(plan: Plan, allowance: Allowance) -> dict:
@@ -143,6 +151,8 @@ def index(request):
         "default_locations": ",".join(defaults),
         "reach_checks": [{"key": c, "label": LABEL[c], "per": PER_PLACE[c], "question": QUESTION[c]}
                          for c in REACH_CHECKS],
+        "speed_checks": [{"key": c, "label": LABEL[c], "per": PER_PLACE[c], "question": QUESTION.get(c, "")}
+                         for c in SPEED_CHECKS],
     })
 
 
@@ -357,7 +367,10 @@ def render_result(request):
     panel = render_bottleneck(report, interactive=True, heading="h3")
     # "Who can reach it", also our own autoescaping template; "" for a report without checks.
     reach = render_reach(report, interactive=True, heading="h3")
+    # "Is it fast?", likewise; "" for a report without speed checks.
+    speed = render_speed(report, interactive=True, heading="h3")
     ctx.update(map_svg=mark_safe(svg), bottleneck=mark_safe(panel), reach=mark_safe(reach),  # noqa: S308
+               speed=mark_safe(speed),  # noqa: S308
                reach_legend=MAP_LEGEND if report.reach is not None else "",
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
