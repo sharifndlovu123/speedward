@@ -236,7 +236,11 @@ With no position at all, the map says "Server position unknown: set GEOIP_DB, dr
 
 ## How to read the map and the statuses
 
-The map has one dot per test location, coloured by first-byte time against `FAST_MS` and `SLOW_MS` (a place with no data is a hollow grey ring), and a square at the server that answered it where that can be placed (see above). Each row in the table has one status:
+The map has one dot per test location, coloured by first-byte time against `FAST_MS` and `SLOW_MS` (a place with no data is a hollow grey ring), and a square at the server that answered it where that can be placed (see above).
+
+**Labels.** Each label goes in the first spot around its dot where it covers no other label, dot or square and is not cut off at the map edge. Places that sit close together share one label, joined to their dots by thin lines: "London 38ms · Paris 120ms" names two or three places, and "5 places" stands for more. When there is no room, a label is left out rather than drawn on top of another. Narrow screens (phones) use larger labels, so fewer fit; blocked places are labelled first, then measured ones, then the rest by name. Every place, labelled or not, keeps its dot, which you can hover or focus with the keyboard to read its result, and its row in the table. Reports with more than 200 places show dots only.
+
+Each row in the table has one status:
 
 - **measured**: the test ran and the site answered. Only these rows have timings and count in averages and pass/fail limits.
 - **blocked**: the site itself refused the request or timed out.
