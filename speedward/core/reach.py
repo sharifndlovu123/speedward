@@ -105,12 +105,14 @@ def reach_grid(report: ScanReport) -> Grid:
     columns = [MAIN] + [c for c in REACH_CHECKS if any(x.check == c for x in results)]
     port = next((x.port for x in results if x.check == PORT), None)
     scheme = (urlsplit(report.target).scheme or "https").lower()
+    grouped: dict[tuple[int, str], list[Part]] = {}  # one pass: work grows with rows + results only
+    for x in results:
+        grouped.setdefault((x.row, x.check), []).append(_part(x))
     rows = []
     for i, r in enumerate(report.locations):
         cells = [Cell(MAIN, "", [_main_part(r)])]
         for c in columns[1:]:
-            parts = [_part(x) for x in results if x.check == c and x.row == i]
-            cells.append(Cell(c, "", parts or [Part("not_run", NO_RESULT)]))
+            cells.append(Cell(c, "", grouped.get((i, c)) or [Part("not_run", NO_RESULT)]))
         for cell in cells:
             cell.state = _state(cell.parts)
         states = {c.state for c in cells}

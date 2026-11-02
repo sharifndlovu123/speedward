@@ -220,3 +220,52 @@ def test_known_not_run_texts_for_checks_load():
     d = _with(lambda d: d["options"].update(not_run=["IPv6 check: Globalping limit reached",
                                                      "port check: the test failed on the Globalping side"]))
     assert ScanReport.from_dict(d).options["not_run"][0] == "IPv6 check: Globalping limit reached"
+
+
+# --- untrusted size (posted to /render and /export) -----------------------------------------------------
+
+def test_location_cap_matches_globalping_largest_probe_count():
+    from speedward.core.globalping import KEY_MAX_PROBES
+    from speedward.core.models import MAX_LOCATIONS, REACH_PER_PLACE
+    assert MAX_LOCATIONS == KEY_MAX_PROBES and REACH_PER_PLACE == 5
+
+
+def _big(places, per_place=5):
+    report = rep([ok(f"P{i}") for i in range(places)])
+    d = json.loads(json.dumps(report.to_dict()))
+    item = rr("ipv6", 0).__dict__ | {"location": json.loads(json.dumps(loc("A").__dict__))}
+    d["reach"] = [dict(item, row=i % places) for i in range(places * per_place)]
+    return d
+
+
+def test_a_report_at_the_location_cap_loads_and_one_more_is_refused():
+    from speedward.core.models import MAX_LOCATIONS
+    report = rep([ok(f"P{i}") for i in range(MAX_LOCATIONS)])
+    assert len(ScanReport.from_dict(report.to_dict()).locations) == MAX_LOCATIONS
+    d = rep([ok(f"P{i}") for i in range(MAX_LOCATIONS + 1)]).to_dict()
+    with pytest.raises(ValueError, match="too many locations"):
+        ScanReport.from_dict(d)
+
+
+def test_a_reach_list_longer_than_places_times_checks_is_refused_before_reading_it():
+    d = _big(3)
+    d["reach"].append(d["reach"][0])  # 3 places x 5 + 1
+    with pytest.raises(ValueError, match="more reach results"):
+        ScanReport.from_dict(d)
+    d["reach"] = [None] * (10**6)  # never iterated
+    with pytest.raises(ValueError, match="more reach results"):
+        ScanReport.from_dict(d)
+
+
+def test_a_full_size_grid_is_built_quickly():
+    import time
+
+    from speedward.core.models import MAX_LOCATIONS
+    report = rep([ok(f"P{i}") for i in range(MAX_LOCATIONS)],
+                 [rr(c, i, **({"resolver": ip} if c == "dns" else {}))
+                  for i in range(MAX_LOCATIONS) for c, ip in (("ipv6", None), ("http", None), ("dns", "1.1.1.1"),
+                                                             ("dns", "8.8.8.8"), ("port", None))])
+    began = time.perf_counter()
+    again = ScanReport.from_dict(json.loads(json.dumps(report.to_dict())))
+    assert len(again.reach) == 5 * MAX_LOCATIONS
+    assert time.perf_counter() - began < 5  # linear: well under a second here; quadratic took far longer

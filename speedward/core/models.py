@@ -344,6 +344,9 @@ class ScanReport:
         d = _obj(data, "report")
         if d.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported schema_version")
+        # Posted reports are untrusted: no scan has more places than Globalping allows in one measurement.
+        if len(_list(d, "locations")) > MAX_LOCATIONS:
+            raise ValueError("too many locations")
         server = d.get("server")
         browser = d.get("browser")
         report = cls(
@@ -523,9 +526,17 @@ def _dns(d: dict) -> DnsResult:
                      _str_list(d, "answers"), _num_or_none(d, "lookup_ms", 0, MAX_MS), _s_or_none(d, "probe"))
 
 
+# At most this many places in one report (Globalping's largest probe count per measurement, with a key).
+MAX_LOCATIONS = 500
+# Results per place: one per check, the dns check one per resolver.
+REACH_PER_PLACE = len(REACH_CHECKS) - 1 + len(RESOLVER_IPS)
+
+
 def _reach_list(value, rows: int) -> list[ReachResult]:
     if not isinstance(value, list):
         raise ValueError("reach must be a list")
+    if len(value) > rows * REACH_PER_PLACE:  # checked before any item is read
+        raise ValueError("more reach results than places and checks allow")
     out, seen = [], set()
     for x in value:
         d = _obj(x, "reach result")
