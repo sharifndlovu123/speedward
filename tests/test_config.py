@@ -77,3 +77,19 @@ def test_check_endpoint_refuses_token_to_remote_host():
         check_endpoint("https://evil.example/v1", "tok-secret")
     assert "tok-secret" not in str(info.value)
     assert info.value.host == "evil.example"
+
+
+# --- FAST_MS / SLOW_MS (final review item 4) ----------------------------------------------------
+
+def test_speed_thresholds_defaults_and_values():
+    from speedward.core.config import speed_thresholds
+    assert speed_thresholds({}) == (300, 800)
+    assert speed_thresholds({"FAST_MS": "50", "SLOW_MS": "100.5"}) == (50, 100.5)
+
+
+@pytest.mark.parametrize("env", [{"FAST_MS": "x"}, {"FAST_MS": "0"}, {"SLOW_MS": "-1"}, {"FAST_MS": "nan"},
+                                 {"FAST_MS": "inf"}, {"FAST_MS": "900"}, {"FAST_MS": "500", "SLOW_MS": "500"}])
+def test_speed_thresholds_rejects_bad_values(env):
+    from speedward.core.config import speed_thresholds
+    with pytest.raises(ValueError):
+        speed_thresholds(env)

@@ -95,8 +95,12 @@ def test_focus_ring_rule_comes_after_the_checked_rule_for_picks():
 
 def test_unknown_server_position_says_how_to_fix_and_draws_no_lines():
     svg = render_map(report([ok("Tokyo", 100)], server=None))
-    assert "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON" in svg
+    # A CLI report or exported file cannot drop a pin: only the settings are named there.
+    assert "Server position unknown: set GEOIP_DB or SERVER_LAT/SERVER_LON" in svg
+    assert "drop the pin" not in svg
     assert not re.search(r'<path d="M[^"]* Q', svg)
+    web = render_map(report([ok("Tokyo", 100)], server=None), pin_hint=True)
+    assert "Server position unknown: set GEOIP_DB, drop the pin or set SERVER_LAT/SERVER_LON" in web
 
 
 def test_pinned_server_draws_one_arc_per_place_and_says_pin():

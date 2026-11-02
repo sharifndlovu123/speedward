@@ -815,3 +815,9 @@ def test_render_labels_other_probe_repeats_and_lists_skipped_measurements(client
     assert "the repeat ran on a different test machine" in html
     assert "Repeat request from the same test machine" not in html
     assert "Ping: Globalping limit reached, so the Delay column has no figures." in html
+
+
+def test_html_export_uses_configured_speed_thresholds(client, settings):
+    settings.FAST_MS, settings.SLOW_MS = 50, 100
+    html = post_json(client, reverse("export", args=["html"]), {"result": report_dict()}).content.decode()
+    assert "green up to 50 ms first byte, red from 100 ms" in html

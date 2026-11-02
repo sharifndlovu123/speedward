@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
-from speedward.core.config import build_environment
+from speedward.core.config import build_environment, speed_thresholds
 
 BASE_DIR = Path(__file__).resolve().parent
 _ENV = build_environment(Path(".env"), on_warning=lambda m: print(m, file=sys.stderr))
@@ -31,19 +31,6 @@ def _int(name: str, default: int, minimum: int = 0) -> int:
         raise ImproperlyConfigured(f"{name} must be a whole number") from None
     if value < minimum:
         raise ImproperlyConfigured(f"{name} must be at least {minimum}")
-    return value
-
-
-def _float(name: str, default: float) -> float:
-    raw = (_ENV.get(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        value = float(raw)
-    except ValueError:
-        raise ImproperlyConfigured(f"{name} must be a number") from None
-    if not value > 0:
-        raise ImproperlyConfigured(f"{name} must be above 0")
     return value
 
 
@@ -73,12 +60,12 @@ GLOBALPING_POLL_INTERVAL = 0.5
 GEOIP_DB = _ENV.get("GEOIP_DB") or None
 SERVER_LAT = _ENV.get("SERVER_LAT") or None
 SERVER_LON = _ENV.get("SERVER_LON") or None
-FAST_MS = _float("FAST_MS", 300)
-SLOW_MS = _float("SLOW_MS", 800)
+try:  # the same rules as the CLI (speedward.core.config.speed_thresholds)
+    FAST_MS, SLOW_MS = speed_thresholds(_ENV)
+except ValueError as _exc:
+    raise ImproperlyConfigured(str(_exc)) from None
 RESULT_TTL_SECONDS = _int("RESULT_TTL_SECONDS", 900, minimum=60)
 MAX_CONCURRENT_SCANS = _int("MAX_CONCURRENT_SCANS", 2, minimum=1)
-if SLOW_MS <= FAST_MS:
-    raise ImproperlyConfigured("SLOW_MS must be greater than FAST_MS")
 
 # --- Django (deliberately minimal: no database, sessions, auth or admin) --------------------------
 DATABASES = {}

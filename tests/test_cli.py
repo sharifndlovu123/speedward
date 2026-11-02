@@ -320,3 +320,20 @@ def test_cli_start_failure_names_a_place_without_probes(fake):
     r = scan()
     assert r.exit_code == 2
     assert "no test machine found for one of the places you chose" in r.stderr
+
+
+def test_cli_html_uses_fast_and_slow_from_the_environment(fake, monkeypatch):
+    monkeypatch.setenv("FAST_MS", "50")
+    monkeypatch.setenv("SLOW_MS", "100")
+    r = scan("--format", "html")
+    assert r.exit_code == 0
+    assert "green up to 50 ms first byte, red from 100 ms" in r.stdout
+
+
+def test_cli_refuses_bad_speed_thresholds_before_any_test(fake, monkeypatch):
+    monkeypatch.setenv("FAST_MS", "900")
+    monkeypatch.setenv("SLOW_MS", "100")
+    r = scan()
+    assert r.exit_code == 2
+    assert "FAST_MS and SLOW_MS" in r.stderr
+    assert fake.posts() == []

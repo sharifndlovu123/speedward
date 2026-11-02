@@ -327,7 +327,8 @@ def render_result(request):
         row["index"] = i
     verdict, failed = _pass_fail(report, limits)
     # render_map escapes every dynamic string itself (see speedward/reports/map.py).
-    ctx.update(map_svg=mark_safe(render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)),  # noqa: S308
+    svg = render_map(report, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS, pin_hint=True)
+    ctx.update(map_svg=mark_safe(svg),  # noqa: S308
                verdict=verdict, verdict_failed=verdict.startswith("Pass/fail: FAILED"), failed=failed,
                fast_ms=plain_number(settings.FAST_MS), slow_ms=plain_number(settings.SLOW_MS))
     return render(request, "_results.html", ctx)
@@ -340,6 +341,7 @@ def export(request, fmt):
         report = _report(_posted(request))
     except ValueError:
         return _error(BAD_RESULT, 400)
-    response = HttpResponse(render_report(report, fmt), content_type=EXPORT_TYPES[fmt])
+    text = render_report(report, fmt, fast_ms=settings.FAST_MS, slow_ms=settings.SLOW_MS)
+    response = HttpResponse(text, content_type=EXPORT_TYPES[fmt])
     response["Content-Disposition"] = f'attachment; filename="speedward-report.{fmt}"'
     return response

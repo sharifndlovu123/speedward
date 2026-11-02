@@ -102,6 +102,11 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
     plan = Plan(locations=specs, traceroute=traceroute, dns=dns, browser=False)
 
     env = _environment()
+    try:  # checked before any test is spent
+        fast_ms, slow_ms = config.speed_thresholds(env)
+    except ValueError as exc:
+        _err(f"Error: {exc}")
+        raise typer.Exit(2) from None
     # GLOBALPING_BASE_URL is for tests only (points at a local fake); deliberately not in --help.
     # Read from the real process environment only, never from `.env`.
     base_url = os.environ.get("GLOBALPING_BASE_URL") or None
@@ -160,7 +165,7 @@ def _run(url, locations, traceroute, dns, browser, fmt, out, max_ttfb, max_load,
             _err(f"Detail: {clean(str(exc))}")
         raise typer.Exit(2) from None
 
-    text = render(report, fmt)
+    text = render(report, fmt, fast_ms=fast_ms, slow_ms=slow_ms)
     if out:
         try:
             out.write_text(text, encoding="utf-8")

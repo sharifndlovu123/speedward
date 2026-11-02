@@ -270,3 +270,10 @@ def test_summary_figures_keep_wording_and_never_invent_a_number():
     ok_html = render(rep(), "html")
     figs = text(re.search(r'<section class="figures".*?</section>', ok_html, re.S).group(0))
     assert "920 ms" in figs
+
+
+def test_html_export_uses_the_configured_speed_thresholds():
+    out = render(rep(), "html", fast_ms=50, slow_ms=100)
+    assert "green up to 50 ms first byte, red from 100 ms" in out
+    assert "green up to 300 ms first byte, red from 800 ms" in render(rep(), "html")
+    assert render(rep(), "md", fast_ms=50, slow_ms=100) == render(rep(), "md")

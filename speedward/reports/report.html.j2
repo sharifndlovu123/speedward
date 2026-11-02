@@ -45,6 +45,7 @@ footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:v
 </header>
 
 <section class="map" aria-label="Map">{{ map_svg }}</section>
+<p class="mute">Circle = test location. Square = server that answered it (a CDN edge when the addresses differ; a frame around the circle when in the same city). Lines: green up to {{ fast_ms }} ms first byte, red from {{ slow_ms }} ms; dashed grey: no data.</p>
 
 <section class="figures" aria-label="Summary">
 <div class="figure"><small class="cap">Average first byte</small><b class="num">{{ avg_fig[0] }}{% if avg_fig[1] %}<span class="unit">{{ avg_fig[1] }}</span>{% endif %}</b><small class="note">measured locations only</small></div>
