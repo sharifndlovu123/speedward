@@ -26,6 +26,8 @@
 .bn-block b{font-size:1.25rem;font-weight:700;line-height:1.1}
 .bn-block .bn-k{margin:0}
 .bn-n{font-size:.85rem;color:var(--mute)}
+/* a note from the speed checks, under the block's own note; it never changes the mark */
+.bn-extra{border-top:1px dotted currentColor;padding-top:4px}
 .bn-block.bn-visitor,.bn-block.bn-edge{flex:0 1 8rem}
 .bn-block.bn-visitor b,.bn-block.bn-edge b{font-size:1rem}
 .bn-block.bn-edge{border-style:dashed}

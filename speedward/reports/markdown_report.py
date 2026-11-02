@@ -1,6 +1,7 @@
 from ._view import context
 from .bottleneck import markdown_lines
 from .reach import markdown_lines as reach_lines
+from .speed import markdown_lines as speed_lines
 
 
 def _c(text) -> str:
@@ -22,6 +23,9 @@ def to_markdown(report) -> str:
     reach = reach_lines(report)
     if reach:
         L += [""] + reach  # cells are escaped there
+    speed = speed_lines(report)
+    if speed:
+        L += [""] + speed  # likewise
     where = markdown_lines(report)
     if where:
         L += [""] + [_c(line) if line.startswith("- ") else line for line in where]

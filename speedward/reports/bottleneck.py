@@ -13,6 +13,8 @@ from jinja2 import Environment, FileSystemLoader
 
 from speedward.core.bottleneck import STAGES, Diagnosis, PlaceFigure, StageFigure
 
+from .speed import notes_for
+
 NAME = {"dns": "DNS", "connect": "Connect", "tls": "TLS", "server_wait": "Server wait", "download": "Download"}
 WORD = {"dns": "DNS", "connect": "connect", "tls": "TLS", "server_wait": "server wait", "download": "download"}
 NUMBER = {s: i for i, s in enumerate(STAGES, start=1)}
@@ -101,11 +103,15 @@ def _note(d: Diagnosis, s: StageFigure, overall: bool) -> str:
 
 
 def _diagram(d: Diagnosis, stages: list[StageFigure], total: float | None, overall: bool,
-             place: PlaceFigure | None = None) -> dict:
+             place: PlaceFigure | None = None, extra: dict[str, str] | None = None) -> dict:
+    """extra: notes from the speed checks (speedward/reports/speed.py diagram_notes), one per stage. They
+    sit under a block's own note and never change its mark."""
     blocks, bar = [], []
+    extra = extra or {}
     for s in stages:
         blocks.append({"stage": s.stage, "n": NUMBER[s.stage], "name": NAME[s.stage], "ms": ms(s.ms),
-                       "mark": s.mark, "flag": FLAG.get(s.mark, ""), "note": _note(d, s, overall)})
+                       "mark": s.mark, "flag": FLAG.get(s.mark, ""), "note": _note(d, s, overall),
+                       "extra": extra.get(s.stage, "")})
         if s.share:
             bar.append({"stage": s.stage, "mark": s.mark, "pct": round(s.share * 100, 2)})
     if overall:
@@ -245,7 +251,7 @@ def _card_distance(d: Diagnosis) -> dict:
     return {**card, "title": "Not enough data", "text": "Distance needs connect times from at least two places."}
 
 
-def _place(d: Diagnosis, p: PlaceFigure) -> dict:
+def _place(d: Diagnosis, p: PlaceFigure, extra: dict[str, str] | None = None) -> dict:
     if p.status != "measured":
         why = p.reason or "no reason given"
         return {"row": p.row, "name": p.place, "measured": False, "tag": "no data", "total": "",
@@ -259,7 +265,7 @@ def _place(d: Diagnosis, p: PlaceFigure) -> dict:
         tag = "not judged"
     segments = [{"mark": s.mark, "pct": round(s.share * 100, 2)} for s in p.stages if s.share]
     return {"row": p.row, "name": p.place, "measured": True, "tag": tag, "total": ms(p.total_ms),
-            "diagram": _diagram(d, p.stages, p.total_ms, False, p), "reason": "", "segments": segments}
+            "diagram": _diagram(d, p.stages, p.total_ms, False, p, extra), "reason": "", "segments": segments}
 
 
 def _footnote(d: Diagnosis) -> str:
@@ -275,15 +281,19 @@ def _footnote(d: Diagnosis) -> str:
     return out
 
 
-def view(d: Diagnosis) -> dict:
+def view(d: Diagnosis, notes: dict | None = None) -> dict:
+    """notes: speedward/reports/speed.py diagram_notes ({"overall": {...}, "places": {row: {...}}}) or None."""
     headline, detail = _headline(d)
-    overall = None if d.verdict == "nothing_measured" else _diagram(d, d.stages, d.total_ms, True)
+    notes = notes or {"overall": {}, "places": {}}
+    overall = None if d.verdict == "nothing_measured" else _diagram(d, d.stages, d.total_ms, True,
+                                                                    extra=notes["overall"])
     big, possible = pct(d.rules.biggest_share, ()), pct(d.rules.possible_share, ())
     return {
         "kicker": f"Where the time goes · average of {_plural(d.measured, 'measured place')}",
         "headline": headline, "detail": detail, "overall": overall, "checks": _checks(d),
         "cards": [_card_biggest(d), _card_cache(d), _card_distance(d)],
-        "places": [_place(d, p) for p in d.places], "footnote": _footnote(d), "scale": SCALE,
+        "places": [_place(d, p, notes["places"].get(p.row)) for p in d.places], "footnote": _footnote(d),
+        "scale": SCALE,
         "key": [(k, text.format(big=big, possible=possible)) for k, text in KEY],
         "average_label": f"average of {_plural(d.measured, 'measured place')}",
     }
@@ -296,15 +306,15 @@ def render_bottleneck(report, interactive: bool = False, heading: str = "h2") ->
         return ""
     from markupsafe import Markup
     css = Markup(CSS)  # noqa: S704 - a file shipped with this package, not data
-    return _env.get_template("bottleneck.html.j2").render(v=view(report.diagnosis), interactive=interactive,
-                                                          h=heading, css=css)
+    return _env.get_template("bottleneck.html.j2").render(v=view(report.diagnosis, notes_for(report)),
+                                                          interactive=interactive, h=heading, css=css)
 
 
 def markdown_lines(report) -> list[str]:
     if report.diagnosis is None:
         return []
     d = report.diagnosis
-    v = view(d)
+    v = view(d, notes_for(report))
     L = ["## Where the time goes", "", f"**{v['headline']}** {v['detail']}", ""]
     if v["overall"] is not None:
         g = v["overall"]
@@ -313,7 +323,8 @@ def markdown_lines(report) -> list[str]:
             L += [g["reason"], ""]
         for s, b in zip(d.stages, g["blocks"], strict=True):
             share = f" ({_p(d, s.share)})" if s.share is not None else ""
-            L.append(f"{b['n']}. {b['name']}: {b['ms']}{share}, {MARK_TEXT[s.mark]}")
+            L.append(f"{b['n']}. {b['name']}: {b['ms']}{share}, {MARK_TEXT[s.mark]}"
+                     + (f" ({b['extra']})" if b["extra"] else ""))
         L += ["", f"Edge / CDN (seen, not timed): {g['edge']['title']}, {g['edge']['note']}."]
     if v["checks"]:
         L += [""] + [f"- {c['title']}: {c['text']}" for c in v["checks"]]

@@ -1,0 +1,21 @@
+{#- "Is it fast?": shared by the HTML export and the web UI. Autoescaped; every value is text.
+    Each cell is a symbol and a word; no colour carries meaning. -#}
+<section class="speedchecks" aria-label="Is it fast? Speed checks">
+<style>{{ css }}</style>
+{% if not interactive %}<{{ h }} class="sp-title">Is it fast? Speed checks</{{ h }}>{% endif %}
+<div class="sp-head">
+<p class="sp-kicker">{{ v.kicker }}</p>
+<ul class="sp-findings">{% for f in v.findings %}<li><p>{{ f.text }}</p>{% if f.prompt %}<p class="sp-check">{{ f.prompt }}</p>{% endif %}</li>{% endfor %}</ul>
+{% if interactive %}<button type="button" class="secondary" data-sp-open>See the speed checks</button>{% endif %}
+</div>
+<div class="sp-body">
+{% if interactive %}<{{ h }} class="sp-title" tabindex="-1">Is it fast? Speed checks</{{ h }}>{% endif %}
+<div class="scroll" tabindex="0" role="region" aria-label="Speed checks, by place"><table class="sp-grid">
+<thead><tr><th scope="col">Place</th>{% for hd in v.headers %}<th scope="col">{{ hd }}</th>{% endfor %}</tr></thead>
+<tbody>
+{% for r in v.rows %}<tr data-row="{{ r.row }}"><th scope="row">{{ r.place }}</th>{% for c in r.cells %}<td class="sp-{{ c.state }}"><span class="sp-sym" aria-hidden="true">{{ c.symbol }}</span> <b>{{ c.word }}</b>{% if c.detail %} <span class="sp-detail">{{ c.detail }}</span>{% endif %}</td>{% endfor %}</tr>
+{% endfor %}</tbody></table></div>
+<p class="sp-key">{{ v.key }}</p>
+{% for n in v.notes %}<p class="sp-key">{{ n }}</p>
+{% endfor %}</div>
+</section>
