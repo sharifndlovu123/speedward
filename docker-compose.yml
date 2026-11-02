@@ -1,0 +1,71 @@
+# speedward and MaxMind's geoipupdate, side by side.
+#
+#   docker compose up -d --build      start (or rebuild after git pull)
+#   docker compose logs -f speedward  follow the app's log (it never holds targets or results)
+#   docker compose down               stop (the downloaded database volume is kept)
+#
+# Values come from .env by interpolation; .env itself is never copied into the image (.dockerignore)
+# and is not handed to either container wholesale. Each service gets only the variables listed here:
+# the MaxMind licence key goes to geoipupdate alone, the Globalping key to speedward alone.
+# Optional: keep the MaxMind values in ./secrets/ files instead, see docker-compose.secrets.yml.
+
+name: speedward
+
+services:
+  speedward:
+    build: .
+    image: speedward:local
+    restart: unless-stopped
+    # Loopback only. The app has no login: read "Run it for other people" in README.md before
+    # publishing it further (for example "0.0.0.0:8000:8000", behind your own authentication).
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      GLOBALPING_TOKEN: ${GLOBALPING_TOKEN:-}
+      FAST_MS: ${FAST_MS:-}
+      SLOW_MS: ${SLOW_MS:-}
+      RESULT_TTL_SECONDS: ${RESULT_TTL_SECONDS:-}
+      MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      SERVER_LAT: ${SERVER_LAT:-}
+      SERVER_LON: ${SERVER_LON:-}
+      DEBUG: ${DEBUG:-0}
+      # Fixed: the GEOIP_DB in .env is a host path for runs without Docker. Until geoipupdate has
+      # downloaded the file the app runs normally and simply draws no position lines.
+      GEOIP_DB: /geo/GeoLite2-City.mmdb
+    volumes:
+      - geoip:/geo:ro
+    read_only: true
+    tmpfs:
+      - /tmp  # gunicorn's worker heartbeat files
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # Uses 127.0.0.1 as the Host, so keep it in ALLOWED_HOSTS. The page asks Globalping for the
+      # allowance (GET /limits, which costs no tests).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=10)"]
+      interval: 5m
+      timeout: 15s
+      start_period: 20s
+      retries: 3
+
+  geoipupdate:
+    # Official image; pinned (see https://github.com/maxmind/geoipupdate/blob/main/doc/docker.md).
+    image: ghcr.io/maxmind/geoipupdate:v8.0.0
+    restart: unless-stopped
+    # Left empty, geoipupdate stops with an error in `docker compose logs geoipupdate` (speedward keeps
+    # running without positions). Not "required" here so that docker-compose.secrets.yml can replace them.
+    environment:
+      GEOIPUPDATE_ACCOUNT_ID: ${GEOIPUPDATE_ACCOUNT_ID:-}
+      GEOIPUPDATE_LICENSE_KEY: ${GEOIPUPDATE_LICENSE_KEY:-}
+      GEOIPUPDATE_EDITION_IDS: ${GEOIPUPDATE_EDITION_IDS:-GeoLite2-City}
+      GEOIPUPDATE_FREQUENCY: "84"  # hours between runs: twice a week (0 would run once and exit)
+      GEOIPUPDATE_DB_DIR: /usr/share/GeoIP
+    volumes:
+      - geoip:/usr/share/GeoIP
+
+volumes:
+  geoip:

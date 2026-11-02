@@ -10,4 +10,5 @@ ENV STATIC_ROOT=/app/staticfiles
 USER app
 EXPOSE 8000
 # One worker + threads: scan progress is held in this process's memory. No access log by design.
-CMD ["gunicorn", "speedward.web.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "8", "--timeout", "60"]
+# No control socket: it is not needed, and docker-compose.yml runs the image with a read-only root.
+CMD ["gunicorn", "speedward.web.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "8", "--timeout", "60", "--no-control-socket"]
