@@ -12,7 +12,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from speedward.core.bottleneck import STAGES, Diagnosis, PlaceFigure, StageFigure
+from speedward.core.bottleneck import STAGES, Diagnosis, PlaceFigure, Rules, StageFigure
 
 from ._md import md_text
 from .speed import notes_for
@@ -49,9 +49,12 @@ def ms(v: float | None) -> str:
     return "not available" if v is None else f"{v:.0f} ms"
 
 
-def pct(share: float, thresholds: tuple[float, ...] = (0.25, 0.40)) -> str:
+def pct(share: float, thresholds: tuple[float, ...] | None = None) -> str:
     """A share as a whole percent, rounded half up but never up across a threshold (39.96% is "39%",
-    so a block shown under 40% is never shown as 40%)."""
+    so a block shown under 40% is never shown as 40%). The thresholds default to the default Rules."""
+    if thresholds is None:
+        r = Rules()
+        thresholds = (r.possible_share, r.biggest_share, r.dns_share)
     value = math.floor(share * 100 + 0.5)
     for t in thresholds:
         if share < t and value >= round(t * 100):
@@ -63,7 +66,7 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
-def _thresholds(d: Diagnosis) -> tuple[float, float]:
+def _thresholds(d: Diagnosis) -> tuple[float, float, float]:
     return (d.rules.possible_share, d.rules.biggest_share, d.rules.dns_share)
 
 

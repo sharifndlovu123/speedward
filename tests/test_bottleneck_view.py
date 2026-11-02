@@ -193,3 +193,10 @@ def test_panel_files_ship_with_the_package():
     patterns = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]["speedward"]
     for name in ("reports/bottleneck.html.j2", "reports/bottleneck.css"):
         assert any(Path(name).match(p) for p in patterns), name
+
+
+def test_pct_defaults_come_from_the_shared_rules(monkeypatch):
+    from speedward.core import bottleneck as core
+    from speedward.reports import bottleneck as rb
+    monkeypatch.setattr(rb, "Rules", lambda: core.Rules(biggest_share=0.5, possible_share=0.3, dns_share=0.3))
+    assert rb.pct(0.4996) == "49%"  # never rounded up across the configured default
