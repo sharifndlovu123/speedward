@@ -19,7 +19,7 @@
 <ol>
 <li>Download a City database in <code>.mmdb</code> form: MaxMind GeoLite2 City (free account and licence from maxmind.com) or DB-IP Lite City (free from db-ip.com, CC BY 4.0). Check the licence before use.</li>
 <li>Install the extra: <code>pip install -e ".[geoip]"</code> (the Docker image has it).</li>
-<li>Set <code>GEOIP_DB=/path/to/file.mmdb</code> in <code>.env</code>, or for Docker mount the file and pass <code>-e GEOIP_DB=/geo/GeoLite2-City.mmdb</code>. Restart, then run the test again.</li>
+<li>Set <code>GEOIP_DB=/path/to/file.mmdb</code> in <code>.env</code> and restart; <code>scripts/update_geoip.sh</code> keeps the file current. With Docker Compose, set the <code>GEOIPUPDATE_</code> keys in <code>.env</code> instead: its geoipupdate service downloads the file. Then run the test again.</li>
 </ol>
 <p class="mute">The file stays on this server; no lookup leaves it. Addresses shared by a CDN (anycast) still get no square, because their place is uncertain.</p>
 </details>
