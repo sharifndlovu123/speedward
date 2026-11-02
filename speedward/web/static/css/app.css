@@ -99,7 +99,8 @@ main{max-width:none;margin:0;padding:0}
 
 /* Top edge: brand, notice and the allowance as quiet edge text. */
 #topbar{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:10px 18px}
-#topbar .brand{display:flex;align-items:baseline;gap:12px}
+#topbar .brand{display:flex;align-items:center;gap:10px}
+#topbar .logo{flex:none;color:var(--ink)}
 #topbar h1{font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
 #topbar .tagline{font-size:.85rem}
 #topbar p{margin:0}

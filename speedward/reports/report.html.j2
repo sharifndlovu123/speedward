@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Speed report: {{ target }}</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3MiA3MiIgd2lkdGg9IjcyIiBoZWlnaHQ9IjcyIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9InNwZWVkd2FyZCI+PHRpdGxlPnNwZWVkd2FyZDwvdGl0bGU+PHN0eWxlPi5pe3N0cm9rZTojMUMxQzFDfS5me2ZpbGw6IzFDMUMxQ30uYXtmaWxsOiNDNjJGMTd9QG1lZGlhIChwcmVmZXJzLWNvbG9yLXNjaGVtZTpkYXJrKXsuaXtzdHJva2U6I0YwRUFFMH0uZntmaWxsOiNGMEVBRTB9LmF7ZmlsbDojRTg1NTNBfX08L3N0eWxlPjxjaXJjbGUgY2xhc3M9ImkiIGN4PSIzNiIgY3k9IjM2IiByPSIyOCIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIzIi8+PGVsbGlwc2UgY2xhc3M9ImkiIGN4PSIzNiIgY3k9IjM2IiByeD0iMTIiIHJ5PSIyOCIgZmlsbD0ibm9uZSIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggY2xhc3M9ImkiIGQ9Ik04IDM2IEg2NCIgc3Ryb2tlLW9wYWNpdHk9Ii4zNSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggY2xhc3M9ImkiIGQ9Ik0xNiA1MCBRMzAgMTQgNTYgMjIiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjbGFzcz0iZiIgY3g9IjE2IiBjeT0iNTAiIHI9IjYiLz48cmVjdCBjbGFzcz0iYSIgeD0iNTAiIHk9IjE2IiB3aWR0aD0iMTIiIGhlaWdodD0iMTIiLz48L3N2Zz4=">
 <style>
 /* Same tokens as the web UI (paper, ink, hairlines); self-contained, no outside requests. */
 :root{--paper:#F0EAE0;--ink:#1C1C1C;--mute:#5A5650;--faint:#7A746B;--hair:#1C1C1C;--warn:#9A3B00;--err:#A3200F;--bar:#1C1C1C;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;color-scheme:dark}}
 :root[data-theme="dark"]{--paper:#141414;--ink:#EDE8DF;--mute:#A39E95;--faint:#77736C;--hair:#EDE8DF;--warn:#F0A35E;--err:#FF8A7A;--bar:#EDE8DF;color-scheme:dark}
 *{box-sizing:border-box}
+.kicker .logo{vertical-align:-2px;margin-right:6px}
 html,body{background:var(--paper)}
 body{margin:0;color:var(--ink);font:15px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
 main{max-width:1040px;margin:0 auto;padding:32px 20px 48px}
@@ -39,7 +41,7 @@ footer{margin-top:40px;padding-top:12px;border-top:1px solid var(--hair);color:v
 <body>
 <main>
 <header>
-<div class="kicker">speedward · speed report</div>
+<div class="kicker"><svg class="logo" viewBox="0 0 72 72" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="36" cy="36" r="28" fill="none" stroke="currentColor" stroke-width="3"/><ellipse cx="36" cy="36" rx="12" ry="28" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="2"/><path d="M8 36 H64" stroke="currentColor" stroke-opacity=".35" stroke-width="2"/><path d="M16 50 Q30 14 56 22" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><circle cx="16" cy="50" r="6" fill="currentColor"/><rect x="50" y="16" width="12" height="12" fill="#C62F17"/></svg>speedward · speed report</div>
 <h1>{{ target }}</h1>
 <div class="mute">{{ r.started.isoformat() }} &middot; speedward {{ r.version }}</div>
 </header>
