@@ -168,7 +168,7 @@ def render_map(report: ScanReport, width: int = 1000, fast_ms: float = FAST_MS,
                   f'stroke-dasharray="{_num(5 * k)} {_num(4 * k)}" opacity="0.45"')
         if fb is not None:
             col = _colour(fb, fast_ms, slow_ms)
-            line = f'stroke="{col}" stroke-width="{_num(1.6 * k)}" fill="none" opacity="0.85"'
+            line = f'stroke="{col}" stroke-width="{_num(1.6 * k)}" fill="none"'
             dot = f'fill="{col}"'
             none = ""
             text = f"{name} {fb:.0f}ms"
@@ -246,6 +246,10 @@ _PICK_STYLE = (
     '.sw-pick[aria-checked="true"]{fill:var(--ink);stroke:var(--bg);stroke-width:2}'
     # After the checked rule and more specific, so the ring shows on checked and unchecked picks.
     '.sw-pick:focus-visible,.sw-pick[aria-checked="true"]:focus-visible{stroke:var(--ink);stroke-width:4}'
+    # A chosen dot is already ink, so its focus also lights the ring drawn just after it: a gap, then an
+    # outer ink ring (the dot's own stroke stays ink). Focus never looks like a slightly bigger dot.
+    ".sw-pick-ring{fill:none;stroke:none;pointer-events:none}"
+    '.sw-pick[aria-checked="true"]:focus-visible+.sw-pick-ring{stroke:var(--ink);stroke-width:2.5}'
     "@keyframes sw-pulse{50%{opacity:.35}}"
     ".sw-scanning .sw-pick[aria-checked=\"true\"]{animation:sw-pulse 1.2s ease-in-out infinite}"
     ".sw-locked .sw-pick{cursor:default}"
@@ -290,6 +294,7 @@ def render_picker_map(selected: list[str], width: int = 1000) -> str:
         out.append(f'<circle class="sw-pick" data-place="{escape(p.name, quote=True)}" tabindex="0" '
                    f'role="checkbox" aria-checked="{on}" cx="{_num(x)}" cy="{_num(y)}" r="{_num(7 * k)}">'
                    f"<title>{escape(p.name)}, {escape(p.country)}</title></circle>")
+        out.append(f'<circle class="sw-pick-ring" aria-hidden="true" cx="{_num(x)}" cy="{_num(y)}" r="{_num(13.5 * k)}"/>')
     # Resting place of the unset pin: open Pacific on the right, clear of the side panels and the
     # bottom strip so it can be grabbed. The script moves it (data-home is that spot).
     hx, hy = _num(345 / 360 * W), _num(H / 2)

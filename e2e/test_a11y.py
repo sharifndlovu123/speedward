@@ -111,3 +111,16 @@ def test_reflow_no_sideways_scroll_or_clipped_controls(page, live_site, watch, s
     assert page.evaluate(CLIPPED) == []
     page.goto(live_site + "/")
     assert page.evaluate(CLIPPED) == []
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_html_export(page, scheme):
+    """The downloadable HTML report is read on its own: same AA rules, light and dark."""
+    from speedward.core.models import LocationResult
+    from speedward.reports import render
+    from tests.test_reports import loc, ok, rep
+    report = rep(locations=[ok("Tokyo", 412), ok("London", 120),
+                            LocationResult(loc("Lagos"), "blocked", "timed out")])
+    page.emulate_media(color_scheme=scheme, reduced_motion="reduce")
+    page.set_content(render(report, "html"))
+    check(page, f"export {scheme}")

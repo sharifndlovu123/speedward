@@ -116,3 +116,31 @@ def test_panels_are_flat_and_motion_can_be_switched_off():
     assert "@import" not in css and "url(" not in css  # no web fonts or outside requests
     assert re.search(r"@media \(prefers-reduced-motion:\s*reduce\)", css)
     assert re.search(r"\.panel\{[^}]*border-radius:0", css)
+
+
+def _blend(fg: str, bg: str, alpha: float) -> str:
+    f, b = (fg.lstrip("#"), bg.lstrip("#"))
+    mix = [round(alpha * int(f[i:i + 2], 16) + (1 - alpha) * int(b[i:i + 2], 16)) for i in (0, 2, 4)]
+    return "#" + "".join(f"{c:02x}" for c in mix)
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_speed_lines_pass_3_to_1_as_drawn(theme):
+    """Lines are drawn with an opacity: the colour that reaches the screen must still be 3:1 on land."""
+    from speedward.core.models import LocationResult, Location, Stages
+    from datetime import datetime, timezone
+    from speedward.core.models import ScanReport
+    from speedward.reports.map import render_map
+    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    locs = [LocationResult(Location("JP", "Tokyo", 35.7, 139.7, 1, "n", "isp"), "measured",
+                           stages=Stages(first_byte=fb, total=fb), server_position=None) for fb in (100, 500, 900)]
+    from speedward.core.models import ServerPosition
+    svg = render_map(ScanReport(target="https://e.com/", started=now, finished=now, version="0", options={},
+                                server=ServerPosition(52.5, 13.4, "manual"), locations=locs, paths=[], dns=[],
+                                browser=None))
+    lines = re.findall(r'<path d="M[^"]*" stroke="var\(--(fast|mid|slow)\)"[^>]*?(?:opacity="([\d.]+)")?/>', svg)
+    assert {name for name, _ in lines} == {"fast", "mid", "slow"}
+    t = MAP[theme]
+    for name, op in lines:
+        drawn = _blend(t[name], t["land"], float(op or 1))
+        assert ratio(drawn, t["land"]) >= UI, f"{theme} {name} line as drawn: {ratio(drawn, t['land']):.2f}"

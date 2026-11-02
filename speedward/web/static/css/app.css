@@ -136,7 +136,7 @@ main{max-width:none;margin:0;padding:0}
 #progress-lines{margin:0;padding:0;list-style:none}
 #progress-lines li{padding:6px 0;border-bottom:1px solid var(--hair);font-variant-numeric:tabular-nums}
 #progress-lines li:last-child::after{content:"";display:inline-block;width:6px;height:6px;margin-left:8px;
-  background:var(--accent);vertical-align:middle;animation:sw-blink 1s steps(2,start) infinite}
+  background:var(--ink);vertical-align:middle;animation:sw-blink 1s steps(2,start) infinite}
 @keyframes sw-blink{to{visibility:hidden}}
 .notice,.banner{border-left:3px solid var(--warn)}
 .banner p{margin:0 0 10px}
