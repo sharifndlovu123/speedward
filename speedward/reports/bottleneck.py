@@ -64,7 +64,7 @@ def _plural(n: int, word: str) -> str:
 
 
 def _thresholds(d: Diagnosis) -> tuple[float, float]:
-    return (d.rules.possible_share, d.rules.biggest_share)
+    return (d.rules.possible_share, d.rules.biggest_share, d.rules.dns_share)
 
 
 def _p(d: Diagnosis, share: float) -> str:

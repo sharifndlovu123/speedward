@@ -114,3 +114,17 @@ def test_estimate_and_hints_count_one_mtr_for_network_path_and_the_mtr_check(cli
     page = client.get(reverse("index")).content.decode()
     assert "ticking both runs two" not in page
     assert page.count("shares one test with") == 2
+
+
+def test_a_scan_uses_the_configured_thresholds(client, settings):
+    from speedward.core.bottleneck import Rules
+    from speedward.core.speed import SpeedRules
+    settings.DIAGNOSIS_RULES = Rules(min_places=4, biggest_share=0.5)
+    settings.SPEED_RULES = SpeedRules(min_places=4, varies_ratio=3)
+    result = run_full_scan(client, checks="consistency")
+    assert result["diagnosis"]["rules"]["min_places"] == 4 and result["diagnosis"]["rules"]["biggest_share"] == 0.5
+    assert result["diagnosis"]["verdict"] == "too_few"
+    assert result["speed_summary"]["rules"]["varies_ratio"] == 3
+    body = json.dumps({"result": result})
+    md = client.post(reverse("export", args=["md"]), body, content_type="application/json").content.decode()
+    assert "at least 4 needed" in md  # the export keeps the values the scan was judged by

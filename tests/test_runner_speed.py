@@ -347,3 +347,15 @@ def test_shared_mtr_that_cannot_run_leaves_both_without_figures(fake):
     report = scan(fake, checks=("mtr",), traceroute=True)
     assert all(p.status == "not_run" for p in report.paths)
     assert all(x.status == "not_run" and x.stages is None and not x.hops for x in by(report, "mtr"))
+
+
+def test_the_report_keeps_the_rules_it_was_run_with(fake):
+    from speedward.core.bottleneck import Rules
+    from speedward.core.speed import SpeedRules
+    gp = GlobalpingClient(token="t", base_url=fake.base_url, poll_interval=0.01)
+    report = run_scan("https://example.com/", Plan([dict(x) for x in TWO], checks=("consistency",)), gp,
+                      rules=Rules(min_places=5), speed_rules=SpeedRules(min_places=5, loss_pct=30))
+    assert report.diagnosis.rules == Rules(min_places=5)
+    assert report.speed_rules == SpeedRules(min_places=5, loss_pct=30)
+    again = ScanReport.from_dict(report.to_dict())
+    assert again.speed_rules == report.speed_rules and again.diagnosis.rules == report.diagnosis.rules

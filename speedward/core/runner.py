@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 
 from speedward import __version__
 from speedward.core.analysis import cdn_status
-from speedward.core.bottleneck import diagnose
+from speedward.core.bottleneck import Rules, diagnose
 from speedward.core.budget import Plan
 from speedward.core.checks import (
     COMPRESSION,
@@ -65,6 +65,7 @@ from speedward.core.models import (
     TraceStep,
     clean,
 )
+from speedward.core.speed import SpeedRules
 from speedward.core.target import is_ip_host, normalise_target
 
 _HTTP_VERSION = re.compile(r"^HTTP/(\d(?:\.\d)?)\s")
@@ -277,7 +278,10 @@ def _cold_fields(probe: dict, item: dict) -> dict:
 
 def run_scan(url: str, plan: Plan, client: GlobalpingClient,
              on_progress: Callable[[str], None] | None = None,
-             geo: Geolocator | None = None) -> ScanReport:
+             geo: Geolocator | None = None, rules: Rules | None = None,
+             speed_rules: SpeedRules | None = None) -> ScanReport:
+    """rules / speed_rules: the configured thresholds (speedward.core.config.analysis_rules); the
+    defaults when omitted. The report keeps them, so its panels and exports are judged by them."""
     def progress(line: str) -> None:
         if on_progress is not None:
             on_progress(line)
@@ -313,7 +317,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         results = [LocationResult(Location("", _magic_label(s), None, None, None, None, None),
                                   "test_failed", reason) for s in plan.locations]
         return _report(target, started, plan, scan, None, results, [], [], [] if _reach_on(plan) else None,
-                       [] if _speed_on(plan) else None)
+                       [] if _speed_on(plan) else None, rules, speed_rules)
 
     cold = _items(cold_doc)
     fields = [_cold_fields(p, item) for p, item in cold]
@@ -389,7 +393,7 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
 
     server = _server(geo, results)
     progress("Finished")
-    return _report(target, started, plan, scan, server, results, paths, dns, reach, speed)
+    return _report(target, started, plan, scan, server, results, paths, dns, reach, speed, rules, speed_rules)
 
 
 def _reach_on(plan: Plan) -> bool:
@@ -854,7 +858,7 @@ def _speed(scan: _Scan, cold, cold_id: str, parts, http_opts: dict, plan: Plan,
 
 
 def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dns, reach=None,
-            speed=None) -> ScanReport:
+            speed=None, rules: Rules | None = None, speed_rules: SpeedRules | None = None) -> ScanReport:
     options = {"locations": [dict(s) for s in plan.locations], "traceroute": plan.traceroute,
                "dns": plan.dns, "browser": plan.browser}
     if plan.checks:
@@ -863,6 +867,6 @@ def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dn
         options["not_run"] = list(scan.skipped)
     report = ScanReport(target=target, started=started, finished=datetime.now(UTC),
                         version=__version__, options=options, server=server, locations=results,
-                        paths=paths, dns=dns, browser=None, reach=reach, speed=speed)
-    report.diagnosis = diagnose(report)
+                        paths=paths, dns=dns, browser=None, reach=reach, speed=speed, speed_rules=speed_rules)
+    report.diagnosis = diagnose(report, rules)
     return report

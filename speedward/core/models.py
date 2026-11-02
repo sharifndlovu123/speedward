@@ -27,6 +27,7 @@ from speedward.core.checks import (
 
 if TYPE_CHECKING:  # bottleneck imports this module; at run time it is imported where it is used
     from speedward.core.bottleneck import Diagnosis
+    from speedward.core.speed import SpeedRules
 
 SCHEMA_VERSION = 1
 
@@ -436,6 +437,9 @@ class ScanReport:
     # "Is it fast?" results (speedward/core/speed.py sums them up and adds notes to the diagram). None
     # when no speed check was ticked, and for a report from before they existed: nothing is shown then.
     speed: list[SpeedResult] | None = None
+    # The "Is it fast?" thresholds this report is judged by (set by the runner from the settings, or
+    # read back from a saved summary). None: the defaults. Exported inside "speed_summary", not alone.
+    speed_rules: SpeedRules | None = None
 
     def __post_init__(self):
         self.target, self.version = clean(self.target), clean(self.version)

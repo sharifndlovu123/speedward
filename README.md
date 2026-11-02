@@ -152,6 +152,22 @@ Set these in the environment or in `.env` (the real environment wins). Defaults 
 | `CSRF_TRUSTED_ORIGINS` | none | Web UI: full origins when served over HTTPS |
 | `DEBUG` | off | Web UI: `1`, `true`, `yes` or `on` enable it. Local use only |
 
+**Analysis thresholds.** The rules behind "Where the time goes" and "Is it fast?" (explained in those sections below). They apply to the web UI, the command line and every export. Each value is checked when the web UI or a scan starts: a value that is not a number, not finite or outside its bounds stops it with an error that names the setting and its bounds (never the value given). Every diagnosis and speed summary records the values it was judged by, so an export or a saved result keeps showing the result it was made with.
+
+| Setting | Default | Bounds | Meaning |
+| --- | --- | --- | --- |
+| `BIGGEST_SHARE` | `0.40` | 0.01 to 1 | A stage is the biggest block at this share of the total or more |
+| `POSSIBLE_SHARE` | `0.25` | 0.01 to 1, not above `BIGGEST_SHARE` | A possible block at this share or more |
+| `MIN_PLACES` | `3` | whole number, 3 to 1000 | Places needed for any conclusion, in both panels. Never below 3 |
+| `NEAR_CONNECT_MS` | `40` | 0 to 1000000000 | A place connecting faster than this is "close" (the "close places wait too" note) |
+| `DISTANCE_CORRELATION` | `0.7` | 0 to 1 | Connect or TLS "grows with distance" at this correlation with distance or more |
+| `DISTANCE_SPREAD_MS` | `50` | 0 to 1000000000 | ... and when the slowest place takes at least this much longer than the quickest |
+| `DNS_SHARE` | `0.25` | 0.01 to 1 | "DNS is large" in a place at this share of its own total or more |
+| `VARIES_RATIO` | `2` | 1 to 100 | Consistency: a place varies when its slowest run is at least this many times its median ... |
+| `VARIES_MIN_MS` | `50` | 0 to 1000000000 | ... and at least this many ms above it |
+| `BAD_HOP_LOSS_PCT` | `10` | 1 to 100 | Path: a bad hop is loss of at least this percentage that carries through to the site |
+| `LONG_LINK_MS` | `50` | 1 to 1000000000 | Path: a long link is a rise of at least this many ms at one hop that stays up to the site |
+
 Not a `.env` setting: `STATIC_ROOT` (real environment only; defaults to `./staticfiles`). `GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` and `GEOIPUPDATE_EDITION_IDS` sit in `.env` for `docker compose` only; speedward itself never reads them.
 
 ## Optional: lines to the server that answered each place
@@ -241,7 +257,7 @@ In the web UI the headline sits under the summary figures; "See the request path
 
 **The marks** (outline, pattern and a text label, never colour alone):
 
-| Mark | Rule | Constant |
+| Mark | Rule | Setting (default) |
 | --- | --- | --- |
 | biggest block | the largest share, and at least 40% of the total. Below that the headline says "no single stage dominates" | `BIGGEST_SHARE = 0.40` |
 | possible block | any other stage with at least 25% of the total, or connect / TLS when they grow with distance (below) | `POSSIBLE_SHARE = 0.25` |
@@ -252,10 +268,10 @@ In the web UI the headline sits under the summary figures; "See the request path
 
 - *Server wait:* the card says close places wait too when server wait is at least 40% of the time in a place whose connect time is under 40 ms (`NEAR_CONNECT_MS = 40`).
 - *Distance:* connect or TLS "grows with distance" when, across at least 3 places with a known server position, its time correlates with the distance to the server that answered (correlation of at least 0.7, `DISTANCE_CORRELATION`) and the slowest place takes at least 50 ms longer than the quickest (`DISTANCE_SPREAD_MS = 50`). The distance is from the test place to the server that answered it (see "lines to the server that answered" above), or to the one configured or pinned server. Without any position it only reports the plain spread of connect times.
-- *DNS* is called out when the lookup is at least 25% of the time in at least one place.
+- *DNS* is called out when the lookup is at least 25% of the time in at least one place (`DNS_SHARE = 0.25`).
 - *Caching:* HIT and MISS counts come from the CDN headers. The repeat gain uses only places repeated on the same test machine, as the Cache gain figure does; otherwise it says why there is none.
 
-The rule values live in `speedward/core/bottleneck.py`. They are not settings yet. Each saved diagnosis records the values it was made with, and a saved copy is only accepted if those are exactly these default values and the diagnosis is exactly what they give for the report's own timings. A report from before this feature loads without a panel.
+The defaults live in `speedward/core/bottleneck.py`, and each can be changed with the setting of the same name (see "Settings" above for the bounds). Each saved diagnosis records the values it was made with, and a saved copy is only accepted if those values are within the same bounds (so never fewer than 3 places) and the diagnosis is exactly what they give for the report's own timings. A copy saved before `DNS_SHARE` existed is read with DNS judged by `POSSIBLE_SHARE`, as it was then. A report from before this feature loads without a panel.
 
 **What it cannot tell you.**
 
@@ -321,7 +337,10 @@ test = 0").
 TLS 1.2 seen in the main test adds "TLS 1.2 costs one more round trip" to the TLS block once any speed
 check ran. The notes sit under each block's own text and never change its mark (biggest / possible block).
 
-The rules, with their named constants in `speedward/core/speed.py`:
+The rules, with their defaults in `speedward/core/speed.py`. Each can be changed with a setting (see
+"Settings" above), and each speed summary records the values it used; a saved one is accepted only when
+they are within the same bounds and the summary is exactly what they give for its own results (one saved
+before summaries recorded them is judged by the defaults):
 
 - Consistency: a place **varies** when its slowest run is at least `VARIES_RATIO` (2) times its median
   **and** at least `VARIES_MIN_MS` (50 ms) above it, otherwise it is **steady**. With fewer than 5 runs on
@@ -340,13 +359,13 @@ The rules, with their named constants in `speedward/core/speed.py`:
   The step labels are inferred, not reported: the first step is the probe's own resolver, a server named
   `*.root-servers.net` is a root server, the last step is the name's own (authoritative) servers, the first
   step after the root is the TLD and any further ones are "delegation".
-- Path: a **bad hop** is the first hop from which loss of at least `LOSS_PCT` (10%) carries through every
+- Path: a **bad hop** is the first hop from which loss of at least `BAD_HOP_LOSS_PCT` (10%) carries through every
   later hop to the site. Loss that stops at a middle hop is a router limiting its own replies and is not
-  flagged. A **long link** is the largest rise of at least `RISE_MS` (50 ms) at one hop that stays up to the
+  flagged. A **long link** is the largest rise of at least `LONG_LINK_MS` (50 ms) at one hop that stays up to the
   site; the timings indicate distance (for example an ocean crossing). Jitter is the site's own, the mean
   change between consecutive packets (Globalping's `jAvg` was not usable, see the API notes).
 
-Every overall finding needs at least 3 places with a result of their own; with fewer it says there are
+Every overall finding needs at least `MIN_PLACES` (3) places with a result of their own; with fewer it says there are
 not enough places. Blocked runs are counted and named; failed or not-run ones are "no data". None of them
 enter a figure or a finding. A failed DNS trace or path test is never counted against the site.
 

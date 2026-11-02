@@ -19,17 +19,19 @@ Marks (the block diagram):
 - "not_judged": fewer than MIN_PLACES measured places, so nothing is marked.
 - "not_available": the stage was not returned by any measured place.
 
-The diagnosis records the rule values it used. Until they become settings, a saved copy is accepted
-only with exactly the default values above.
+Each rule can be set from the environment (speedward/core/config.py analysis_rules, README "Where the
+time goes"), within RULE_BOUNDS. The diagnosis records the rule values it used, and a saved copy is
+accepted only when those values are within the same bounds (MIN_PLACES never below 3) and its figures are
+exactly what its own timings give under them.
 """
 from __future__ import annotations
 
-import math
 import statistics
 from dataclasses import asdict, dataclass, field
 
 from speedward.core.edge import distance_km
 from speedward.core.models import MAX_MS, SAME_PROBE, LocationResult, ScanReport
+from speedward.core.rules import in_bounds
 
 STAGES = ("dns", "connect", "tls", "server_wait", "download")
 _FIELD = {"dns": "dns", "connect": "connect", "tls": "tls", "server_wait": "first_byte", "download": "download"}
@@ -42,6 +44,7 @@ MIN_PLACES = 3             # fewer measured places than this: no conclusion, no 
 NEAR_CONNECT_MS = 40.0     # a place is "close" to its server when connect takes less than this
 DISTANCE_CORRELATION = 0.7  # connect / TLS "grow with distance" at this correlation with km or more
 DISTANCE_SPREAD_MS = 50.0  # ... and when the slowest place takes at least this much longer than the quickest
+DNS_SHARE = 0.25           # "DNS is large" in a place at this share of its own total or more
 
 MARKS = ("biggest", "possible", "fine", "not_judged", "not_available")
 VERDICTS = ("nothing_measured", "too_few", "no_timings", "biggest", "no_single_stage")
@@ -56,6 +59,14 @@ class Rules:
     near_connect_ms: float = NEAR_CONNECT_MS
     distance_correlation: float = DISTANCE_CORRELATION
     distance_spread_ms: float = DISTANCE_SPREAD_MS
+    dns_share: float = DNS_SHARE
+
+
+# (lowest, highest, whole number) for each rule: the settings and saved copies are held to the same bounds.
+RULE_BOUNDS = {"biggest_share": (0.01, 1, False), "possible_share": (0.01, 1, False),
+               "min_places": (3, 1000, True), "near_connect_ms": (0, MAX_MS, False),
+               "distance_correlation": (0, 1, False), "distance_spread_ms": (0, MAX_MS, False),
+               "dns_share": (0.01, 1, False)}
 
 
 @dataclass
@@ -320,7 +331,7 @@ def diagnose(report: ScanReport, rules: Rules | None = None) -> Diagnosis:
             if (connect.ms is not None and connect.ms < rules.near_connect_ms and wait.share is not None
                     and wait.share >= rules.biggest_share and (near is None or connect.ms < near.connect_ms)):
                 near = Spot(p.place, p.row, ms=wait.ms, connect_ms=connect.ms, share=wait.share)
-            if dns.share is not None and dns.share >= rules.possible_share:
+            if dns.share is not None and dns.share >= rules.dns_share:
                 dns_heavy += 1
                 if dns_example is None or dns.share > dns_example.share:
                     dns_example = Spot(p.place, p.row, ms=dns.ms, share=dns.share)
@@ -335,38 +346,20 @@ def diagnose(report: ScanReport, rules: Rules | None = None) -> Diagnosis:
 
 # --- loading a saved diagnosis ---------------------------------------------------------------------
 
-def _rule(d: dict, key: str, lo: float, hi: float, whole: bool = False):
-    value = d.get(key)
-    if isinstance(value, bool) or not isinstance(value, int if whole else (int, float)):
-        raise ValueError(f"diagnosis rule {key} must be a number")
-    # The range check comes first: it compares a huge JSON integer (10**400) exactly, where
-    # math.isfinite would raise OverflowError converting it to float. NaN fails the comparison too.
-    if not lo <= value <= hi:
-        raise ValueError(f"diagnosis rule {key} is out of range")
-    try:
-        finite = math.isfinite(value)
-    except ArithmeticError:
-        finite = False
-    if not finite:
-        raise ValueError(f"diagnosis rule {key} is out of range")
-    return value
-
-
 def _rules(value) -> Rules:
-    if not isinstance(value, dict) or set(value) != set(Rules.__dataclass_fields__):
+    if not isinstance(value, dict):
         raise ValueError("diagnosis rules must be an object with the known rules")
-    rules = Rules(biggest_share=_rule(value, "biggest_share", 0.01, 1),
-                  possible_share=_rule(value, "possible_share", 0.01, 1),
-                  min_places=_rule(value, "min_places", 1, 1000, whole=True),
-                  near_connect_ms=_rule(value, "near_connect_ms", 0, MAX_MS),
-                  distance_correlation=_rule(value, "distance_correlation", 0, 1),
-                  distance_spread_ms=_rule(value, "distance_spread_ms", 0, MAX_MS))
+    keys = set(Rules.__dataclass_fields__)
+    if set(value) == keys - {"dns_share"}:  # saved before DNS_SHARE existed, when DNS used possible_share
+        value = {**value, "dns_share": value.get("possible_share")}
+    if set(value) != keys:
+        raise ValueError("diagnosis rules must be an object with the known rules")
+    for key in keys:
+        if not in_bounds(value[key], RULE_BOUNDS[key]):
+            raise ValueError(f"diagnosis rule {key} is out of range")
+    rules = Rules(**{key: value[key] for key in keys})
     if rules.possible_share > rules.biggest_share:
         raise ValueError("diagnosis rules: possible_share cannot be above biggest_share")
-    # The rules are not settings yet, so a saved copy cannot bring its own: other values (for example
-    # min_places=1 to draw a conclusion from one place) would let a forged diagnosis pass as consistent.
-    if rules != Rules():
-        raise ValueError("diagnosis rules differ from this version's rules")
     return rules
 
 
@@ -391,7 +384,10 @@ def diagnosis_from_dict(value, report: ScanReport) -> Diagnosis:
     trust, and never made up for a report that did not have one."""
     if not isinstance(value, dict):
         raise ValueError("diagnosis must be an object")
-    fresh = diagnose(report, _rules(value.get("rules")))
+    rules = _rules(value.get("rules"))
+    if isinstance(value["rules"], dict) and "dns_share" not in value["rules"]:  # an older copy (see _rules)
+        value = {**value, "rules": {**value["rules"], "dns_share": rules.dns_share}}
+    fresh = diagnose(report, rules)
     if not _same(value, fresh.to_dict()):
         raise ValueError("diagnosis does not follow from the report's own results")
     return fresh

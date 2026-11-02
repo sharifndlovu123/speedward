@@ -280,7 +280,7 @@ def test_finished_result_removed_from_server_after_first_fetch(client):
 def test_status_reports_progress_lines(client, monkeypatch):
     gate = threading.Event()
 
-    def slow(url, plan, client_, on_progress=None, geo=None):
+    def slow(url, plan, client_, on_progress=None, geo=None, rules=None, speed_rules=None):
         on_progress("Testing the first visit from 2 locations")
         gate.wait(5)
         raise ScanError("stop")
@@ -335,7 +335,7 @@ def test_concurrent_scan_limit(client, settings, monkeypatch):
     state.reset()
     gate = threading.Event()
 
-    def slow(url, plan, client_, on_progress=None, geo=None):
+    def slow(url, plan, client_, on_progress=None, geo=None, rules=None, speed_rules=None):
         gate.wait(5)
         raise ScanError("stop")
     monkeypatch.setattr(views, "run_scan", slow)
