@@ -1,11 +1,11 @@
 # Task runner: https://github.com/casey/just  (installed into the venv by `pip install -e ".[dev]"`)
-# Run `.venv/bin/just` (or just `just` if it is on your PATH) to list every task.
+# Run `just` to list every task (system install, or `.venv/bin/just` from the venv).
 
 venv := ".venv/bin"
 
 # List the tasks
 default:
-    @{{venv}}/just --list --unsorted
+    @{{just_executable()}} --list --unsorted
 
 # Lint (never run `ruff format`: the code is not auto-formatted)
 lint:
