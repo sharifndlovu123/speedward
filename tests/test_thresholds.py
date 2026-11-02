@@ -218,3 +218,22 @@ def test_a_summary_cannot_bring_rules_that_are_not_an_object():
     raw["speed_summary"]["rules"] = [3]
     with pytest.raises(ValueError):
         summary_from_dict(raw["speed_summary"], ScanReport.from_dict(_saved(full())))
+
+
+@pytest.mark.parametrize("name,value", [("MIN_PLACES", "1_0"), ("BIGGEST_SHARE", "0.4_0"),
+                                        ("NEAR_CONNECT_MS", "4_0"), ("MIN_PLACES", " 4 ")])
+def test_underscores_in_numbers_are_refused(name, value):
+    if value.strip() == "4":  # surrounding spaces are fine
+        assert analysis_rules({name: value})[0].min_places == 4
+        return
+    with pytest.raises(ValueError) as exc:
+        analysis_rules({name: value})
+    assert str(exc.value).startswith(name + " must be ") and value not in str(exc.value)
+
+
+def test_bounds_are_written_without_exponents():
+    with pytest.raises(ValueError) as exc:
+        analysis_rules({"NEAR_CONNECT_MS": "-1"})
+    assert str(exc.value) == "NEAR_CONNECT_MS must be a number from 0 to 1000000000 (default 40)."
+    from speedward.core.rules import describe
+    assert describe("X", (0.01, 1, False), 0.25) == "X must be a number from 0.01 to 1 (default 0.25)."

@@ -6,6 +6,7 @@ A bound is (lowest, highest, whole number). Messages name the setting or rule, n
 from __future__ import annotations
 
 import math
+import re
 
 Bound = tuple[float, float, bool]
 
@@ -28,12 +29,22 @@ def in_bounds(value, bound: Bound) -> bool:
 def describe(name: str, bound: Bound, default) -> str:
     lo, hi, whole = bound
     kind = "a whole number" if whole else "a number"
-    return f"{name} must be {kind} from {lo:g} to {hi:g} (default {default:g})."
+    return f"{name} must be {kind} from {_plain(lo)} to {_plain(hi)} (default {_plain(default)})."
+
+
+def _plain(v: float) -> str:
+    """A bound as written in README: 1000000000, not 1e+09."""
+    return str(int(v)) if float(v).is_integer() else f"{v:f}".rstrip("0")
+
+
+_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")  # no underscores, no "nan" or "inf"
 
 
 def parse(name: str, raw: str, bound: Bound, default):
     """A setting's text as a number within its bound. ValueError(describe(...)) otherwise."""
     message = describe(name, bound, default)
+    if not _NUMBER.fullmatch(raw.strip()):
+        raise ValueError(message)
     try:
         value = int(raw) if bound[2] else float(raw)
     except ValueError:
