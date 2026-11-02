@@ -191,3 +191,26 @@ def test_an_old_saved_result_loads_with_no_grid(page, live_site, watch):
     expect(page.locator("#results-map svg.sw-map")).to_be_visible()
     expect(page.locator(".rc-head, .reach")).to_have_count(0)
     expect(page.locator("#results-summary .legend")).not_to_contain_text("worst result")
+
+
+WORDS_KEPT = """(sel) => {
+  const table = document.querySelector(sel), region = table.closest('.scroll');
+  // a word broken letter by letter makes a cell much taller than one line of its word
+  const word = table.querySelector('tbody td b'), line = parseFloat(getComputedStyle(word).lineHeight) || 20;
+  return {table: table.getBoundingClientRect().width, region: region.clientWidth,
+          scrolls: region.scrollWidth > region.clientWidth, focusable: region.tabIndex === 0,
+          wordLines: Math.round(word.getBoundingClientRect().height / line)};
+}"""
+
+
+def test_grid_scrolls_in_its_own_region_on_a_390_px_phone(page, live_site, reach_kinds, watch):
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.emulate_media(reduced_motion="reduce")
+    scan(page, live_site, "ipv6", "http", "dns", "port")
+    page.get_by_role("button", name="See who can reach it").click()
+    expect(page.locator("#results-body table.rc-grid")).to_be_visible()
+    m = page.evaluate(WORDS_KEPT, "#results-body table.rc-grid")
+    assert m["scrolls"] and m["focusable"] and m["table"] > m["region"]
+    assert m["wordLines"] == 1  # "reached" stays one word, not "reac / hed"
+    assert page.evaluate(CLIPPED) == []
+    check(page, "grid at 390 px")

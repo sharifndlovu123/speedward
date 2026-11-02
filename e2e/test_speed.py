@@ -194,3 +194,16 @@ def test_the_estimate_leaves_out_checks_a_plain_or_ip_address_cannot_use(page, l
     expect(page.locator("#estimate")).to_contain_text("about 6 tests")
     page.fill("#url", "https://example.com/")
     expect(page.locator("#estimate")).to_contain_text("about 10 tests")
+
+
+def test_speed_table_scrolls_in_its_own_region_on_a_390_px_phone(page, live_site, speed_kinds, watch):
+    from e2e.test_reach import WORDS_KEPT
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.emulate_media(reduced_motion="reduce")
+    scan(page, live_site, *ALL)
+    page.get_by_role("button", name="See the speed checks").click()
+    expect(page.locator("#results-body table.sp-grid")).to_be_visible()
+    m = page.evaluate(WORDS_KEPT, "#results-body table.sp-grid")
+    assert m["scrolls"] and m["focusable"] and m["table"] > m["region"] and m["wordLines"] == 1
+    assert page.evaluate(CLIPPED) == []
+    check(page, "speed table at 390 px")

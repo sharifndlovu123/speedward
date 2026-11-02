@@ -10,9 +10,12 @@
 .rc-finding .rc-check{margin-top:4px}
 .rc-head button{margin:2px 0 8px}
 .rc-body .rc-title{margin-top:8px;scroll-margin-top:64px}
-.rc-grid{border-collapse:collapse;width:100%;border:1px solid var(--hair)}
+/* Six columns of words do not fit a phone: the grid keeps readable columns and scrolls sideways inside
+   its own focusable region (a data table, the WCAG reflow exception), never the page. */
+.rc-grid{border-collapse:collapse;width:100%;min-width:44rem;border:1px solid var(--hair)}
 .rc-grid th,.rc-grid td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--hair);
-  overflow-wrap:anywhere;color:var(--ink)}
+  overflow-wrap:break-word;color:var(--ink)}
+.rc-grid tbody th{min-width:6rem}
 .rc-grid thead th{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
 .rc-grid tbody th{font-weight:600}
 .rc-grid tbody tr:last-child>*{border-bottom:0}
