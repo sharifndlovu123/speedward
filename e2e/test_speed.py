@@ -30,11 +30,15 @@ def speed_kinds(fake_globalping, four_places):  # noqa: F811
     fake_globalping.by_kind = {"http2": _like(four_places, [h2, h2, no_h2, seoul], "http"),
                                "compression": _like(four_places, [br, br, plain, seoul], "http")}
     before = dict(fake_globalping.by_type)
+    # A scan with every speed check costs 11 tests per place; earlier scans in the session draw down the
+    # fake's allowance, so start each test with a full one (no confirmation prompt in the way).
+    fake_globalping.remaining = None
     fake_globalping.by_type["dns"] = _like(four_places, [speed_recorded("dns_trace_ok")] * 4, "dns")
     fake_globalping.by_type["mtr"] = _like(four_places, [speed_recorded("mtr_icmp_far")] * 4, "mtr")
     yield
     fake_globalping.by_kind = {}
     fake_globalping.by_type = before
+    fake_globalping.remaining = None
 
 
 def scan(page, base, *checks):
