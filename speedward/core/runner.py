@@ -364,6 +364,8 @@ def run_scan(url: str, plan: Plan, client: GlobalpingClient,
         paths = _paths(cold, doc, why, reused)
         if shared:
             shared_mtr = (doc, reused, why)
+            if doc is None:  # the path check had its answer from this test too: say so for it as well
+                scan.skipped.append(f"path loss check: {why}")
 
     # 5. Optional DNS answers.
     dns: list[DnsResult] = []

@@ -359,3 +359,21 @@ def test_the_report_keeps_the_rules_it_was_run_with(fake):
     assert report.speed_rules == SpeedRules(min_places=5, loss_pct=30)
     again = ScanReport.from_dict(report.to_dict())
     assert again.speed_rules == report.speed_rules and again.diagnosis.rules == report.diagnosis.rules
+
+
+def test_a_rate_limited_shared_mtr_is_explained_for_both_the_routes_and_the_path_check(fake):
+    from speedward.reports import render
+    fake.rate_limit_after = 3
+    report = scan(fake, checks=("mtr",), traceroute=True)
+    assert report.options["not_run"] == ["network path: Globalping limit reached",
+                                         "path loss check: Globalping limit reached"]
+    md = render(ScanReport.from_dict(report.to_dict()), "md")
+    assert "Network path: Globalping limit reached, so the routes have no data." in md
+    assert "Path loss check: Globalping limit reached, so the Path column has no data." in md
+
+
+@pytest.mark.parametrize("what", ["consistency check", "HTTP/2 check", "compression check", "DNS trace check",
+                                  "path loss check"])
+def test_every_skipped_speed_check_has_an_explanation(fake, what):
+    from speedward.reports._view import SKIP_EFFECT
+    assert what in SKIP_EFFECT
