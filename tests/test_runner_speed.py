@@ -191,3 +191,53 @@ def test_cold_run_that_cannot_be_fetched_keeps_an_empty_speed_list(fake):
     gp = GlobalpingClient(token="t", base_url=fake.base_url, poll_interval=0.001, wait_timeout=0.05)
     report = run_scan("https://example.com/", Plan([dict(x) for x in TWO], checks=("mtr",)), gp)
     assert report.speed == [] and report.reach is None
+
+
+def _answer(code, content_type="text/html; charset=utf-8", encoding=None):
+    res = speed_recorded("compress_br")
+    res["statusCode"] = code
+    res["rawOutput"] = f"HTTP/1.1 {code}\n..."
+    res["headers"].pop("content-encoding", None)
+    res["headers"].pop("content-type", None)
+    if content_type:
+        res["headers"]["content-type"] = content_type
+    if encoding:
+        res["headers"]["content-encoding"] = encoding
+    return res
+
+
+@pytest.mark.parametrize(("code", "content_type", "reason"), [
+    (301, "text/html", "the first response was a redirect or an error (HTTP 301), so compression was not judged"),
+    (404, "text/html", "the first response was a redirect or an error (HTTP 404), so compression was not judged"),
+    (500, "text/html", "the first response was a redirect or an error (HTTP 500), so compression was not judged"),
+    (204, None, "nothing to compress: the first response has no body (HTTP 204)"),
+    (200, "image/png", "nothing to compress: the first response is not text (image/png)"),
+    (200, None, "nothing to compress: the first response has no content type"),
+])
+def test_compression_is_judged_only_on_a_2xx_text_answer(fake, code, content_type, reason):
+    fake.by_kind["compression"] = on_probes(_answer(code, content_type))
+    comp = by(scan(fake, checks=("compression",)), "compression")[0]
+    assert (comp.status, comp.reason, comp.encoding, comp.stages) == ("not_run", reason, None, None)
+
+
+@pytest.mark.parametrize("content_type", ["text/html", "application/json", "application/javascript",
+                                          "image/svg+xml", "application/ld+json", "text/css"])
+def test_compressible_answers_are_judged(fake, content_type):
+    fake.by_kind["compression"] = on_probes(_answer(200, content_type))
+    comp = by(scan(fake, checks=("compression",)), "compression")[0]
+    assert (comp.status, comp.encoding) == ("measured", "none")
+
+
+def test_not_judged_places_never_make_the_finding_or_the_download_note():
+    from speedward.core.models import Location, SpeedResult
+    from speedward.core.speed import speed_summary
+    from speedward.reports.speed import diagram_notes
+    from tests.test_speed import ok, rep
+
+    gone = [SpeedResult("compression", i, Location("XX", "x", None, None, None, None, None), "not_run",
+                        "the first response was a redirect or an error (HTTP 301), so compression was not judged")
+            for i in range(3)]
+    s = speed_summary(rep([ok("A"), ok("B"), ok("C")], gone))
+    assert s.overall[0].verdict == "too_few"
+    assert "download" not in diagram_notes(s)["overall"]
+    assert all("download" not in diagram_notes(s)["places"][i] for i in range(3))

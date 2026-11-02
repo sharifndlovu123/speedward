@@ -665,11 +665,44 @@ def _http2_failed(res: dict, status: str, reason: str):
     return status, reason
 
 
-def _compression_fields(res: dict) -> dict:
+# Content types worth compressing: text, and the structured-text formats served as application/*.
+_COMPRESSIBLE = re.compile(r"text/[\w.+-]+|application/(?:json|javascript|ecmascript|xml|xhtml\+xml|"
+                           r"[\w.-]+\+(?:json|xml))|image/svg\+xml")
+_MIME = re.compile(r"[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}")
+
+
+def _header(res: dict, name: str):
     value = None
     for key, v in _headers(res).items():
-        if isinstance(key, str) and key.lower() == "content-encoding":
+        if isinstance(key, str) and key.lower() == name:
             value = v[0] if isinstance(v, list) and v else v
+    return value
+
+
+def _nothing_to_judge(res: dict) -> str | None:
+    """Why this answer says nothing about compression, or None when it does: only a 2xx answer with a
+    body of a text type is "compressed" or "not compressed"."""
+    code = res.get("statusCode")
+    if not isinstance(code, int) or isinstance(code, bool) or not 200 <= code < 300:
+        shown = f" (HTTP {code})" if isinstance(code, int) and not isinstance(code, bool) and 100 <= code <= 599 else ""
+        return f"the first response was a redirect or an error{shown}, so compression was not judged"
+    if code in (204, 205):
+        return f"nothing to compress: the first response has no body (HTTP {code})"
+    kind = _header(res, "content-type")
+    kind = kind.split(";", 1)[0].strip().lower() if isinstance(kind, str) else ""
+    if not kind:
+        return "nothing to compress: the first response has no content type"
+    if not _COMPRESSIBLE.fullmatch(kind):
+        shown = f" ({kind})" if _MIME.fullmatch(kind) else ""
+        return f"nothing to compress: the first response is not text{shown}"
+    return None
+
+
+def _compression_fields(res: dict) -> dict:
+    why = _nothing_to_judge(res)
+    if why is not None:
+        return {"status": "not_run", "reason": why}
+    value = _header(res, "content-encoding")
     if not isinstance(value, str) or not value.strip():
         encoding = "none"
     else:

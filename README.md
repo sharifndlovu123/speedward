@@ -325,7 +325,10 @@ The rules, with their named constants in `speedward/core/speed.py`:
 - HTTP/2: Globalping fails the request when the server does not offer HTTP/2 (there is no fallback); that
   is shown as "not offered", never as blocked. The time difference is against the main test's repeat on
   the same machine, and only where both ran.
-- Compression: "not compressed" when no `Content-Encoding` came back. Globalping's own default request
+- Compression: judged only on a 2xx answer with a body of a text type (HTML, CSS, JavaScript, JSON, XML,
+  SVG). A redirect or error, an empty answer (204) or anything else (an image, no content type) shows
+  "no data" with the reason, and never counts as "not compressed". Otherwise "not compressed" when no
+  `Content-Encoding` came back. Globalping's own default request
   already asks for `gzip, deflate, br`, so the download difference is between two runs that could both be
   compressed: one run each, mostly noise.
 - DNS trace: the slowest step is the one that took the longest (1 ms or more); ties go to the earlier step.
