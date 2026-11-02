@@ -393,3 +393,17 @@ def test_stored_rules_are_used_when_loading():
     d = diagnose(rep, rules)
     assert d.biggest is None
     assert diagnosis_from_dict(json.loads(json.dumps(d.to_dict())), rep) == d
+
+
+def test_readme_documents_every_rule_value():
+    from pathlib import Path
+
+    from speedward.core import bottleneck as b
+    readme = (Path(__file__).parent.parent / "README.md").read_text()
+    assert "What it cannot tell you" in readme
+    for name in ("BIGGEST_SHARE", "POSSIBLE_SHARE", "MIN_PLACES", "NEAR_CONNECT_MS", "DISTANCE_CORRELATION",
+                 "DISTANCE_SPREAD_MS"):
+        assert name in readme, name
+    assert f"BIGGEST_SHARE = {b.BIGGEST_SHARE:.2f}" in readme and f"POSSIBLE_SHARE = {b.POSSIBLE_SHARE:.2f}" in readme
+    assert f"MIN_PLACES = {b.MIN_PLACES}" in readme and f"NEAR_CONNECT_MS = {b.NEAR_CONNECT_MS:g}" in readme
+    assert f"at least {b.DISTANCE_CORRELATION:g}" in readme and f"DISTANCE_SPREAD_MS = {b.DISTANCE_SPREAD_MS:g}" in readme

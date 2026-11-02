@@ -184,3 +184,12 @@ def test_export_heading_comes_first_and_only_once():
     html = render_bottleneck(server_heavy())
     assert html.count("Where the time goes</h2>") == 1
     assert html.index("Where the time goes</h2>") < html.index('class="bn-head"')
+
+
+def test_panel_files_ship_with_the_package():
+    import tomllib
+    from pathlib import Path
+    root = Path(__file__).parent.parent
+    patterns = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]["speedward"]
+    for name in ("reports/bottleneck.html.j2", "reports/bottleneck.css"):
+        assert any(Path(name).match(p) for p in patterns), name
