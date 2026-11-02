@@ -85,6 +85,7 @@ class GlobalpingClient:
         self.timeout = timeout
         self.poll_interval = poll_interval
         self.wait_timeout = wait_timeout
+        self._owns_http = http is None
         self._http = http or httpx.Client(timeout=timeout)
         self.last_rate: dict = {}  # latest x-ratelimit-* / x-request-cost seen on a POST 202
 
@@ -92,6 +93,17 @@ class GlobalpingClient:
         return f"GlobalpingClient(base_url={self.base_url!r}, token={'<set>' if self._token else '<unset>'})"
 
     __str__ = __repr__
+
+    def close(self) -> None:
+        """Close the HTTP connection pool, unless it was passed in (then its owner closes it)."""
+        if self._owns_http:
+            self._http.close()
+
+    def __enter__(self) -> GlobalpingClient:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     # --- plumbing ------------------------------------------------------
     def _request(self, method: str, path: str, **kw) -> httpx.Response:

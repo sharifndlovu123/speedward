@@ -110,7 +110,8 @@ def _budget(plan: Plan, allowance: Allowance) -> dict:
 def index(request):
     strip = ""
     try:
-        strip = describe_allowance(_client().allowance(), None, time.time()).text
+        with _client() as gp:
+            strip = describe_allowance(gp.allowance(), None, time.time()).text
     except EndpointRefused as exc:
         strip = str(exc)
     except GlobalpingError:
@@ -145,7 +146,8 @@ def estimate(request):
     except ValueError:
         return _error(BAD_LIMITS, 400)
     try:
-        allowance = _client().allowance()
+        with _client() as gp:
+            allowance = gp.allowance()
     except EndpointRefused as exc:
         return _error(str(exc), 503)
     except GlobalpingError:
@@ -154,9 +156,13 @@ def estimate(request):
 
 
 def _run(st: state.ScanState, entry: state.Entry, url: str, plan: Plan, client: GlobalpingClient, geo) -> None:
-    """Background thread body. Records the outcome in memory; logs only an exception type name."""
+    """Background thread body. Records the outcome in memory; logs only an exception type name.
+    Owns `client` and closes it before the outcome is recorded."""
     try:
-        report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo)
+        try:
+            report = run_scan(url, plan, client, on_progress=entry.add_progress, geo=geo)
+        finally:
+            client.close()
         st.finish(entry.id, report.to_dict())
     except ScanError as exc:  # only the fixed message for its kind; the text may hold the target
         st.fail(entry.id, start_message(exc.kind))
@@ -192,22 +198,29 @@ def scan(request):
     geo.pin = pin  # lowest precedence: a configured position or geo-IP result still wins
     try:
         client = _client()
-        allowance = client.allowance()
     except EndpointRefused as exc:
         return _error(str(exc), 503)
-    except GlobalpingError:
-        return _error(UNREACHABLE, 502)
+    started = False
+    try:
+        try:
+            allowance = client.allowance()
+        except GlobalpingError:
+            return _error(UNREACHABLE, 502)
 
-    budget = _budget(plan, allowance)
-    if budget["refused"]:
-        return JsonResponse({**budget, "error": budget["refused"]}, status=400)
-    if not budget["fits"] and request.POST.get("confirm") != "1":
-        return JsonResponse({**budget, "needs_confirm": True}, status=409)
+        budget = _budget(plan, allowance)
+        if budget["refused"]:
+            return JsonResponse({**budget, "error": budget["refused"]}, status=400)
+        if not budget["fits"] and request.POST.get("confirm") != "1":
+            return JsonResponse({**budget, "needs_confirm": True}, status=409)
 
-    st = state.get()
-    entry = st.create()
-    if entry is None:
-        return _error(BUSY, 503)
+        st = state.get()
+        entry = st.create()
+        if entry is None:
+            return _error(BUSY, 503)
+        started = True
+    finally:
+        if not started:  # once started, the scan thread owns the client and closes it
+            client.close()
     threading.Thread(target=_run, args=(st, entry, url, plan, client, geo), daemon=True).start()
     return JsonResponse({"id": entry.id}, status=202)
 

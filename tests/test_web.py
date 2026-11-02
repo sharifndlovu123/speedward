@@ -188,7 +188,8 @@ def test_page_has_no_inline_script_and_carries_ttl(client, settings):
 def test_security_headers_and_csp(client):
     r = client.get(reverse("index"))
     assert r["Content-Security-Policy"] == ("default-src 'self'; style-src 'self' 'unsafe-inline'; "
-                                            "img-src 'self' data:; script-src 'self'; frame-ancestors 'none'")
+                                            "img-src 'self' data:; script-src 'self'; frame-ancestors 'none'; "
+                                            "base-uri 'none'; form-action 'self'")
     assert r["X-Content-Type-Options"] == "nosniff"
     assert r["Referrer-Policy"] == "no-referrer"
     assert r["X-Frame-Options"] == "DENY"
@@ -830,3 +831,19 @@ def test_huge_timings_are_a_400_not_a_500(client, name):
     url = reverse(name) if name == "render" else reverse("export", args=["html"])
     r = post_json(client, url, {"result": result, "limits": {}})
     assert r.status_code == 400
+
+
+def test_views_close_their_globalping_clients(client, monkeypatch):
+    from speedward.core.globalping import GlobalpingClient
+    made = []
+    real_init = GlobalpingClient.__init__
+
+    def tracking_init(self, *a, **k):
+        real_init(self, *a, **k)
+        made.append(self)
+    monkeypatch.setattr(GlobalpingClient, "__init__", tracking_init)
+    client.get(reverse("index"))
+    client.post(reverse("estimate"), {"locations": "Berlin,Tokyo"})
+    run_full_scan(client)
+    assert len(made) >= 3
+    assert all(c._http.is_closed for c in made)

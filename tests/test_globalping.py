@@ -294,3 +294,15 @@ def _failed(raw):
 ])
 def test_classify_failure_causes(raw, status, reason):
     assert classify(_failed(raw)) == (status, reason)
+
+
+def test_client_closes_only_its_own_http_client():
+    import httpx
+    own = GlobalpingClient()
+    with own:
+        pass
+    assert own._http.is_closed
+    shared = httpx.Client()
+    GlobalpingClient(http=shared).close()
+    assert not shared.is_closed
+    shared.close()
