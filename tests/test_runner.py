@@ -488,3 +488,12 @@ def test_start_messages_are_fixed_and_distinct():
     assert "no test machine found for one of the places you chose" in start_message("no_probe")
     assert "key" in start_message("key") and "address" in start_message("address")
     assert start_message("unknown kind") == START_MESSAGES["other"]
+
+
+def test_scan_report_carries_a_diagnosis_of_its_own_results(fake):
+    from speedward.core.bottleneck import diagnose
+    with client(fake) as gp:
+        report = run_scan("https://example.com/", Plan(locations=TWO), gp)
+    assert report.diagnosis is not None
+    assert report.diagnosis == diagnose(report)
+    assert report.to_dict()["diagnosis"]["measured"] == 2

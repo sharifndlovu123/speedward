@@ -377,3 +377,54 @@ def test_from_dict_cleans_target_and_version():
 def test_from_dict_rejects_absurd_timings(mutate):
     with pytest.raises(ValueError):
         ScanReport.from_dict(_broken(mutate))
+
+
+# --- the "where the time goes" diagnosis -------------------------------------------------------
+
+def _diagnosed() -> ScanReport:
+    from speedward.core.bottleneck import diagnose
+    from speedward.core.models import Stages as _S
+    t = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
+    locs = [LocationResult(Location("XX", c, None, None, None, None, None), "measured",
+                           stages=_S(dns=5, connect=c_ms, tls=10, first_byte=200, download=5, total=230))
+            for c, c_ms in (("London", 10), ("Tokyo", 150), ("Lagos", 60))]
+    locs.append(LocationResult(Location("XX", "Seoul", None, None, None, None, None), "blocked", "timed out"))
+    r = ScanReport("https://example.com/", t, t, "0.1.0", {}, None, locs, [], [], None)
+    r.diagnosis = diagnose(r)
+    return r
+
+
+def test_diagnosis_round_trips_through_from_dict():
+    r = _diagnosed()
+    d = json.loads(json.dumps(r.to_dict()))
+    assert d["diagnosis"]["verdict"] == "biggest"
+    assert ScanReport.from_dict(d) == r
+
+
+def test_report_without_a_diagnosis_loads_with_none_and_is_never_given_one():
+    d = json.loads(json.dumps(_diagnosed().to_dict()))
+    del d["diagnosis"]
+    assert ScanReport.from_dict(d).diagnosis is None
+    d["diagnosis"] = None
+    assert ScanReport.from_dict(d).diagnosis is None
+
+
+@pytest.mark.parametrize("bad", ["biggest", 1, [], {"verdict": "biggest"}])
+def test_from_dict_refuses_a_malformed_diagnosis(bad):
+    d = json.loads(json.dumps(_diagnosed().to_dict()))
+    d["diagnosis"] = bad
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)
+
+
+def test_from_dict_refuses_a_diagnosis_that_does_not_match_the_timings():
+    d = json.loads(json.dumps(_diagnosed().to_dict()))
+    d["locations"][0]["stages"]["first_byte"] = 900  # the timings changed, the diagnosis did not
+    with pytest.raises(ValueError):
+        ScanReport.from_dict(d)
+
+
+def test_report_without_a_diagnosis_has_no_diagnosis_key():
+    r = _diagnosed()
+    r.diagnosis = None
+    assert "diagnosis" not in r.to_dict()

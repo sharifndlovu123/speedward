@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 from speedward import __version__
 from speedward.core.analysis import cdn_status
+from speedward.core.bottleneck import diagnose
 from speedward.core.budget import Plan
 from speedward.core.edge import Answer, cf_ray_code, place
 from speedward.core.geo import Geolocator
@@ -440,6 +441,8 @@ def _report(target, started, plan: Plan, scan: _Scan, server, results, paths, dn
                "dns": plan.dns, "browser": plan.browser}
     if scan.skipped:
         options["not_run"] = list(scan.skipped)
-    return ScanReport(target=target, started=started, finished=datetime.now(UTC),
-                      version=__version__, options=options, server=server, locations=results,
-                      paths=paths, dns=dns, browser=None)
+    report = ScanReport(target=target, started=started, finished=datetime.now(UTC),
+                        version=__version__, options=options, server=server, locations=results,
+                        paths=paths, dns=dns, browser=None)
+    report.diagnosis = diagnose(report)
+    return report

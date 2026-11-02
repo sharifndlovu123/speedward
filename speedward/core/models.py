@@ -6,6 +6,10 @@ import math
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # bottleneck imports this module; at run time it is imported where it is used
+    from speedward.core.bottleneck import Diagnosis
 
 SCHEMA_VERSION = 1
 
@@ -242,12 +246,15 @@ class ScanReport:
     paths: list[PathResult]
     dns: list[DnsResult]
     browser: BrowserResult | None
+    # "Where the time goes" (speedward/core/bottleneck.py), set by the runner. None for a report from
+    # before it existed: such a report shows no panel and is never given a diagnosis afterwards.
+    diagnosis: Diagnosis | None = None
 
     def __post_init__(self):
         self.target, self.version = clean(self.target), clean(self.version)
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "schema_version": SCHEMA_VERSION,
             "target": self.target,
             "started": self.started.isoformat(),
@@ -260,20 +267,26 @@ class ScanReport:
             "dns": [asdict(d) for d in self.dns],
             "browser": asdict(self.browser) if self.browser else None,
         }
+        if self.diagnosis is not None:  # a report from before the diagnosis exports exactly as it came
+            out["diagnosis"] = self.diagnosis.to_dict()
+        return out
 
     @classmethod
     def from_dict(cls, data) -> ScanReport:
         """Rebuild a report from `to_dict` output (for example a copy the browser saved).
 
         The input is untrusted: anything missing, of the wrong type or of another schema version
-        raises ValueError. Every text field goes through the same cleaning as a fresh scan.
+        raises ValueError. Every text field goes through the same cleaning as a fresh scan. A diagnosis
+        is accepted only if it is exactly what the report's own results give (diagnosis_from_dict).
         """
+        from speedward.core.bottleneck import diagnosis_from_dict
+
         d = _obj(data, "report")
         if d.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported schema_version")
         server = d.get("server")
         browser = d.get("browser")
-        return cls(
+        report = cls(
             target=_s(d, "target"),
             started=_when(d, "started"),
             finished=_when(d, "finished"),
@@ -285,6 +298,9 @@ class ScanReport:
             dns=[_dns(_obj(x, "dns result")) for x in _list(d, "dns")],
             browser=None if browser is None else _browser(_obj(browser, "browser")),
         )
+        if d.get("diagnosis") is not None:
+            report.diagnosis = diagnosis_from_dict(d["diagnosis"], report)
+        return report
 
 
 # --- from_dict helpers: strict type checks, ValueError on anything unexpected ----------------------
