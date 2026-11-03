@@ -440,6 +440,9 @@
     var text = pluralLocations(n);
     if (n > 0 && !costStale && lastCost !== null) { text += " · about " + lastCost + " tests"; }
     setText($("pick-summary"), text);
+    // The same cost, short, beside Start on phones (hidden from screen readers: the line above is read).
+    setText($("start-cost"), n === 0 ? "No places picked" : estimateFailed ? "Cost unknown" :
+      (costStale || lastCost === null) ? "Working out the cost" : "About " + lastCost + " tests");
   }
 
   function renderPicks() {
@@ -866,12 +869,36 @@
     if (changed && h === "peek") { $("sheet-body").scrollTop = 0; }  // peek always shows its top
     if (changed && !quiet) { setText($("sheet-state"), (results ? sheetResultTexts : sheetTexts)[h]); }
     // Focus never stays on something the new height hides: it moves to the sheet's own buttons.
+    clipPeek();
+    colFocus();
     var now = document.activeElement;
     if (phone() && a && a !== body && (now === a || now === body || !now) && $("sheet").contains(a) && !rendered(a)) {
       var next = rendered($("sheet-more")) ? $("sheet-more") : $("sheet-less");
       next.focus();
     }
   }
+
+  // Peek in results shows a fixed glimpse of the summary. Controls it cuts off are made inert, so Tab
+  // never lands on something off screen; raising the sheet gives them back.
+  var peekInert = [];
+  function clipPeek() {
+    peekInert.forEach(function (el) { el.removeAttribute("inert"); });
+    peekInert = [];
+    if (!(phone() && hasResults && !picking && sheet === "peek")) { return; }
+    var sb = $("sheet-body");
+    sb.scrollTop = 0;
+    var box = sb.getBoundingClientRect();
+    var all = sb.querySelectorAll("a[href], button, input, select, textarea, summary, [tabindex]");
+    Array.prototype.forEach.call(all, function (el) {
+      if (el === sb || !rendered(el) || el.closest("[inert]")) { return; }
+      var r = el.getBoundingClientRect();
+      if (r.top < box.top - 1 || r.bottom > box.bottom + 1) {
+        el.setAttribute("inert", "");
+        peekInert.push(el);
+      }
+    });
+  }
+  window.addEventListener("resize", function () { clipPeek(); });
 
   function stepSheet(by) {
     var i = Math.max(0, Math.min(SHEETS.length - 1, SHEETS.indexOf(sheet) + by));
@@ -964,6 +991,7 @@
       lastMode = mode;
       setSheet(mode === "repick" ? "half" : "peek", true);
     }
+    clipPeek();
     colFocus();
   }
 
@@ -971,6 +999,7 @@
   // still scroll but holds nothing focusable: let the keyboard reach it so all of it can be read.
   function colFocus() {
     var want = picksLocked || (hasResults && !picking);
+    if (phone() && sheet === "peek" && hasResults && !picking) { want = false; }  // peek does not scroll
     var on = phone() ? $("sheet-body") : $("left-col");
     var off = phone() ? $("left-col") : $("sheet-body");
     if (want) { on.setAttribute("tabindex", "0"); } else { on.removeAttribute("tabindex"); }

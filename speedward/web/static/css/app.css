@@ -245,7 +245,7 @@ tr.hl{background:var(--hl)}
 
 /* --- wider screens: the phone-only parts add no box ------------------------------------------------ */
 .sheet,.sheet-body{display:contents}
-.sheet-head,.menu-toggle,.pin-move,.pin-move-hint{display:none}
+.sheet-head,.menu-toggle,.pin-move,.pin-move-hint,.start-cost{display:none}
 
 /* --- phone (approved mockup page-20): one thin top bar and one bottom sheet over the map ----------
    The sheet has three heights, set by the script on <body data-sheet>: peek (address, cost and Start;
@@ -312,7 +312,11 @@ tr.hl{background:var(--hl)}
   .strip .panel-head .mute{flex-basis:100%;font-size:.8rem}
   /* Start stays in the flow, straight after the cost lines, so the cost is always read just before it
      and nothing scrolls under it (a floating Start would cover the More checks boxes). */
-  .form-foot{position:static;padding:10px 0}
+  .form-foot{position:static;padding:10px 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+  .form-foot .error{flex-basis:100%}
+  /* the cost again, beside Start: the places can change below it at half and full height */
+  .start-cost{display:block;flex:none;margin:0;font-weight:600;font-size:.9rem}
+  #start{flex:1 1 9rem;width:auto}
 
   /* peek before a scan: the address, the cost and Start; the rest comes with Show more */
   body:not(.show-results)[data-sheet="peek"] .more-checks,
@@ -321,6 +325,8 @@ tr.hl{background:var(--hl)}
   body:not(.show-results)[data-sheet="peek"] #form-panel .panel-body>p.small,
   body:not(.show-results)[data-sheet="peek"] #picker-strip{display:none}
 
+  /* peek in results is a fixed glimpse (no scrolling); what it cuts off is made inert by the script */
+  body.show-results[data-sheet="peek"] .sheet-body{overflow:hidden}
   /* full in results: the details fill the sheet and scroll inside it */
   body.show-results[data-sheet="full"] .sheet-body{display:flex;flex-direction:column;overflow:hidden}
   body.show-results[data-sheet="full"] .middle{display:none}

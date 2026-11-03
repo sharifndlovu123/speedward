@@ -39,6 +39,8 @@ def test_move_pin_button_and_the_cost_straight_before_start():
     assert '<button type="button" id="pin-move" class="secondary pin-move">Move pin</button>' in body
     assert re.search(r'<p id="pin-move-hint" class="pin-move-hint" hidden>', body)
     assert body.index('id="pick-summary"') < body.index('id="estimate"') < body.index('id="start"')
+    foot = re.search(r'<div class="form-foot">(.*?)</div>', body, re.S).group(1)
+    assert '<p id="start-cost" class="start-cost" aria-hidden="true"></p>' in foot  # beside Start on phones
     assert "style=" not in body.split("<div id=\"stage\"")[0].split("<body")[1]
 
 
@@ -46,4 +48,4 @@ def test_wider_screens_get_no_phone_boxes():
     css = re.sub(r"/\*.*?\*/", "", APP_CSS, flags=re.S)
     before_phone = css.split("@media (max-width:700px){\n  :root{--bar-h")[0]
     assert ".sheet,.sheet-body{display:contents}" in before_phone
-    assert re.search(r"\.sheet-head,\.menu-toggle,\.pin-move,\.pin-move-hint\{display:none\}", before_phone)
+    assert re.search(r"\.sheet-head,\.menu-toggle,\.pin-move,\.pin-move-hint,\.start-cost\{display:none\}", before_phone)

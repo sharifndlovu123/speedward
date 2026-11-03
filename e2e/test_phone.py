@@ -316,3 +316,64 @@ def test_sheet_content_stays_reachable_by_keyboard(page, live_site, watch):
         page.keyboard.press("Tab")
         seen.add(page.evaluate("document.activeElement.getAttribute('aria-label') || document.activeElement.id"))
     assert "Locations table" in seen
+
+
+# --- review fixes -------------------------------------------------------------------------------
+
+IN_SHEET = """(sel) => {
+  const el = document.querySelector(sel), r = el.getBoundingClientRect();
+  const s = document.querySelector('#sheet-body').getBoundingClientRect();
+  return r.top >= s.top - 1 && r.bottom <= s.bottom + 1 && r.top >= 0 && r.bottom <= window.innerHeight;
+}"""
+
+
+@pytest.mark.parametrize("size", [{"width": 320, "height": 568}, {"width": 390, "height": 844}], ids=["320x568", "390x844"])
+def test_start_is_fully_on_screen_at_peek(page, live_site, watch, size):
+    phone(page, size)
+    page.goto(live_site + "/")
+    expect(page.locator("#pick-summary")).to_contain_text("about")
+    assert page.evaluate(IN_SHEET, "#start")
+    assert page.evaluate(IN_SHEET, "#estimate")
+
+
+def test_the_cost_sits_beside_start_at_every_height_and_follows_new_picks(page, live_site, watch):
+    phone(page)
+    page.goto(live_site + "/")
+    expect(page.locator("#start-cost")).to_have_text("About 36 tests")
+    for h in SHEETS:
+        set_sheet(page, h)
+        page.locator("#start").scroll_into_view_if_needed()
+        expect(page.locator("#start-cost")).to_be_in_viewport()
+        cost, start = page.locator("#start-cost").bounding_box(), page.locator("#start").bounding_box()
+        assert abs((cost["y"] + cost["height"] / 2) - (start["y"] + start["height"] / 2)) < start["height"]  # same row
+    set_sheet(page, "full")
+    page.locator('#chips .chip[data-place="London"]').click()  # a pick below Start changes the cost
+    expect(page.locator("#start-cost")).to_have_text("About 33 tests")
+    page.locator("#start").scroll_into_view_if_needed()
+    expect(page.locator("#start-cost")).to_be_in_viewport()
+
+
+def test_clipped_peek_content_is_out_of_the_tab_order(page, live_site, watch):
+    phone(page)
+    scan(page, live_site)
+    clipped = page.evaluate("""() => {
+      const s = document.querySelector('#sheet-body').getBoundingClientRect(), out = [];
+      for (const el of document.querySelectorAll('#sheet-body button, #sheet-body a[href], #sheet-body input, #sheet-body [tabindex]')) {
+        const r = el.getBoundingClientRect();
+        if (!r.width) continue;
+        const outside = r.top < s.top - 1 || r.bottom > s.bottom + 1;
+        out.push({outside, inert: !!el.closest('[inert]'), text: el.textContent.trim().slice(0, 40)});
+      }
+      return out;
+    }""")
+    assert any(c["outside"] for c in clipped), "expected some summary controls below the peek"
+    assert all(c["inert"] for c in clipped if c["outside"]), clipped
+    page.locator("#sheet-more").focus()
+    for _ in range(12):
+        page.keyboard.press("Tab")
+        if page.evaluate("document.querySelector('#sheet-body').contains(document.activeElement)"):
+            assert page.evaluate("""() => { const r = document.activeElement.getBoundingClientRect(),
+                s = document.querySelector('#sheet-body').getBoundingClientRect();
+                return r.top >= s.top - 1 && r.bottom <= s.bottom + 1; }""")
+    set_sheet(page, "half")
+    assert page.locator("#sheet-body [inert]").count() == 0
