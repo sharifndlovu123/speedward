@@ -97,6 +97,8 @@ def test_finding_in_summary_grid_in_drawer_and_worst_dot(page, live_site, reach_
     order = page.evaluate("[...document.querySelectorAll('#results-summary > *')].map(e => e.className)")
     assert order[:3] == ["figures", "bn-head", "rc-head"]
 
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
+
     page.get_by_role("button", name="See who can reach it").click()
     expect(page.locator("#drawer")).to_be_visible()
     expect(page.locator("#results-body .rc-title")).to_be_focused()
@@ -140,6 +142,7 @@ def test_axe_with_checks_and_grid(page, live_site, reach_kinds, watch, scheme, s
     start(page)
     expect(page.locator("#results-summary .rc-head")).to_be_visible(timeout=30_000)
     check(page, f"results with finding {scheme} {size}")
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
     page.get_by_role("button", name="See who can reach it").click()
     expect(page.locator("#results-body table.rc-grid")).to_be_visible()
     check(page, f"grid {scheme} {size}")
@@ -208,6 +211,7 @@ def test_grid_scrolls_in_its_own_region_on_a_390_px_phone(page, live_site, reach
     page.set_viewport_size({"width": 390, "height": 844})
     page.emulate_media(reduced_motion="reduce")
     scan(page, live_site, "ipv6", "http", "dns", "port")
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
     page.get_by_role("button", name="See who can reach it").click()
     expect(page.locator("#results-body table.rc-grid")).to_be_visible()
     m = page.evaluate(WORDS_KEPT, "#results-body table.rc-grid")
