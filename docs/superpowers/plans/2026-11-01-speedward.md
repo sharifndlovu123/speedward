@@ -419,6 +419,28 @@ Behaviour (author's decisions): web status strip "N of M tests left this hour ·
 5. Keep the style: ink and paper tokens, flat, no red (the server marker keeps its red); text never colour-only; dark theme; reduced motion; strict CSP (no inline style attributes); escaping of all place names.
 6. Tests: unit tests for the placement function (no collisions for the default 12, Europe 7 and all 32 sets from the measurement tool; no label outside the viewBox; deterministic; cluster merging thresholds; dropped-label fallback), render tests for web and export, an e2e check that re-uses the Task 22 labels.py measurement idea (assert 0 overlapping label pairs and 0 labels cut off for the three sets, desktop and phone widths), axe in light and dark, reflow. README: one short note on how labels are placed and what a merged label means.
 
+### Task 24: Phone layout and a Light / Dark / Auto theme switch (author approved mockups page-20-phone.html and page-21-theme-switch.html)
+
+Mockup sources: /home/sharif/Documents/vs_code/work/devbridge/site-speed/.superpowers/brainstorm/12023-1793700849/content/page-20-phone.html and page-21-theme-switch.html (read the HTML). Desktop stays as it is.
+
+**Phone layout (below 700 px wide), web app only:**
+1. One thin top bar: logo and name before a scan, the address in results mode, plus a menu button (Export, Run again, Clear now, Locations, and the theme switch). It never covers more than one line, so the map stays visible.
+2. One bottom sheet replacing the stacked panels, with three heights: peek (before a scan: address, cost, Start; in results: headline number, the finding, blocked count), half (places, More checks, summary), full (diagram, Who can reach it, Is it fast?, place table). Drag the handle, tap it, or use a Show/Hide button; keyboard and screen-reader order matches the sections; focus is managed when the height changes; the sheet is a labelled region; reduced motion removes the slide animation. The cost-before-Start rule still holds (cost visible in peek before Start).
+3. Diagram as a vertical list of blocks on phones (same marks, texts and to-scale bar; same data, one template: do not fork the diagnosis logic).
+4. Wide tables (Who can reach it, Is it fast?, places) scroll sideways inside their own focusable region with the place-name column fixed; place table rows may become cards.
+5. Server pin: tap area at least 44 px and a 'Move pin' button as an alternative to dragging (keyboard arrows stay).
+6. Map labels: the Task 23 behaviour stays; nothing new.
+
+**Theme switch (all widths):**
+1. Light / Dark / Auto segmented radio group (Auto default) in the desktop top bar and in the phone menu. Light and Dark set `data-theme` on `<html>` and remember the choice in `localStorage` for this browser only (wrapped in try/catch, page works without it); Auto removes the attribute and follows the device. Never sent to the server, no cookies.
+2. No flash: apply the saved choice before first paint with a small external script file in `<head>` (strict CSP: no inline script), not a deferred module.
+3. Accessible: real radio group named 'Colour theme', arrow-key keyboard use, visible focus ring, 44 px tap height on phones, contrast checked in both themes.
+4. The map, diagram, grids, favicon and logo follow the theme (`reports/map.py` and tokens already support `data-theme`); exported HTML reports keep following the viewer's device (no switch).
+
+**Rules:** ink/paper tokens, flat hairline, no red except Start and the server marker; text never colour-only; strict CSP (no inline style attributes added); textContent only; no outside requests; nothing stored on the server.
+
+**Tests:** e2e at 390 px and 320 px and 200% zoom (no horizontal page scroll, nothing clipped, map visible with the sheet at peek, sheet heights by pointer and keyboard, focus order, sheet content reachable), theme switch (sets and persists, Auto follows the device via emulated colour scheme, no flash: attribute present at first paint, works with localStorage blocked), axe in light and dark on desktop and phone in every sheet height, contrast tests for any new token pairs, reduced motion. README: how to use the sheet and theme switch.
+
 ## Self-Review notes
 
 - Spec coverage: map and dimmed unreachable (Task 7); cold, warm, delay (Tasks 3 to 5); reasons (Tasks 3, 7); CDN (Task 5); pass/fail (Tasks 5, 8); browser test (Task 10); export (Tasks 7, 9); stage breakdown, path, network type, DNS, server identity (Tasks 4, 5, 7); key handling and wording (Tasks 3, 9, 11); budget (Tasks 4, 8, 9); session storage and expiry (Task 9); server position (Task 6); first-task verification (Task 1).

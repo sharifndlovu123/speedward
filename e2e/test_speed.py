@@ -8,7 +8,7 @@ import json
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick, start
+from e2e.helpers import open_details, pick, raise_sheet, start
 from e2e.test_a11y import CLIPPED, check, setup
 from e2e.test_bottleneck import four_places  # noqa: F401 - fixture
 from e2e.test_reach import _like, tick
@@ -77,6 +77,8 @@ def test_findings_in_summary_table_in_drawer_notes_on_the_diagram(page, live_sit
     order = page.evaluate("[...document.querySelectorAll('#results-summary > *')].map(e => e.className)")
     assert order[:3] == ["figures", "bn-head", "sp-head"]
 
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
+
     page.get_by_role("button", name="See the speed checks").click()
     expect(page.locator("#drawer")).to_be_visible()
     expect(page.locator("#results-body .sp-title")).to_be_focused()
@@ -124,6 +126,7 @@ def test_axe_with_speed_checks(page, live_site, speed_kinds, watch, scheme, size
     start(page)
     expect(page.locator("#results-summary .sp-head")).to_be_visible(timeout=30_000)
     check(page, f"results with findings {scheme} {size}")
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
     page.get_by_role("button", name="See the speed checks").click()
     expect(page.locator("#results-body table.sp-grid")).to_be_visible()
     check(page, f"speed table {scheme} {size}")
@@ -154,7 +157,7 @@ def test_reflow_with_speed_checks(page, live_site, speed_kinds, watch, size):
     assert page.evaluate(CLIPPED) == []
     scan(page, live_site, *ALL)
     assert page.evaluate(CLIPPED) == []
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     assert page.evaluate(CLIPPED) == []
 
 
@@ -201,6 +204,7 @@ def test_speed_table_scrolls_in_its_own_region_on_a_390_px_phone(page, live_site
     page.set_viewport_size({"width": 390, "height": 844})
     page.emulate_media(reduced_motion="reduce")
     scan(page, live_site, *ALL)
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
     page.get_by_role("button", name="See the speed checks").click()
     expect(page.locator("#results-body table.sp-grid")).to_be_visible()
     m = page.evaluate(WORDS_KEPT, "#results-body table.sp-grid")

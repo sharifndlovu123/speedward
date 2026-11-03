@@ -6,7 +6,7 @@ import copy
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick, start
+from e2e.helpers import open_details, pick, raise_sheet, start
 from e2e.test_a11y import CLIPPED, check, setup
 from e2e.test_session_storage import TARGET
 from tests.fake_globalping import three_places
@@ -52,6 +52,8 @@ def test_headline_in_summary_and_diagram_in_drawer(page, live_site, four_places,
     # The headline comes straight after the figures.
     order = page.evaluate("[...document.querySelectorAll('#results-summary > *')].map(e => e.className)")
     assert order[:2] == ["figures", "bn-head"]
+
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
 
     page.get_by_role("button", name="See the request path").click()
     expect(page.locator("#drawer")).to_be_visible()
@@ -126,6 +128,7 @@ def test_axe_with_the_panel(page, live_site, four_places, watch, scheme, size):
     scan(page, live_site)
     expect(page.locator("#results-summary .bn-head")).to_be_visible()
     check(page, f"results with panel {scheme} {size}")
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
     page.get_by_role("button", name="See the request path").click()
     expect(visible_view(page)).to_have_attribute("data-bn-view", "all")
     check(page, f"diagram {scheme} {size}")
@@ -156,7 +159,7 @@ def test_reflow_with_the_diagram(page, live_site, four_places, watch, size):
     page.emulate_media(reduced_motion="reduce")
     scan(page, live_site)
     assert page.evaluate(CLIPPED) == []
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     assert page.evaluate(CLIPPED) == []
     direction = visible_view(page).locator(".bn-path").evaluate("e => getComputedStyle(e).flexDirection")
     assert direction == "column"
@@ -164,6 +167,7 @@ def test_reflow_with_the_diagram(page, live_site, four_places, watch, size):
 
 def test_see_the_request_path_shows_the_heading_below_the_sticky_bar(page, live_site, four_places, watch):
     scan(page, live_site)
+    raise_sheet(page, "half")  # phones: peek cuts the summary off (Task 24)
     page.get_by_role("button", name="See the request path").click()
     title = page.locator("#results-body .bn-title").bounding_box()
     bar = page.locator("#drawer .panel-head").bounding_box()

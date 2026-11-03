@@ -3,7 +3,7 @@ import json
 
 from playwright.sync_api import expect
 
-from e2e.helpers import start
+from e2e.helpers import raise_sheet, start
 
 KEY = "speedward:result"
 TARGET = "https://e2e-target.example/"
@@ -182,6 +182,7 @@ def test_first_tab_stops_are_panel_controls_not_dots(page, live_site, watch):
 def _first_scan(page, live_site):
     page.goto(live_site + "/")
     page.fill("#url", TARGET)
+    raise_sheet(page, "half")  # phones: the places show from half height (Task 24)
     page.click("[data-preset=clear]")
     chip(page, "Paris").click()
     start(page)
@@ -215,6 +216,7 @@ def test_phone_results_mode_keeps_export_and_run_again_reachable(page, live_site
     page.set_viewport_size({"width": 360, "height": 740})
     _first_scan(page, live_site)
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    for sel in ("[data-export=html]", "#results-run-again", "#locations-toggle"):
+    page.click("#menu-toggle")  # Task 24: on phones these live in the top bar's menu
+    for sel in ("[data-export=html]", "#results-run-again", "#results-clear", "#locations-toggle"):
         page.locator(sel).scroll_into_view_if_needed()
         expect(page.locator(sel)).to_be_in_viewport()
