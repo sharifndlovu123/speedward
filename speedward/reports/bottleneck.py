@@ -259,18 +259,25 @@ def _card_distance(d: Diagnosis) -> dict:
 def _place(d: Diagnosis, p: PlaceFigure, extra: dict[str, str] | None = None) -> dict:
     if p.status != "measured":
         why = p.reason or "no reason given"
-        return {"row": p.row, "name": p.place, "measured": False, "tag": "no data", "total": "",
-                "diagram": None, "reason": f"{STATUS_TEXT[p.status]}: {why}. No timings, left out of every figure.",
-                "segments": []}
+        reason = f"{STATUS_TEXT[p.status]}: {why}. No timings, left out of every figure."
+        return {"row": p.row, "name": p.place, "measured": False, "tag": "no data", "stage_ms": "", "total": "",
+                "label": reason, "diagram": None, "reason": reason, "segments": []}
+    stage_ms = ""
     if p.held_back_by is not None:
         tag = WORD[p.held_back_by]
+        held = _stage(p.stages, p.held_back_by).ms  # the place's own stage time, from the diagnosis
+        stage_ms = ms(held) if held is not None else ""
     elif d.verdict in ("biggest", "no_single_stage"):
         tag = "no single stage"
     else:
         tag = "not judged"
+    total = ms(p.total_ms)
+    # The stage's own time and the whole request, so the total is never read as the stage's time.
+    label = f"{tag} {stage_ms} of {total}" if stage_ms else f"{tag}, total {total}"
     segments = [{"mark": s.mark, "pct": round(s.share * 100, 2)} for s in p.stages if s.share]
-    return {"row": p.row, "name": p.place, "measured": True, "tag": tag, "total": ms(p.total_ms),
-            "diagram": _diagram(d, p.stages, p.total_ms, False, p, extra), "reason": "", "segments": segments}
+    return {"row": p.row, "name": p.place, "measured": True, "tag": tag, "stage_ms": stage_ms, "total": total,
+            "label": label, "diagram": _diagram(d, p.stages, p.total_ms, False, p, extra), "reason": "",
+            "segments": segments}
 
 
 def _footnote(d: Diagnosis) -> str:
@@ -350,7 +357,7 @@ def markdown_lines(report) -> list[str]:
     L += [""] + [f"- {c['kicker']}: **{c['title']}**. {c['text']} {c['check']}" for c in v["cards"]]
     L += ["", "Each place, by what holds it back:", ""]
     for p in v["places"]:
-        L.append(f"- {p['name']}: {p['tag']}, {p['total']}" if p["measured"] else f"- {p['name']}: {p['reason']}")
+        L.append(f"- {p['name']}: {p['label']}")
     L += ["", v["footnote"]]
     return L
 
