@@ -5,6 +5,10 @@
   <div class="brand">{% include "_logo.html" %}<h1>speedward</h1><span class="mute tagline">How fast your site loads from around the world.</span></div>
   <p class="notice-line">{{ notice }}</p>
   <p class="status" id="allowance-strip" aria-live="off"><span id="allowance-text">{{ strip_text }}{% if strip_link %}<a href="https://globalping.io" rel="noopener noreferrer">https://globalping.io</a>{% endif %}</span><span id="allowance-last-run" hidden> · last run <span id="allowance-ago"></span></span><span id="allowance-stale" hidden> · could not refresh, these numbers may be out of date</span></p>
+  <div class="theme-switch" role="radiogroup" aria-labelledby="theme-name">
+    <span id="theme-name" class="theme-name"><span class="visually-hidden">Colour </span>theme</span>
+    <span class="seg"><label><input type="radio" name="theme" value="light"><span>Light</span></label><label><input type="radio" name="theme" value="dark"><span>Dark</span></label><label><input type="radio" name="theme" value="auto" checked><span>Auto</span></label></span>
+  </div>
   <div id="results-bar" class="results-bar" hidden>
     <h2 id="results-title"></h2>
     <div class="actions">
