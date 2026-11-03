@@ -7,7 +7,7 @@ import json
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick, start
+from e2e.helpers import open_details, pick, raise_sheet, start
 from e2e.test_a11y import CLIPPED, check, setup
 from e2e.test_bottleneck import four_places  # noqa: F401 - fixture
 from e2e.test_session_storage import KEY, TARGET
@@ -40,6 +40,7 @@ def reach_kinds(fake_globalping, four_places):  # noqa: F811
 
 
 def tick(page, *names):
+    raise_sheet(page, "half")  # phones: More checks show from half height (Task 24)
     for n in names:
         page.check(f'input[name="check"][value="{n}"]')
 
@@ -165,7 +166,7 @@ def test_reflow_with_checks_and_grid(page, live_site, reach_kinds, watch, size):
     assert page.evaluate(CLIPPED) == []
     scan(page, live_site, "ipv6", "http", "dns", "port")
     assert page.evaluate(CLIPPED) == []
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     assert page.evaluate(CLIPPED) == []
 
 

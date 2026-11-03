@@ -6,7 +6,7 @@ import copy
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick, start
+from e2e.helpers import open_details, pick, start
 from e2e.test_a11y import CLIPPED, check, setup
 from e2e.test_session_storage import TARGET
 from tests.fake_globalping import three_places
@@ -156,7 +156,7 @@ def test_reflow_with_the_diagram(page, live_site, four_places, watch, size):
     page.emulate_media(reduced_motion="reduce")
     scan(page, live_site)
     assert page.evaluate(CLIPPED) == []
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     assert page.evaluate(CLIPPED) == []
     direction = visible_view(page).locator(".bn-path").evaluate("e => getComputedStyle(e).flexDirection")
     assert direction == "column"

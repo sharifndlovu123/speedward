@@ -93,6 +93,10 @@ DEBUG=1 django-admin runserver --settings=speedward.web.settings
 
 Open <http://127.0.0.1:8000/>. Enter an address, review the estimate, press Start test. `DEBUG=1` is for your own machine only.
 
+**Colour theme.** The Theme switch in the top bar (in the Menu on phones) picks Light, Dark or Auto. Auto, the default, follows your device. Light or Dark is remembered in this browser only (local storage, never sent to the server, no cookie); if the browser blocks storage the switch still works until you reload. Exported HTML reports have no switch and follow the device of whoever opens them.
+
+**On a phone** (under 700 px wide) the map fills the screen and everything else sits in one bottom sheet with three heights. It starts low (peek): the address, the test cost and Start, or after a scan the headline number and finding. Show more (or tap or drag the bar at the top of the sheet) raises it to half (places, More checks, the summary) and then full (every setting; after a scan the details: the request path as a list of blocks, who can reach it, is it fast? and the place table). Show less lowers it; Close or Escape on the details goes back to half. Wide tables scroll sideways inside their own box while the place name stays in view. Export, Run again, Clear now, Locations and the colour theme are in the Menu in the top bar. The server pin has a larger tap area, and Move pin (under Server is in) places it with one tap on the map instead of a drag; the arrow keys still work.
+
 ## Run it with Docker Compose
 
 `docker-compose.yml` runs two containers: **speedward** (built from the `Dockerfile`: gunicorn, one worker with threads, non-root, read-only root file system) and MaxMind's official **geoipupdate** image, which keeps the GeoLite2 City file current in a shared volume that speedward mounts read-only.

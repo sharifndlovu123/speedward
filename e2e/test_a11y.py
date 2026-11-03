@@ -8,7 +8,7 @@ import pytest
 from axe_playwright_python.sync_playwright import Axe
 from playwright.sync_api import expect
 
-from e2e.helpers import pick, start
+from e2e.helpers import open_details, pick, start
 from e2e.test_session_storage import TARGET
 
 AXE = Axe()
@@ -65,7 +65,7 @@ def test_results_and_drawer(page, live_site, watch, scheme, size):
     start_scan(page, live_site)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     check(page, f"results {scheme} {size}")
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     expect(page.locator("#drawer")).to_be_visible()
     check(page, f"drawer {scheme} {size}")
 
@@ -107,7 +107,7 @@ def test_reflow_no_sideways_scroll_or_clipped_controls(page, live_site, watch, s
     start_scan(page, live_site)
     expect(page.locator("#results-map svg.sw-map")).to_be_visible(timeout=30_000)
     assert page.evaluate(CLIPPED) == []
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     assert page.evaluate(CLIPPED) == []
     page.goto(live_site + "/")
     assert page.evaluate(CLIPPED) == []

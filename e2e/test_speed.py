@@ -8,7 +8,7 @@ import json
 import pytest
 from playwright.sync_api import expect
 
-from e2e.helpers import pick, start
+from e2e.helpers import open_details, pick, start
 from e2e.test_a11y import CLIPPED, check, setup
 from e2e.test_bottleneck import four_places  # noqa: F401 - fixture
 from e2e.test_reach import _like, tick
@@ -154,7 +154,7 @@ def test_reflow_with_speed_checks(page, live_site, speed_kinds, watch, size):
     assert page.evaluate(CLIPPED) == []
     scan(page, live_site, *ALL)
     assert page.evaluate(CLIPPED) == []
-    page.click("#drawer-toggle")
+    open_details(page)  # phones: the sheet at full height (Task 24)
     assert page.evaluate(CLIPPED) == []
 
 
