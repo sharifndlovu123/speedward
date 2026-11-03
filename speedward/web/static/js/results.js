@@ -757,6 +757,41 @@
     announcePin();
   });
 
+  // On phones the pin gets an invisible hit circle at least 44 px across (46 px, to be safe) (sized from the map's scale).
+  var pinHit = document.createElementNS(SVGNS, "circle");
+  pinHit.setAttribute("class", "sw-hit");
+  pinHit.setAttribute("fill", "none");
+  pinHit.setAttribute("pointer-events", "all");
+  pinHit.setAttribute("r", "0");
+  pinEl.insertBefore(pinHit, pinEl.firstChild);
+  function sizePinHit() {
+    var m = pinSvg.getScreenCTM();
+    var scale = m ? Math.abs(m.a) : 0;
+    pinHit.setAttribute("r", phone() && scale > 0 ? String(Math.ceil(23 / scale * 10) / 10) : "0");
+  }
+  window.addEventListener("resize", sizePinHit);
+
+  var placing = false;
+  function setPlacing(on) {
+    placing = !!on && !picksLocked;
+    setText($("pin-move"), placing ? "Cancel moving" : "Move pin");
+    show($("pin-move-hint"), placing);
+    pinSvg.classList.toggle("sw-placing", placing);
+    if (placing) {
+      if (sheet === "full") { setSheet("half"); }  // the map must be on screen to tap it
+      setText($("pin-status"), "Tap the map where the server is. Press Cancel moving or Escape to stop.");
+    }
+  }
+  $("pin-move").addEventListener("click", function () { setPlacing(!placing); });
+  function placeAt(e) {
+    var pt = pinPoint(e);
+    setPlacing(false);
+    if (!pt) { return; }
+    setPin(90 - clampNum(pt.y, 0, vb.height) / vb.height * 180, clampNum(pt.x, 0, vb.width) / vb.width * 360 - 180, true);
+    announcePin();
+    if (rendered($("pin-move"))) { $("pin-move").focus(); }
+  }
+
   initPicker();
   setPicks([], true);
   var saved0 = readPin();
@@ -764,6 +799,7 @@
 
   var pickerMap = $("picker-map");
   pickerMap.addEventListener("click", function (e) {
+    if (placing) { placeAt(e); return; }
     var dot = e.target.closest ? e.target.closest(".sw-pick") : null;
     if (dot) { toggleName(dot.getAttribute("data-place")); }
   });
@@ -786,9 +822,126 @@
     if (e.key === "Enter") { e.preventDefault(); addPlace(); }
   });
 
+  // --- phone layout: one thin top bar with a menu, one bottom sheet with three heights -----------
+  // Below 700 px (the same width as the stylesheet). The sheet height lives on <body data-sheet>; the
+  // stylesheet decides what each height shows. Drag or tap the handle, or use Show more / Show less;
+  // keyboard and screen-reader users get the buttons, and the new height is announced.
+  var phoneMQ = window.matchMedia ? window.matchMedia("(max-width: 700px)") : null;
+  function phone() { return !!(phoneMQ && phoneMQ.matches); }
+  var SHEETS = ["peek", "half", "full"];
+  var sheet = "peek";
+  var sheetTexts = {
+    peek: "Panel lowered: the address, the cost and Start.",
+    half: "Panel at half height: places and More checks.",
+    full: "Panel at full height: every setting."
+  };
+  var sheetResultTexts = {
+    peek: "Panel lowered: the headline.",
+    half: "Panel at half height: the summary.",
+    full: "Panel at full height: the details."
+  };
+
+  function rendered(el) { return !!(el && el.getClientRects().length); }
+
+  function setSheet(h, quiet) {
+    if (SHEETS.indexOf(h) === -1) { h = "peek"; }
+    // Read before anything changes: the browser drops focus from an element as soon as it is hidden.
+    var a = document.activeElement;
+    var changed = h !== sheet;
+    sheet = h;
+    body.setAttribute("data-sheet", h);
+    show($("sheet-less"), h !== "peek");
+    show($("sheet-more"), h !== "full");
+    var results = hasResults && !picking;
+    if (phone() && results) {
+      var d = $("drawer");
+      if (h === "full" && d.hidden) {
+        setDrawer(true, $("sheet-more"));
+      } else if (h !== "full" && !d.hidden) {
+        show(d, false);
+        $("drawer-toggle").setAttribute("aria-expanded", "false");
+        clearSelected();
+      }
+    }
+    if (changed && h === "peek") { $("sheet-body").scrollTop = 0; }  // peek always shows its top
+    if (changed && !quiet) { setText($("sheet-state"), (results ? sheetResultTexts : sheetTexts)[h]); }
+    // Focus never stays on something the new height hides: it moves to the sheet's own buttons.
+    var now = document.activeElement;
+    if (phone() && a && a !== body && (now === a || now === body || !now) && $("sheet").contains(a) && !rendered(a)) {
+      var next = rendered($("sheet-more")) ? $("sheet-more") : $("sheet-less");
+      next.focus();
+    }
+  }
+
+  function stepSheet(by) {
+    var i = Math.max(0, Math.min(SHEETS.length - 1, SHEETS.indexOf(sheet) + by));
+    setSheet(SHEETS[i]);
+  }
+
+  $("sheet-more").addEventListener("click", function () { stepSheet(1); });
+  $("sheet-less").addEventListener("click", function () { stepSheet(-1); });
+
+  // The handle: a tap moves up one height (from full back down to peek); a drag snaps to the height
+  // nearest where the finger is let go, in the direction it moved. Pointer only (aria-hidden): the
+  // buttons next to it do the same for everyone.
+  var handle = $("sheet-handle");
+  var grab = null;
+  handle.addEventListener("pointerdown", function (e) {
+    if (e.button !== undefined && e.button !== 0) { return; }
+    e.preventDefault();
+    grab = { y: e.clientY };
+    body.classList.add("sheet-drag");
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* still works without capture */ }
+  });
+  function endGrab(e, cancelled) {
+    if (!grab) { return; }
+    var dy = grab.y - e.clientY;
+    grab = null;
+    body.classList.remove("sheet-drag");
+    if (cancelled) { return; }
+    if (Math.abs(dy) < 8) { setSheet(sheet === "full" ? "peek" : SHEETS[SHEETS.indexOf(sheet) + 1]); return; }
+    var at = e.clientY / Math.max(1, window.innerHeight);  // where the top of the sheet was let go
+    var nearest = at < 0.25 ? "full" : at < 0.6 ? "half" : "peek";
+    var i = SHEETS.indexOf(sheet), j = SHEETS.indexOf(nearest);
+    if (dy > 0) { j = Math.max(j, i + 1); } else { j = Math.min(j, i - 1); }
+    setSheet(SHEETS[Math.max(0, Math.min(SHEETS.length - 1, j))]);
+  }
+  handle.addEventListener("pointerup", function (e) { endGrab(e, false); });
+  handle.addEventListener("pointercancel", function (e) { endGrab(e, true); });
+
+  // The menu (phones): Export, Run again, Clear now, Locations, the colour theme and the allowance.
+  function menuOpen() { return body.classList.contains("menu-open"); }
+  function setMenu(on) {
+    body.classList.toggle("menu-open", !!on);
+    $("menu-toggle").setAttribute("aria-expanded", on ? "true" : "false");
+  }
+  $("menu-toggle").addEventListener("click", function () { setMenu(!menuOpen()); });
+  // An action from the menu closes it (after the action's own handler has run).
+  $("results-bar").addEventListener("click", function (e) {
+    var b = e.target.closest ? e.target.closest(".actions button") : null;
+    if (!b || !menuOpen()) { return; }
+    setMenu(false);
+    if (!$("menu-toggle").hidden) { $("menu-toggle").focus(); }
+  });
+  document.addEventListener("click", function (e) {
+    if (menuOpen() && !$("topbar").contains(e.target)) { setMenu(false); }
+  });
+
+  function layoutChanged() {
+    if (!phone()) { setMenu(false); }
+    if (phone() && hasResults && !picking && !$("drawer").hidden) { setSheet("full", true); }
+    colFocus();
+    sizePinHit();
+  }
+  if (phoneMQ) {
+    if (phoneMQ.addEventListener) { phoneMQ.addEventListener("change", layoutChanged); } else { phoneMQ.addListener(layoutChanged); }
+  }
+  sizePinHit();
+
   // --- layout modes: map in front, panels over it ----------------------------------------------
   var hasResults = false;
   var picking = true;
+  var lastMode = null;
 
   function applyMode() {
     var showPicker = !hasResults || picking;
@@ -803,14 +956,25 @@
     var t = $("locations-toggle");
     t.setAttribute("aria-pressed", picking ? "true" : "false");
     document.body.classList.toggle("has-results", hasResults);
+    document.body.classList.toggle("show-results", hasResults && !picking);
+    // A new mode starts the phone sheet at a fitting height: the headline (peek) for results, the
+    // places (half) when changing the places of a result, the address and Start (peek) otherwise.
+    var mode = !hasResults ? "pick" : picking ? "repick" : "results";
+    if (mode !== lastMode) {
+      lastMode = mode;
+      setSheet(mode === "repick" ? "half" : "peek", true);
+    }
     colFocus();
   }
 
   // When the side column shows no form (picks locked while testing, or the results summary) it can
   // still scroll but holds nothing focusable: let the keyboard reach it so all of it can be read.
   function colFocus() {
-    var col = $("left-col");
-    if (picksLocked || (hasResults && !picking)) { col.setAttribute("tabindex", "0"); } else { col.removeAttribute("tabindex"); }
+    var want = picksLocked || (hasResults && !picking);
+    var on = phone() ? $("sheet-body") : $("left-col");
+    var off = phone() ? $("left-col") : $("sheet-body");
+    if (want) { on.setAttribute("tabindex", "0"); } else { on.removeAttribute("tabindex"); }
+    off.removeAttribute("tabindex");
   }
 
   function setPicking(on) {
@@ -831,6 +995,10 @@
     var open = !!(on && hasResults);
     show(d, open);
     $("drawer-toggle").setAttribute("aria-expanded", open ? "true" : "false");
+    if (phone() && hasResults && !picking) {
+      var want = open ? "full" : (sheet === "full" ? "half" : sheet);
+      if (want !== sheet) { setSheet(want, true); }
+    }
     if (open) {
       if (opener) { drawerOpener = opener; }
       $("drawer-close").focus();
@@ -854,12 +1022,10 @@
   });
   $("drawer-close").addEventListener("click", function () { closeDrawer(true); });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !$("drawer").hidden) { e.preventDefault(); closeDrawer(true); }
-  });
-  $("sheet-toggle").addEventListener("click", function () {
-    var open = document.body.classList.toggle("sheet-open");
-    $("sheet-toggle").setAttribute("aria-expanded", open ? "true" : "false");
-    setText($("sheet-toggle"), open ? "Less" : "More");
+    if (e.key !== "Escape") { return; }
+    if (menuOpen()) { e.preventDefault(); setMenu(false); $("menu-toggle").focus(); return; }
+    if (placing) { e.preventDefault(); setPlacing(false); $("pin-move").focus(); return; }
+    if (!$("drawer").hidden) { e.preventDefault(); closeDrawer(true); }
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-collapse]"), function (b) {
     b.addEventListener("click", function () {
@@ -869,6 +1035,8 @@
       setText(b, collapsed ? "Show" : "Hide");
     });
   });
+
+  applyMode();  // sets the starting sheet height (peek) and the body classes
 
   // --- results ---------------------------------------------------------------------------------
   var expiryTimer = null;
@@ -919,6 +1087,7 @@
       picking = false;
       applyMode();
       $("left-col").scrollTop = 0;  // the headline figures first
+      $("sheet-body").scrollTop = 0;
     }).catch(function () {
       removeSaved();
       current = null;
@@ -1043,6 +1212,7 @@
           progress(["Starting"]);
           show($("progress"), true);
           $("left-col").scrollTop = 0;  // progress is at the top of the column: bring it on screen
+          $("sheet-body").scrollTop = 0;
           poll(data.id);
           return;
         }

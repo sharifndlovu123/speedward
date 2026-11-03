@@ -3,6 +3,7 @@
 <div id="overlay" class="overlay">
 <header id="topbar" class="panel">
   <div class="brand">{% include "_logo.html" %}<h1>speedward</h1><span class="mute tagline">How fast your site loads from around the world.</span></div>
+  <button type="button" id="menu-toggle" class="menu-toggle secondary" aria-expanded="false">Menu</button>
   <p class="notice-line">{{ notice }}</p>
   <p class="status" id="allowance-strip" aria-live="off"><span id="allowance-text">{{ strip_text }}{% if strip_link %}<a href="https://globalping.io" rel="noopener noreferrer">https://globalping.io</a>{% endif %}</span><span id="allowance-last-run" hidden> · last run <span id="allowance-ago"></span></span><span id="allowance-stale" hidden> · could not refresh, these numbers may be out of date</span></p>
   <div class="theme-switch" role="radiogroup" aria-labelledby="theme-name">
@@ -24,6 +25,15 @@
   </div>
 </header>
 
+<!-- On phones this is one bottom sheet (peek, half, full); on wider screens the wrappers add no box. -->
+<div id="sheet" class="sheet" role="region" aria-label="Settings and results">
+<div class="sheet-head">
+  <button type="button" id="sheet-less" class="secondary" aria-controls="sheet-body" hidden>Show less</button>
+  <div id="sheet-handle" class="sheet-handle" aria-hidden="true"><span></span></div>
+  <button type="button" id="sheet-more" class="secondary" aria-controls="sheet-body">Show more</button>
+  <p id="sheet-state" class="visually-hidden" aria-live="polite"></p>
+</div>
+<div id="sheet-body" class="sheet-body">
 <form id="scan-form" class="scan-form" autocomplete="off" novalidate>
   <div id="middle" class="middle">
     <div id="left-col" class="left-col" role="region" aria-label="Test settings and summary">
@@ -89,6 +99,8 @@
               <option value="custom" disabled hidden>Custom position</option>
               {% for g in groups %}<optgroup label="{{ g.continent }}">{% for p in g.places %}<option value="{{ p.name }}" data-lat="{{ p.lat|stringformat:'.4f' }}" data-lon="{{ p.lon|stringformat:'.4f' }}">{{ p.name }}</option>{% endfor %}</optgroup>{% endfor %}
             </select>
+            <button type="button" id="pin-move" class="secondary pin-move">Move pin</button>
+            <p id="pin-move-hint" class="pin-move-hint" hidden>Tap the map where the server is.</p>
             <p id="pin-help" class="mute small">Fallback only: lines normally run to the server that answered each location. If none can be placed, drag the Server pin on the map, or focus it and use the arrow keys (Shift moves further, Delete or Backspace removes it), to draw lines from your own claim instead. Kept in this tab only.</p>
             <p id="pin-status" class="visually-hidden" aria-live="polite"></p>
           </div>
@@ -114,7 +126,6 @@
 
   <div id="picker-strip" class="panel strip">
     <div class="panel-head"><b><span class="step" aria-hidden="true">02</span>Locations</b> <span class="mute">Click a dot on the map or a name to switch it on or off.</span>
-      <button type="button" id="sheet-toggle" class="collapse secondary" aria-expanded="false">More</button>
       <button type="button" class="collapse secondary" aria-expanded="true" data-collapse="picker-strip">Hide</button></div>
     <div class="panel-body">
       <input type="hidden" id="locations" name="locations" value="{{ default_locations }}">
@@ -143,6 +154,8 @@
   <div class="panel-head"><b>Details</b><button type="button" id="drawer-close" class="secondary">Close</button></div>
   <div id="results-body"></div>
 </aside>
+</div>
+</div>
 </div>
 <!-- The map comes last in the page so Tab reaches the address and Start first; it is fixed behind the panels. -->
 <div id="stage" class="map-stage">
