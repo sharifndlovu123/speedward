@@ -106,6 +106,57 @@ def test_each_measured_place_has_its_own_diagram_and_tag():
     assert dns["flag"] == "possible block" and dns["note"].startswith("30%")
 
 
+def mixed():
+    """Frankfurt's server wait (90 ms) is not its total (6 + 8 + 14 + 90 + 20 = 138 ms); Paris has no
+    single stage; Lagos is blocked."""
+    return diagnosed(ok("Frankfurt", 6, 8, 14, 90, 20), ok("London", 10, 5, 5, 150, 10),
+                     ok("Tokyo", 10, 190, 60, 50, 10), ok("Paris", 20, 20, 20, 20, 20), bad("Lagos"))
+
+
+def by_city(v):
+    return {p["name"].split(",")[0]: p for p in v["places"]}
+
+
+def test_place_label_gives_the_stage_time_and_the_total():
+    places = by_city(view(mixed().diagnosis))
+    assert places["Frankfurt"]["tag"] == "server wait"
+    assert places["Frankfurt"]["stage_ms"] == "90 ms" and places["Frankfurt"]["total"] == "138 ms"
+    assert places["Frankfurt"]["label"] == "server wait 90 ms of 138 ms"
+    assert places["Tokyo"]["label"] == "connect 190 ms of 320 ms"
+
+
+def test_place_label_without_a_held_back_stage_says_total():
+    places = by_city(view(mixed().diagnosis))
+    assert places["Paris"]["label"] == "no single stage, total 100 ms"
+    two = by_city(view(diagnosed(ok("Frankfurt", 6, 8, 14, 90, 20), ok("London")).diagnosis))
+    assert two["Frankfurt"]["label"] == "not judged, total 138 ms"
+
+
+def test_blocked_place_label_is_its_reason_with_no_time():
+    lagos = by_city(view(mixed().diagnosis))["Lagos"]
+    assert lagos["label"] == lagos["reason"] and " ms" not in lagos["label"]
+
+
+def test_place_list_in_every_export_reads_stage_of_total():
+    r = mixed()
+    md = render(r, "md")
+    assert "- Frankfurt, XX: server wait 90 ms of 138 ms" in md
+    assert "- Paris, XX: no single stage, total 100 ms" in md
+    assert "server wait, 138 ms" not in md
+    for html in (render_bottleneck(r), render_bottleneck(r, interactive=True), render(r, "html")):
+        assert '<span class="bn-tag">server wait 90 ms of 138 ms</span>' in html
+        assert '<span class="bn-tag">no single stage, total 100 ms</span>' in html
+        assert "server wait · 138 ms" not in html
+    js = json.loads(render(r, "json"))
+    frankfurt = next(p for p in js["diagnosis"]["places"] if p["place"].startswith("Frankfurt"))
+    assert set(frankfurt) == {"place", "row", "status", "reason", "total_ms", "stages", "largest",
+                              "held_back_by", "cdn", "edge"}  # the saved JSON is unchanged
+
+
+def test_cli_lines_carry_no_place_time_label():
+    assert not any(" ms of " in line or "server wait · " in line for line in cli_lines(mixed()))
+
+
 def test_never_claims_a_cause():
     for r in (server_heavy(), diagnosed(ok("London", 72, 20, 20, 100, 28), ok("Tokyo"), ok("Lagos"))):
         text = json.dumps(view(r.diagnosis)).lower()

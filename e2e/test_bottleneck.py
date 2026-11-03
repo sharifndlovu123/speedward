@@ -99,6 +99,23 @@ def test_a_blocked_place_shows_no_diagram_only_its_reason(page, live_site, four_
     expect(view).to_contain_text("No timings, left out of every figure.")
 
 
+def test_the_place_list_gives_the_stage_time_and_the_total(page, live_site, four_places, watch):
+    """London's tag is its server wait out of its whole request, never the total alone; Seoul (blocked)
+    keeps its reason and shows no time. The figures match London's own diagram."""
+    import re
+    scan(page, live_site)
+    open_details(page)
+    london = page.locator(".bn-pick[data-bn-show='2'] .bn-tag")
+    expect(london).to_have_text(re.compile(r"^server wait \d+ ms of \d+ ms$"))
+    page.locator(".bn-pick[data-bn-show='2']").click()
+    wait = visible_view(page).locator(".bn-block.bn-biggest .bn-ms").text_content()
+    total = visible_view(page).locator(".bn-cap").text_content().rsplit("total ", 1)[1]
+    expect(london).to_have_text(f"server wait {wait} of {total}")
+    seoul = page.locator(".bn-pick[data-bn-show='3'] .bn-tag")
+    expect(seoul).to_contain_text("blocked: ")
+    assert " ms" not in seoul.inner_text()
+
+
 def test_two_places_say_there_is_no_conclusion(page, live_site, watch):
     page.goto(live_site + "/")
     page.fill("#url", TARGET)
