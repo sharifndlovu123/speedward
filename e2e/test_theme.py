@@ -113,3 +113,20 @@ def test_axe_in_every_choice(page, live_site, watch, scheme, choice):
     choose(page, choice)
     expect(page.locator("#pick-summary")).to_contain_text("about")
     check(page, f"theme {choice} on {scheme}")
+
+
+# The desktop top bar before the switch (main at 1280, 1440 and 1600 px) was 74.4 px: the switch must
+# not add a line. Checked against the bound and against the same page with the switch taken out.
+TOPBAR_MAX_PX = 76
+
+
+@pytest.mark.parametrize("width", [1280, 1440, 1600])
+def test_switch_does_not_make_the_desktop_top_bar_taller(page, live_site, watch, width):
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(live_site + "/")
+    expect(page.get_by_role("radiogroup", name="Colour theme")).to_be_visible()
+    with_switch = page.locator("#topbar").bounding_box()["height"]
+    assert with_switch <= TOPBAR_MAX_PX
+    page.add_style_tag(content=".theme-switch{display:none !important}")
+    without = page.locator("#topbar").bounding_box()["height"]
+    assert abs(with_switch - without) <= 1
