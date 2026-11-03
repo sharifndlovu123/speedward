@@ -39,8 +39,8 @@
 <p class="bn-k">Each place, by what holds it back</p>
 <ul class="bn-places">
 {% for p in v.places %}<li class="bn-place{% if not p.measured %} bn-out{% endif %}">
-{% if interactive %}<button type="button" class="bn-pick" data-bn-show="{{ p.row }}"><span class="bn-pname">{{ p.name }}</span>{% if p.measured %}<span class="bn-mini" aria-hidden="true">{% for s in p.segments %}<span class="bn-seg bn-{{ s.mark }}" style="width:{{ s.pct }}%"></span>{% endfor %}</span><span class="bn-tag">{{ p.tag }}{% if p.total %} · {{ p.total }}{% endif %}</span>{% else %}<span class="bn-tag">{{ p.reason }}</span>{% endif %}</button>
-{% elif p.diagram %}<details><summary><span class="bn-pname">{{ p.name }}</span><span class="bn-tag">{{ p.tag }} · {{ p.total }}</span></summary>{{ diagram(p.diagram) }}</details>
+{% if interactive %}<button type="button" class="bn-pick" data-bn-show="{{ p.row }}"><span class="bn-pname">{{ p.name }}</span>{% if p.measured %}<span class="bn-mini" aria-hidden="true">{% for s in p.segments %}<span class="bn-seg bn-{{ s.mark }}" style="width:{{ s.pct }}%"></span>{% endfor %}</span><span class="bn-tag">{{ p.label }}</span>{% else %}<span class="bn-tag">{{ p.reason }}</span>{% endif %}</button>
+{% elif p.diagram %}<details><summary><span class="bn-pname">{{ p.name }}</span><span class="bn-tag">{{ p.label }}</span></summary>{{ diagram(p.diagram) }}</details>
 {% else %}<p><span class="bn-pname">{{ p.name }}</span><span class="bn-tag">{{ p.reason }}</span></p>
 {% endif %}</li>
 {% endfor %}</ul>
