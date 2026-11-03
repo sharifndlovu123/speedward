@@ -10,6 +10,48 @@ Speedward tests how fast a website loads from places around the world and shows 
 
 See [demo.md](demo.md) for a short walkthrough built from a real run.
 
+## Screenshots
+
+All screenshots use made-up data for fake or example sites. No real scan, site or person is shown.
+
+**Choose places and start a scan.** The world map is the page background. The address box, the place picker and the cost estimate float over it.
+
+![Web UI on a desktop screen, light theme: the place picker over the world map with the estimated test cost and the Start button](docs/screenshots/desktop-picker-light.png)
+
+**Results on the map.** Each place is a dot with its time, and a summary sits beside it. Light and dark themes are both built in.
+
+![Web UI results on a desktop screen, light theme: world map with timings per place and a summary panel](docs/screenshots/desktop-results-light.png)
+
+![Web UI results on a desktop screen, dark theme: the same results on a dark background](docs/screenshots/desktop-results-dark.png)
+
+**On a phone.** The panel is a bottom sheet that you can raise from a small peek to full height. Left: choosing places. Right: results. The third shows the full sheet in the dark theme.
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/phone-picker-peek-light.png" alt="Phone screen, light theme: the bottom sheet at its smallest height with the address box, cost and Start button" width="240"></td>
+    <td><img src="docs/screenshots/phone-results-peek-light.png" alt="Phone screen, light theme: results on the map with the bottom sheet at its smallest height" width="240"></td>
+    <td><img src="docs/screenshots/phone-results-full-dark.png" alt="Phone screen, dark theme: the bottom sheet raised to full height showing the result details" width="240"></td>
+  </tr>
+</table>
+
+**Where the time goes.** The HTML export breaks one request into DNS, connect, TLS, server wait and download, and marks the biggest block. Here six places were measured and one was blocked. The blocked place is listed with its reason and left out of every figure.
+
+![HTML export, light theme: block diagram of one request with the server wait marked as the biggest block, and a list of places](docs/screenshots/export-block-diagram-light.png)
+
+![HTML export, dark theme: the same block diagram on a dark background](docs/screenshots/export-block-diagram-dark.png)
+
+**Who can reach it.** A grid of checks per place: HTTPS over IPv4 and IPv6, plain HTTP, DNS and port 443. Each cell has a symbol and a word, so colour is never the only signal.
+
+![Grid of reachability checks per place, with one place blocked and one failing over IPv6](docs/screenshots/who-can-reach-it-light.png)
+
+**Is it fast?** Speed checks per place: consistency over several runs, HTTP/2, compression, DNS trace and the network path. A blocked place shows only its reason.
+
+![Table of speed checks per place with short findings above it](docs/screenshots/speed-checks-light.png)
+
+**Many places on one map.** With 32 places the labels are placed so that none overlap, and places that sit close together share a label.
+
+![World map with 32 places, each with a time label that does not overlap another label](docs/screenshots/map-labels-light.png)
+
 ## What you need
 
 - Python 3.11 or newer, or Docker with Compose (2.24 or newer if you use `docker-compose.secrets.yml`).
